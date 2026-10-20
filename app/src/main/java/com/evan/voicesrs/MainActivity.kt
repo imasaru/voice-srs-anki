@@ -96,10 +96,10 @@ class MainActivity : AppCompatActivity() {
         stopButton = findViewById(R.id.stopButton)
         findViewById<Button>(R.id.retryButton).setOnClickListener { ensurePermissionsAndStart() }
         syncButton.setOnClickListener { syncPending() }
-        chipAgain.setOnClickListener { DrillService.submitTestGrade("again") }
-        chipHard.setOnClickListener { DrillService.submitTestGrade("hard") }
-        chipGood.setOnClickListener { DrillService.submitTestGrade("good") }
-        chipEasy.setOnClickListener { DrillService.submitTestGrade("easy") }
+        chipAgain.setOnClickListener { DrillService.submitTestGrade("again"); render(DrillUi.state) }
+        chipHard.setOnClickListener { DrillService.submitTestGrade("hard"); render(DrillUi.state) }
+        chipGood.setOnClickListener { DrillService.submitTestGrade("good"); render(DrillUi.state) }
+        chipEasy.setOnClickListener { DrillService.submitTestGrade("easy"); render(DrillUi.state) }
         startButton.setOnClickListener { ensurePermissionsAndStart() }
         stopButton.setOnClickListener {
             stopService(Intent(this, DrillService::class.java))
@@ -264,14 +264,17 @@ class MainActivity : AppCompatActivity() {
         if (state.showError && state.errorMessage.isNotBlank()) {
             errorCard.visibility = View.VISIBLE
             errorText.text = state.errorMessage
+            findViewById<TextView>(R.id.errorTitle).text =
+                state.errorTitle.ifBlank { getString(R.string.error_title) }
         } else {
             errorCard.visibility = View.GONE
         }
-        val highlight = state.ratingMicOpen
-        chipAgain.isChecked = highlight
-        chipHard.isChecked = highlight
-        chipGood.isChecked = highlight
-        chipEasy.isChecked = highlight
+        // Single selection driven by service state: only the chosen grade is highlighted.
+        val sel = state.selectedEase
+        chipAgain.isChecked = sel == 1
+        chipHard.isChecked = sel == 2
+        chipGood.isChecked = sel == 3
+        chipEasy.isChecked = sel == 4
         startButton.isEnabled = !state.drillRunning
         stopButton.isEnabled = state.drillRunning
     }

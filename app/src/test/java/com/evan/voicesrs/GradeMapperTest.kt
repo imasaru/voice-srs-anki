@@ -154,4 +154,16 @@ class GradeMapperTest {
     fun `empty buttons returns clamped ease`() {
         assertEquals(3, GradeMapper.toAvailableEase(3, emptyList()))
     }
+
+    @Test
+    fun `v017 whole phrase grades`() {
+        assertEquals(1, GradeMapper.wordToEase("I forgot"))
+        assertEquals(1, GradeMapper.wordToEase("no idea"))
+        assertEquals(1, GradeMapper.wordToEase("I don't know"))
+        assertEquals(3, GradeMapper.wordToEase("got it"))
+        assertEquals(4, GradeMapper.wordToEase("easy peasy"))
+        assertEquals(4, GradeMapper.wordToEase("nailed it!"))
+        assertNull(GradeMapper.wordToEase("goodbye"))
+        assertNull(GradeMapper.wordToEase("not easy peasy"))
+    }
 }

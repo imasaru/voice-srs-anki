@@ -40,6 +40,8 @@ interface VoiceIo {
     /** Listen once; returns the transcript, or null on timeout/silence/error. */
     fun listen(timeoutMs: Long): String?
     fun beep()
+    /** True once the user pressed Stop (or the session is ending). A silent listen then must not grade. */
+    fun stopped(): Boolean = false
 }
 
 /** Skip this card. The drill must not send an ease. */
@@ -64,6 +66,8 @@ class VoiceSelfGrader : Grader {
                 VoiceAction.Skip -> throw SkipRequested()
                 VoiceAction.Pause -> throw PauseRequested()
                 VoiceAction.None -> {
+                    // Stop pressed while waiting for a grade: end without sending any ease.
+                    if (io.stopped()) throw PauseRequested()
                     if (!reprompted) {
                         reprompted = true
                         val again = RatingGuides.reprompt(ctx.speedMode)

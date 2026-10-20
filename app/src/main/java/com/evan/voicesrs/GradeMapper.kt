@@ -50,6 +50,13 @@ object GradeMapper {
         "read it back", "one more time"
     )
 
+    /** Whole-utterance grade phrases that the token rules would reject. */
+    private val GRADE_PHRASES = mapOf(
+        "forgot" to 1, "i forgot" to 1, "forgot it" to 1, "no idea" to 1, "no clue" to 1,
+        "i don't know" to 1, "i dont know" to 1, "don't know" to 1, "dont know" to 1,
+        "got it" to 3, "easy peasy" to 4, "nailed it" to 4, "piece of cake" to 4, "too easy" to 4
+    )
+
     private val FILLERS = setOf(
         "a", "an", "the", "that", "this", "was", "is", "it", "its", "it's",
         "please", "pretty", "very", "so", "really", "just", "i", "id", "i'd",
@@ -88,6 +95,7 @@ object GradeMapper {
         if (text in PAUSE_PHRASES) return VoiceAction.Pause
         if (text in SKIP_PHRASES) return VoiceAction.Skip
         if (text in REPEAT_PHRASES) return VoiceAction.Repeat
+        GRADE_PHRASES[text]?.let { return VoiceAction.Grade(it) }
 
         val tokens = text.split(' ').filter { it.isNotEmpty() && it !in FILLERS }
         if (tokens.isEmpty()) return VoiceAction.None

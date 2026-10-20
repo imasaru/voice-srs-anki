@@ -16,8 +16,12 @@ data class DrillUiState(
     val pendingSync: Int = 0,
     val showError: Boolean = false,
     val errorMessage: String = "",
+    /** Error card title; blank means the default "Can't start the drill". */
+    val errorTitle: String = "",
     /** True while [DrillService] is in a drill session, including after the activity is recreated. */
-    val drillRunning: Boolean = false
+    val drillRunning: Boolean = false,
+    /** Ease (1-4) of the grade chosen for the current card by tap or voice; null clears the chips. */
+    val selectedEase: Int? = null
 )
 
 object DrillUi {

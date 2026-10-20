@@ -13,7 +13,31 @@ private class FakeIo(private val transcripts: List<String?>) : VoiceIo {
     override fun beep() {}
 }
 
+private class StoppedIo : VoiceIo {
+    val spoken = mutableListOf<String>()
+    override fun speak(text: String) { spoken.add(text) }
+    override fun listen(timeoutMs: Long): String? = null
+    override fun beep() {}
+    override fun stopped(): Boolean = true
+}
+
 class VoiceSelfGraderTest {
+    @Test
+    fun `stop during grading sends no ease`() {
+        val io = StoppedIo()
+        try {
+            VoiceSelfGrader().grade(ctx(), io)
+            fail("expected PauseRequested")
+        } catch (_: PauseRequested) {
+        }
+        assertTrue("no reprompt after stop", io.spoken.none { it == RatingGuides.REPROMPT })
+    }
+
+    @Test
+    fun `two silences without stop still default to hard`() {
+        assertEquals(2, VoiceSelfGrader().grade(ctx(), FakeIo(listOf(null, null))))
+    }
+
     private val card = AnkiCard("<p>Q</p>", "<p>A</p>", "VoiceSRS-Test", listOf(1, 2, 3, 4))
     private fun ctx() = GradeContext(card, "the answer")
 

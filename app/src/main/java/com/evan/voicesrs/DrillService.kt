@@ -88,6 +88,15 @@ class DrillService : Service(), VoiceIo {
 
         @Volatile private var active: DrillService? = null
 
+        /** In-drill statuses that must not be left on screen once the session ends. */
+        private val TRANSIENT_STATUS = setOf(
+            "Checking Anki…", "Reading the question", "Answer", "Rate this card",
+            "Listening for your answer", "Listening for your grade"
+        )
+
+        /** First grade per card wins (tap or voice). */
+        val gradeGate = GradeGate()
+
         /**
          * Debug hook used by [com.evan.voicesrs.TestGradeReceiver] (src/debug only).
          * A queued word is returned from the next grade [listen] and then runs
@@ -99,12 +108,22 @@ class DrillService : Service(), VoiceIo {
                 Log.w(TAG, "TEST_GRADE ignored")
                 return
             }
+            val ease = GradeGate.easeOf(word)
+            synchronized(gradeGate) {
+                if (!gradeGate.tryClaim(ease)) {
+                    Log.i(TAG, "TEST_GRADE ignored: no open card or already graded")
+                    return
+                }
+                runCatching { DrillUi.update { it.copy(selectedEase = ease) } }
+                pendingGrades.clear()
+                pendingGrades.add(word)
+            }
+            // Deliver straight into an open recognizer listen when there is one.
             val svc = active
-            if (svc != null && svc.deliverTestGrade(word)) {
+            if (svc != null && svc.deliverQueuedTap(word)) {
                 Log.i(TAG, "TEST_GRADE delivered: $word")
                 return
             }
-            pendingGrades.add(word)
             Log.i(TAG, "TEST_GRADE queued: $word")
         }
     }
@@ -449,7 +468,7 @@ class DrillService : Service(), VoiceIo {
                 val cards = fetchBatch(anki, cfg, store)
                 if (cards.isEmpty()) {
                     announceRecognition()
-                    speak("No cards were due. Drill complete.")
+                    showStatus("No cards due"); speak("No cards were due. Drill complete.")
                     return
                 }
                 runOffline(cfg, anki, store, cards, ankiUp = true)
@@ -465,17 +484,23 @@ class DrillService : Service(), VoiceIo {
         } catch (e: AnkiConnectException) {
             Log.e(TAG, "AnkiConnect failure", e)
             val message = "Connection problem. ${e.message}. Drill stopped."
-            showFailure(message)
+            showFailure(message, title = "Drill stopped: can't reach Anki")
             speak(message)
         } catch (e: Exception) {
             Log.e(TAG, "session failure", e)
             speak("Something went wrong. Drill stopped.")
         } finally {
+            gradeGate.close()
+            pendingGrades.clear()
             publishDrillRunning(false)
             runCatching {
                 DrillUi.update {
                     val cleared = it.copy(drillRunning = false, ratingMicOpen = false)
-                    if (stopRequested.get()) cleared.copy(status = "Stopped") else cleared
+                    when {
+                        stopRequested.get() -> cleared.copy(status = "Stopped")
+                        it.status in TRANSIENT_STATUS -> cleared.copy(status = "Drill complete")
+                        else -> cleared
+                    }
                 }
             }
             stopSelf()
@@ -494,7 +519,11 @@ class DrillService : Service(), VoiceIo {
         runCatching { DrillUi.update { it.copy(engineLabel = label) } }
     }
 
-    private fun showQuestionUi(questionHtml: String) {
+    private fun showQuestionUi(questionHtml: String) = synchronized(gradeGate) {
+        synchronized(injectLock) {
+            pendingGrades.clear()
+            gradeGate.newCard()
+        }
         runCatching {
             DrillUi.update {
                 it.copy(
@@ -503,7 +532,8 @@ class DrillService : Service(), VoiceIo {
                     backHtml = "",
                     showBack = false,
                     heard = "",
-                    ratingMicOpen = false
+                    ratingMicOpen = false,
+                    selectedEase = null
                 )
             }
         }
@@ -597,16 +627,43 @@ class DrillService : Service(), VoiceIo {
         }
     }
 
+    override fun stopped(): Boolean = stopRequested.get() || destroyed
+
     override fun listen(timeoutMs: Long): String? {
         val scripted = SpeechHooks.scripted
         val result = if (scripted != null && scripted.enabled()) {
-            val text = scripted.poll(timeoutMs)
-            if (text != null) Log.i(TAG, "listen ok: SCRIPT") else Log.i(TAG, "listen ok: SCRIPT_EMPTY")
+            // Poll in short slices so a chip tap (queued grade) is honoured during a scripted listen,
+            // the same way the real recognizer path accepts it.
+            val deadline = SystemClock.elapsedRealtime() + timeoutMs
+            var text: String? = null
+            while (text == null) {
+                consumeQueuedGrade()?.let { text = it }
+                if (text != null || stopRequested.get() || destroyed) break
+                val left = deadline - SystemClock.elapsedRealtime()
+                if (left <= 0) break
+                text = scripted.poll(minOf(left, 250L))
+                if (text != null) Log.i(TAG, "listen ok: SCRIPT")
+            }
+            if (text == null) Log.i(TAG, "listen ok: SCRIPT_EMPTY")
             text
         } else {
             consumeQueuedGrade() ?: listenWithRecognizer(timeoutMs)
         }
-        if (!result.isNullOrBlank()) logAction(GradeMapper.parse(result))
+        if (!result.isNullOrBlank()) {
+            val action = GradeMapper.parse(result)
+            logAction(action)
+            if (action is VoiceAction.Grade && grading) {
+                // Voice grade: claim the card and highlight its chip. A tap that came first wins.
+                val used = gradeGate.resolveVoice(action.ease)
+                runCatching { DrillUi.update { it.copy(selectedEase = used) } }
+                Log.i(TAG, "grade chip highlighted ease=$used")
+                if (used != action.ease) {
+                    Log.i(TAG, "voice grade ease=${action.ease} ignored; tapped ease=$used wins")
+                    pendingGrades.clear()
+                    return afterListen(GradeGate.wordOf(used))
+                }
+            }
+        }
         return afterListen(result)
     }
 
@@ -632,11 +689,12 @@ class DrillService : Service(), VoiceIo {
         }
     }
 
-    private fun showFailure(message: String) {
+    private fun showFailure(message: String, title: String = "") {
         DrillUi.update {
             it.copy(
                 showError = true,
                 errorMessage = message,
+                errorTitle = title,
                 status = "Anki offline",
                 ratingMicOpen = false
             )
@@ -656,6 +714,7 @@ class DrillService : Service(), VoiceIo {
     private fun finishGoal(progress: SessionProgress, startedElapsed: Long) {
         val summary = progress.spokenSummary(SystemClock.elapsedRealtime() - startedElapsed)
         Log.i(TAG, "goal reached")
+        showStatus("Goal reached")
         speak(summary)
     }
 
@@ -765,6 +824,7 @@ class DrillService : Service(), VoiceIo {
         unsuspendSkipped(anki, store)
         if (!stopRequested.get() && !goalSpoken) {
             val summary = if (progress.done == 0) {
+                showStatus("No cards due")
                 "No cards were due. Drill complete."
             } else {
                 progress.spokenSummary(SystemClock.elapsedRealtime() - started)
@@ -814,6 +874,7 @@ class DrillService : Service(), VoiceIo {
         }
         if (!stopRequested.get() && !goalSpoken) {
             val summary = if (progress.done == 0) {
+                showStatus("No cards due")
                 "No cards were due. Drill complete."
             } else {
                 progress.spokenSummary(SystemClock.elapsedRealtime() - started)
@@ -1055,6 +1116,17 @@ class DrillService : Service(), VoiceIo {
      * If a grade listen is blocked in the recognizer, complete it with [word]
      * instead of queueing. Returns false when the caller should queue [word].
      */
+    /** A tap is already in [pendingGrades]; move it into the open listen if one is waiting. */
+    private fun deliverQueuedTap(word: String): Boolean {
+        synchronized(injectLock) {
+            if (!(grading && listenActive) || inFlightClaimed) return false
+            if (!pendingGrades.remove(word)) return false
+        }
+        if (deliverTestGrade(word)) return true
+        pendingGrades.add(word)
+        return false
+    }
+
     private fun deliverTestGrade(word: String): Boolean {
         synchronized(injectLock) {
             if (!(grading && listenActive) || inFlightClaimed) return false
