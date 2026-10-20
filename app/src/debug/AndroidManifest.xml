@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Debug-only. adb sends an explicit component broadcast; release has no receiver. -->
+    <application>
+        <receiver
+            android:name=".TestGradeReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.evan.voicesrs.TEST_GRADE" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

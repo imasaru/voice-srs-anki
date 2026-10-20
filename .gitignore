@@ -1,0 +1,13 @@
+build/
+*/build/
+.gradle/
+.kotlin/
+local.properties
+*-key.txt
+*.keystore
+releases/
+shots-*/
+*.log
+.idea/
+
+addon/.ankiconnect-git/
