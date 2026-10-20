@@ -57,7 +57,7 @@ class VoiceSelfGraderTest {
 
     @Test
     fun `speed mode skips guides but still retries a miss`() {
-        val io = FakeIo(listOf("nope", null))
+        val io = FakeIo(listOf("sandwich", null))
         val speed = GradeContext(card, "the answer", cardIndex = 0, speedMode = true)
         assertEquals(2, VoiceSelfGrader().grade(speed, io))
         assertTrue(io.spoken.isEmpty())
@@ -71,6 +71,26 @@ class VoiceSelfGraderTest {
         assertEquals(4, VoiceSelfGrader().grade(later, io))
         assertTrue(io.spoken.contains(RatingGuides.SHORT))
         assertFalse(io.spoken.contains(RatingGuides.LONG))
+    }
+
+    @Test
+    fun `fuzzy grade gud is good`() {
+        assertEquals(3, VoiceSelfGrader().grade(ctx(), FakeIo(listOf("gud"))))
+    }
+
+    @Test
+    fun `san is good`() {
+        assertEquals(3, VoiceSelfGrader().grade(ctx(), FakeIo(listOf("san"))))
+    }
+
+    @Test(expected = SkipRequested::class)
+    fun `skip is not an ease`() {
+        VoiceSelfGrader().grade(ctx(), FakeIo(listOf("skip this card")))
+    }
+
+    @Test(expected = PauseRequested::class)
+    fun `pause is not an ease`() {
+        VoiceSelfGrader().grade(ctx(), FakeIo(listOf("pause")))
     }
 
     @Test

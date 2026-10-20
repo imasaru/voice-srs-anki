@@ -21,6 +21,19 @@ class NeuralTtsTest {
     fun `timeouts match the short connect and read budget`() {
         assertEquals(3_000, NeuralTts.CONNECT_TIMEOUT_MS)
         assertEquals(15_000, NeuralTts.READ_TIMEOUT_MS)
+        assertEquals(3_000, NeuralTts.HEALTH_TIMEOUT_MS)
+    }
+
+    @Test
+    fun `failed health check keeps the session on-device until a later check passes`() {
+        assertEquals(EngineChoice.NEURAL, NeuralTts.sessionEngine(EngineChoice.NEURAL, true))
+        assertEquals(EngineChoice.ON_DEVICE, NeuralTts.sessionEngine(EngineChoice.NEURAL, false))
+        assertEquals(EngineChoice.ON_DEVICE, NeuralTts.sessionEngine(EngineChoice.ON_DEVICE, true))
+        assertTrue(NeuralTts.shouldProbeNeural(EngineChoice.NEURAL, healthKnown = false, blocked = false, elapsedSinceProbeMs = 0L))
+        assertTrue(!NeuralTts.shouldProbeNeural(EngineChoice.ON_DEVICE, healthKnown = false, blocked = false, elapsedSinceProbeMs = 0L))
+        assertTrue(!NeuralTts.shouldProbeNeural(EngineChoice.NEURAL, healthKnown = true, blocked = false, elapsedSinceProbeMs = 60_000L))
+        assertTrue(!NeuralTts.shouldProbeNeural(EngineChoice.NEURAL, healthKnown = true, blocked = true, elapsedSinceProbeMs = 1_000L))
+        assertTrue(NeuralTts.shouldProbeNeural(EngineChoice.NEURAL, healthKnown = true, blocked = true, elapsedSinceProbeMs = NeuralTts.HEALTH_RECHECK_MS))
     }
 
     @Test

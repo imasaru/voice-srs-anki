@@ -149,6 +149,11 @@ class DrillService : Service(), VoiceIo {
     private val injectLock = Any()
     /** elapsedRealtime deadline: do not open the mic before this. */
     private var backoffUntilElapsed = 0L
+    /** Set after the first /health probe this session. */
+    private var neuralHealthKnown = false
+    /** True when the last probe failed. Speak stays on-device until a later probe passes. */
+    private var neuralBlocked = false
+    private var lastNeuralHealthAt = 0L
 
     // ---------- Service lifecycle ----------
 
@@ -268,8 +273,11 @@ class DrillService : Service(), VoiceIo {
             return START_NOT_STICKY
         }
         synchronized(this) {
+            publishDrillRunning(true)
             if (sessionThread?.isAlive != true) {
                 stopRequested.set(false)
+                neuralHealthKnown = false
+                neuralBlocked = false
                 sessionThread = Thread(::runSession, "drill-session").also { it.start() }
             }
         }
@@ -279,7 +287,8 @@ class DrillService : Service(), VoiceIo {
 
     override fun onDestroy() {
         destroyed = true
-        if (active === this) active = null
+        val wasActive = active === this
+        if (wasActive) active = null
         mainHandler.removeCallbacksAndMessages(null)
         requestStop()
         destroyRecognizerOnMain()
@@ -288,7 +297,7 @@ class DrillService : Service(), VoiceIo {
         if (wakeLock?.isHeld == true) wakeLock?.release()
         handler.removeCallbacksAndMessages(null)
         worker.quitSafely()
-        running = false
+        if (wasActive && (active == null || active === this)) publishDrillRunning(false)
         super.onDestroy()
     }
 
@@ -336,95 +345,116 @@ class DrillService : Service(), VoiceIo {
 
     // ---------- Drill session (session thread) ----------
 
+    private sealed class CardStep {
+        data class Graded(val ease: Int, val elapsedMs: Long) : CardStep()
+        data object Skipped : CardStep()
+        data object Paused : CardStep()
+        data object Blank : CardStep()
+    }
+
+    private fun publishDrillRunning(active: Boolean) {
+        running = active
+        runCatching { DrillUi.update { it.copy(drillRunning = active) } }
+    }
+
+    /**
+     * GET /health before any clip is played, including cached ones.
+     * A miss keeps the session on-device until [NeuralTts.HEALTH_RECHECK_MS] elapses
+     * and a later probe succeeds. Logs "neural health ok" or "neural health fail".
+     */
+    private fun refreshNeuralHealth(cfg: AnkiConfig, force: Boolean) {
+        val preferred = TtsEngines.preferred(cfg.ttsEngine)
+        val due = NeuralTts.shouldProbeNeural(
+            preferred,
+            neuralHealthKnown,
+            neuralBlocked,
+            SystemClock.elapsedRealtime() - lastNeuralHealthAt
+        )
+        if (!force && !due) return
+        if (preferred != EngineChoice.NEURAL) {
+            neuralHealthKnown = true
+            neuralBlocked = true
+            showEngine(TtsEngines.LABEL_DEVICE)
+            return
+        }
+        lastNeuralHealthAt = SystemClock.elapsedRealtime()
+        val ok = try {
+            EdgeSpeaker(this).healthy(cfg.neuralUrl, cfg.neuralToken, NeuralTts.HEALTH_TIMEOUT_MS)
+        } catch (_: Exception) {
+            false
+        }
+        neuralHealthKnown = true
+        neuralBlocked = !ok
+        if (NeuralTts.sessionEngine(preferred, ok) == EngineChoice.NEURAL) {
+            Log.i(TAG, "neural health ok")
+            showEngine(TtsEngines.LABEL_NEURAL)
+        } else {
+            Log.i(TAG, "neural health fail")
+            showEngine(TtsEngines.LABEL_DEVICE)
+        }
+    }
+
+    private fun useNeuralNow(cfg: AnkiConfig): Boolean {
+        refreshNeuralHealth(cfg, force = false)
+        return TtsEngines.preferred(cfg.ttsEngine) == EngineChoice.NEURAL && !neuralBlocked
+    }
+
     private fun runSession() {
-        running = true
         Log.i(TAG, "runSession start")
+        if (stopRequested.get()) return
+        publishDrillRunning(true)
+        val store = LocalQueueStore(filesDir)
         try {
             if (!ttsReady.await(30, TimeUnit.SECONDS) || tts == null) {
                 Log.e(TAG, "TTS not ready; aborting drill")
                 return
             }
-            if (recognitionAvailable) {
-                speak("Voice recognition ready.")
-            } else {
-                speak("Warning: speech recognition is not available on this phone. " +
-                        "Cards will be read aloud, but I cannot hear your grades.")
-            }
             val cfg = Prefs.load(this)
-            showEngine(
-                if (TtsEngines.preferred(cfg.ttsEngine) == EngineChoice.NEURAL) {
-                    TtsEngines.LABEL_NEURAL
-                } else {
-                    TtsEngines.LABEL_DEVICE
-                }
-            )
+            refreshNeuralHealth(cfg, force = true)
+            DrillUi.update {
+                it.copy(
+                    showError = false,
+                    errorMessage = "",
+                    status = "Checking Anki…",
+                    progressLine = "",
+                    pendingSync = store.readGrades().size
+                )
+            }
             if (cfg.apiKey.isBlank()) {
-                speak("No AnkiConnect API key set. Open settings and enter it first.")
+                val message = "No AnkiConnect API key is saved. Open Settings and enter it."
+                showFailure(message)
+                speak(message)
                 return
             }
             val anki = AnkiConnect(cfg.url, cfg.apiKey)
-            try {
-                speak("Connecting to Anki.")
-                anki.sync()
-                anki.guiDeckReview(cfg.deck)
-            } catch (e: Exception) {
-                throw e
-            }
-            var reviewed = 0
-            while (!stopRequested.get()) {
-                val card = anki.guiCurrentCard() ?: break
-                anki.guiShowQuestion()
-                val question = AnkiText.stripHtml(card.questionHtml)
-                if (question.isBlank()) {
-                    Log.w(TAG, "empty question; skipping card")
-                    anki.guiAnswerCard(GradeMapper.toAvailableEase(3, card.buttons))
-                    continue
+            val report = anki.preflight(cfg.deck)
+            if (!report.ok) {
+                if (cfg.offlineBatch && store.hasBatch()) {
+                    Log.i(TAG, "preflight failed; drilling saved batch")
+                    announceRecognition()
+                    speak("Anki is offline. Drilling saved cards.")
+                    runOffline(cfg, anki, store, store.readBatch(), ankiUp = false)
+                } else {
+                    Log.i(TAG, "preflight failed")
+                    showFailure(report.message)
+                    speak(report.message)
                 }
-                showQuestionUi(card.questionHtml)
-                speak(question)
-                if (stopRequested.get()) break
-                showStatus("Listening for your answer")
-                beep()
-                listen(ANSWER_LISTEN_TIMEOUT_MS) // retrieval practice; transcript discarded
-                if (stopRequested.get()) break
-                anki.guiShowAnswer()
-                val shown = anki.guiCurrentCard()
-                val answerText = AnkiText.stripHtml(shown?.answerHtml ?: card.answerHtml)
-                val buttons = shown?.buttons ?: card.buttons
-                val answerCard = (shown ?: card).copy(buttons = buttons)
-                showAnswerUi(shown?.answerHtml ?: card.answerHtml)
-                if (answerText.isNotBlank()) speak(answerText)
-                if (stopRequested.get()) break
-                showStatus("Rate this card")
-                setGrading(true)
-                val ease = try {
-                    val speedMode = Prefs.load(this).speedMode
-                    grader.grade(
-                        GradeContext(
-                            answerCard,
-                            answerText,
-                            cardIndex = reviewed,
-                            speedMode = speedMode
-                        ),
-                        this
-                    )
-                } catch (e: InterruptedException) {
-                    throw e
-                } catch (e: MicDeadException) {
-                    throw e // mic dead: abort the drill, never default-grade
-                } catch (e: Exception) {
-                    Log.w(TAG, "grader failed; defaulting to Good", e)
-                    GradeMapper.toAvailableEase(3, buttons)
-                } finally {
-                    setGrading(false)
-                }
-                anki.guiAnswerCard(ease)
-                reviewed++
+                return
             }
-            if (!stopRequested.get()) {
-                speak(if (reviewed == 0) "No cards were due. Drill complete."
-                      else "Drill complete. $reviewed ${if (reviewed == 1) "card" else "cards"} reviewed. Good work.")
-                runCatching { anki.sync() }
+            DrillUi.update { it.copy(showError = false, errorMessage = "") }
+            unsuspendSkipped(anki, store)
+            val pendingLeft = GradeSync.sync(filesDir, anki, attempts = 2)
+            DrillUi.update { it.copy(pendingSync = pendingLeft) }
+            if (cfg.offlineBatch) {
+                val cards = fetchBatch(anki, cfg, store)
+                if (cards.isEmpty()) {
+                    announceRecognition()
+                    speak("No cards were due. Drill complete.")
+                    return
+                }
+                runOffline(cfg, anki, store, cards, ankiUp = true)
+            } else {
+                runOnline(cfg, anki, store)
             }
         } catch (e: InterruptedException) {
             Log.i(TAG, "session interrupted")
@@ -434,16 +464,18 @@ class DrillService : Service(), VoiceIo {
             Log.e(TAG, "microphone judged dead; drill aborted")
         } catch (e: AnkiConnectException) {
             Log.e(TAG, "AnkiConnect failure", e)
-            speak("Connection problem: ${e.message}. Drill stopped.")
+            val message = "Connection problem. ${e.message}. Drill stopped."
+            showFailure(message)
+            speak(message)
         } catch (e: Exception) {
             Log.e(TAG, "session failure", e)
             speak("Something went wrong. Drill stopped.")
         } finally {
-            running = false
+            publishDrillRunning(false)
             runCatching {
                 DrillUi.update {
-                    if (stopRequested.get()) it.copy(ratingMicOpen = false, status = "Stopped")
-                    else it.copy(ratingMicOpen = false)
+                    val cleared = it.copy(drillRunning = false, ratingMicOpen = false)
+                    if (stopRequested.get()) cleared.copy(status = "Stopped") else cleared
                 }
             }
             stopSelf()
@@ -505,7 +537,7 @@ class DrillService : Service(), VoiceIo {
             if (speakOnDevice(text)) Log.i(TAG, "TTS engine=on-device ok")
             return
         }
-        if (TtsEngines.preferred(cfg.ttsEngine) == EngineChoice.NEURAL) {
+        if (useNeuralNow(cfg)) {
             val ok = try {
                 EdgeSpeaker(this).speakBlocking(
                     cfg.neuralUrl,
@@ -566,8 +598,310 @@ class DrillService : Service(), VoiceIo {
     }
 
     override fun listen(timeoutMs: Long): String? {
-        val result = consumeQueuedGrade() ?: listenWithRecognizer(timeoutMs)
+        val scripted = SpeechHooks.scripted
+        val result = if (scripted != null && scripted.enabled()) {
+            val text = scripted.poll(timeoutMs)
+            if (text != null) Log.i(TAG, "listen ok: SCRIPT") else Log.i(TAG, "listen ok: SCRIPT_EMPTY")
+            text
+        } else {
+            consumeQueuedGrade() ?: listenWithRecognizer(timeoutMs)
+        }
+        if (!result.isNullOrBlank()) logAction(GradeMapper.parse(result))
         return afterListen(result)
+    }
+
+    private fun logAction(action: VoiceAction) {
+        val name = when (action) {
+            is VoiceAction.Grade -> "grade ease=${action.ease}"
+            VoiceAction.Repeat -> "repeat"
+            VoiceAction.Skip -> "skip"
+            VoiceAction.Pause -> "pause"
+            VoiceAction.None -> "none"
+        }
+        Log.i(TAG, "voice action: $name")
+    }
+
+    private fun announceRecognition() {
+        val scripted = SpeechHooks.scripted?.enabled() == true
+        if (scripted) Log.i(TAG, "scripted recognizer enabled")
+        if (recognitionAvailable || scripted) {
+            speak("Voice recognition ready.")
+        } else {
+            speak("Warning: speech recognition is not available on this phone. " +
+                    "Cards will be read aloud, but I cannot hear your grades.")
+        }
+    }
+
+    private fun showFailure(message: String) {
+        DrillUi.update {
+            it.copy(
+                showError = true,
+                errorMessage = message,
+                status = "Anki offline",
+                ratingMicOpen = false
+            )
+        }
+    }
+
+    private fun publish(progress: SessionProgress, store: LocalQueueStore) {
+        DrillUi.update {
+            it.copy(
+                progressLine = progress.line(),
+                pendingSync = store.readGrades().size,
+                showError = false
+            )
+        }
+    }
+
+    private fun finishGoal(progress: SessionProgress, startedElapsed: Long) {
+        val summary = progress.spokenSummary(SystemClock.elapsedRealtime() - startedElapsed)
+        Log.i(TAG, "goal reached")
+        speak(summary)
+    }
+
+    private fun stopFromSession() {
+        stopRequested.set(true)
+        try { EdgeSpeaker.stopActive() } catch (_: Exception) {}
+    }
+
+    private fun fetchBatch(anki: AnkiConnect, cfg: AnkiConfig, store: LocalQueueStore): List<OfflineCard> {
+        val ids = anki.dueCardIds(cfg.deck, cfg.offlineBatchSize)
+        if (ids.isEmpty()) {
+            store.writeBatch(emptyList())
+            return emptyList()
+        }
+        val cards = anki.cardsInfo(ids)
+        store.writeBatch(cards)
+        Log.i(TAG, "offline batch ${cards.size}")
+        return cards
+    }
+
+    private fun unsuspendSkipped(anki: AnkiConnect, store: LocalQueueStore) {
+        val ids = store.readSkipped()
+        if (ids.isEmpty()) return
+        try {
+            anki.unsuspendCards(ids)
+            store.writeSkipped(emptyList())
+            Log.i(TAG, "unsuspended skipped cards: ${ids.size}")
+        } catch (e: Exception) {
+            Log.w(TAG, "unsuspend failed: ${e.javaClass.simpleName}")
+        }
+    }
+
+    /** Reveal with guiShowAnswer, then leave the card ungraded and move on. */
+    private fun skipOnline(anki: AnkiConnect, deck: String, card: AnkiCard, store: LocalQueueStore) {
+        Log.i(TAG, "skip card id=${card.cardId}")
+        speak("Skipped.")
+        runCatching { anki.guiShowAnswer() }
+        if (card.cardId <= 0L) return
+        val skipped = store.readSkipped().toMutableList()
+        if (card.cardId !in skipped) skipped += card.cardId
+        store.writeSkipped(skipped)
+        runCatching { anki.suspendCards(listOf(card.cardId)) }
+        runCatching { anki.guiDeckReview(deck) }
+    }
+
+    private fun runOnline(cfg: AnkiConfig, anki: AnkiConnect, store: LocalQueueStore) {
+        announceRecognition()
+        speak("Connecting to Anki.")
+        anki.sync()
+        anki.guiDeckReview(cfg.deck)
+        val due = try {
+            anki.dueCount(cfg.deck)
+        } catch (_: Exception) {
+            0
+        }
+        val progress = SessionProgress(due)
+        val started = SystemClock.elapsedRealtime()
+        publish(progress, store)
+        var lastSkipId = 0L
+        var goalSpoken = false
+        while (!stopRequested.get()) {
+            val elapsed = SystemClock.elapsedRealtime() - started
+            if (!goalSpoken && progress.goalReached(cfg.goalMode, cfg.goalCards, cfg.goalMinutes, elapsed)) {
+                finishGoal(progress, started)
+                goalSpoken = true
+                break
+            }
+            val card = anki.guiCurrentCard() ?: break
+            if (card.cardId != 0L && card.cardId == lastSkipId) {
+                speak("Couldn't skip that card. Drill stopped.")
+                break
+            }
+            anki.guiShowQuestion()
+            val step = drillOne(card.questionHtml, progress.done, cfg.speedMode, card.buttons) {
+                anki.guiShowAnswer()
+                val shown = anki.guiCurrentCard()
+                (shown?.answerHtml ?: card.answerHtml) to (shown?.buttons ?: card.buttons)
+            }
+            when (step) {
+                CardStep.Paused -> {
+                    unsuspendSkipped(anki, store)
+                    return
+                }
+                CardStep.Blank -> {
+                    Log.w(TAG, "empty question; marking good")
+                    anki.guiAnswerCard(GradeMapper.toAvailableEase(3, card.buttons))
+                }
+                CardStep.Skipped -> {
+                    lastSkipId = card.cardId
+                    skipOnline(anki, cfg.deck, card, store)
+                }
+                is CardStep.Graded -> {
+                    lastSkipId = 0L
+                    anki.guiAnswerCard(step.ease)
+                    progress.recordGrade(step.ease, step.elapsedMs)
+                    publish(progress, store)
+                    Log.i(TAG, "graded ease=${step.ease}")
+                }
+            }
+            val after = SystemClock.elapsedRealtime() - started
+            if (!goalSpoken && progress.goalReached(cfg.goalMode, cfg.goalCards, cfg.goalMinutes, after)) {
+                finishGoal(progress, started)
+                goalSpoken = true
+                break
+            }
+        }
+        unsuspendSkipped(anki, store)
+        if (!stopRequested.get() && !goalSpoken) {
+            val summary = if (progress.done == 0) {
+                "No cards were due. Drill complete."
+            } else {
+                progress.spokenSummary(SystemClock.elapsedRealtime() - started)
+            }
+            speak(summary)
+            runCatching { anki.sync() }
+        }
+    }
+
+    private fun runOffline(
+        cfg: AnkiConfig,
+        anki: AnkiConnect,
+        store: LocalQueueStore,
+        cards: List<OfflineCard>,
+        ankiUp: Boolean
+    ) {
+        announceRecognition()
+        val progress = SessionProgress(cards.size)
+        val started = SystemClock.elapsedRealtime()
+        publish(progress, store)
+        var goalSpoken = false
+        for (card in cards) {
+            if (stopRequested.get()) break
+            val elapsed = SystemClock.elapsedRealtime() - started
+            if (progress.goalReached(cfg.goalMode, cfg.goalCards, cfg.goalMinutes, elapsed)) {
+                finishGoal(progress, started)
+                goalSpoken = true
+                break
+            }
+            val step = drillOne(card.front, progress.done, cfg.speedMode, card.buttons) {
+                card.back to card.buttons
+            }
+            when (step) {
+                CardStep.Paused -> return
+                CardStep.Blank -> Log.w(TAG, "offline card had an empty question")
+                CardStep.Skipped -> {
+                    Log.i(TAG, "offline skip id=${card.cardId}")
+                    speak("Skipped.")
+                }
+                is CardStep.Graded -> {
+                    store.enqueueGrade(PendingGrade(card.cardId, step.ease, System.currentTimeMillis()))
+                    progress.recordGrade(step.ease, step.elapsedMs)
+                    publish(progress, store)
+                    Log.i(TAG, "queued ease=${step.ease}")
+                }
+            }
+        }
+        if (!stopRequested.get() && !goalSpoken) {
+            val summary = if (progress.done == 0) {
+                "No cards were due. Drill complete."
+            } else {
+                progress.spokenSummary(SystemClock.elapsedRealtime() - started)
+            }
+            speak(summary)
+        }
+        val left = if (ankiUp) {
+            GradeSync.sync(filesDir, anki, attempts = 4)
+        } else {
+            store.readGrades().size
+        }
+        DrillUi.update { it.copy(pendingSync = left) }
+    }
+
+    /**
+     * Question, optional commands, answer, then a grade.
+     * [reveal] runs once the spoken answer is about to be shown. Online mode
+     * uses it to call guiShowAnswer and refresh the answer HTML.
+     */
+    private fun drillOne(
+        questionHtml: String,
+        cardIndex: Int,
+        speedMode: Boolean,
+        buttons: List<Int>,
+        reveal: () -> Pair<String, List<Int>>
+    ): CardStep {
+        val question = AnkiText.stripHtml(questionHtml)
+        if (question.isBlank()) return CardStep.Blank
+        val started = SystemClock.elapsedRealtime()
+        showQuestionUi(questionHtml)
+        var repeats = 0
+        while (!stopRequested.get()) {
+            speak(question)
+            if (stopRequested.get()) return CardStep.Paused
+            showStatus("Listening for your answer")
+            beep()
+            val action = GradeMapper.parse(listen(ANSWER_LISTEN_TIMEOUT_MS))
+            when (action) {
+                VoiceAction.Repeat -> {
+                    repeats++
+                    if (repeats >= 8) break
+                    continue
+                }
+                VoiceAction.Skip -> return CardStep.Skipped
+                VoiceAction.Pause -> {
+                    stopFromSession()
+                    return CardStep.Paused
+                }
+                else -> break
+            }
+        }
+        if (stopRequested.get()) return CardStep.Paused
+        val (answerHtml, answerButtons) = reveal()
+        val answerText = AnkiText.stripHtml(answerHtml)
+        showAnswerUi(answerHtml)
+        if (answerText.isNotBlank()) speak(answerText)
+        if (stopRequested.get()) return CardStep.Paused
+        showStatus("Rate this card")
+        setGrading(true)
+        return try {
+            val ease = grader.grade(
+                GradeContext(
+                    AnkiCard(questionHtml, answerHtml, "", answerButtons.ifEmpty { buttons }),
+                    answerText,
+                    cardIndex = cardIndex,
+                    speedMode = speedMode
+                ),
+                this
+            )
+            CardStep.Graded(ease, SystemClock.elapsedRealtime() - started)
+        } catch (_: SkipRequested) {
+            CardStep.Skipped
+        } catch (_: PauseRequested) {
+            stopFromSession()
+            CardStep.Paused
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (e: MicDeadException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "grader failed; defaulting to Good", e)
+            CardStep.Graded(
+                GradeMapper.toAvailableEase(3, answerButtons.ifEmpty { buttons }),
+                SystemClock.elapsedRealtime() - started
+            )
+        } finally {
+            setGrading(false)
+        }
     }
 
     /** Hear-back + dead-mic accounting. Shared by the mic path and TEST_GRADE. */

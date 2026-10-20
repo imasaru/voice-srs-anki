@@ -1,7 +1,5 @@
 package com.evan.voicesrs
 
-import java.util.Locale
-
 /**
  * Pluggable grading path. The ease submitted to AnkiConnect's guiAnswerCard
  * always comes from a [Grader], so the drill loop never hard-codes how a
@@ -44,27 +42,37 @@ interface VoiceIo {
     fun beep()
 }
 
-/** v1 grader: self-grading via the spoken words again/hard/good/easy. */
+/** Skip this card. The drill must not send an ease. */
+class SkipRequested : Exception()
+
+/** Pause or stop the drill without grading the open card. */
+class PauseRequested : Exception()
+
+/** v1 grader: self-grading via spoken grades, plus repeat / skip / pause. */
 class VoiceSelfGrader : Grader {
     override fun grade(ctx: GradeContext, io: VoiceIo): Int {
         val opening = RatingGuides.initialPrompt(ctx.cardIndex, ctx.speedMode)
         if (opening != null) io.speak(opening)
         var reprompted = false
         while (true) {
-            val heard = io.listen(LISTEN_TIMEOUT_MS)?.lowercase(Locale.US)
-            if (heard != null && GradeMapper.isRepeat(heard)) {
-                io.speak(ctx.spokenAnswer)
-                continue
-            }
-            val ease = heard?.let { GradeMapper.wordToEase(it) }
-            if (ease != null) return GradeMapper.toAvailableEase(ease, ctx.card.buttons)
-            if (!reprompted) {
-                reprompted = true
-                val again = RatingGuides.reprompt(ctx.speedMode)
-                if (again != null) io.speak(again)
-            } else {
-                // Still nothing: conservative default so the card comes back sooner.
-                return GradeMapper.toAvailableEase(2, ctx.card.buttons)
+            when (val action = GradeMapper.parse(io.listen(LISTEN_TIMEOUT_MS))) {
+                VoiceAction.Repeat -> {
+                    io.speak(ctx.spokenAnswer)
+                    continue
+                }
+                is VoiceAction.Grade -> return GradeMapper.toAvailableEase(action.ease, ctx.card.buttons)
+                VoiceAction.Skip -> throw SkipRequested()
+                VoiceAction.Pause -> throw PauseRequested()
+                VoiceAction.None -> {
+                    if (!reprompted) {
+                        reprompted = true
+                        val again = RatingGuides.reprompt(ctx.speedMode)
+                        if (again != null) io.speak(again)
+                    } else {
+                        // Still nothing: conservative default so the card comes back sooner.
+                        return GradeMapper.toAvailableEase(2, ctx.card.buttons)
+                    }
+                }
             }
         }
     }

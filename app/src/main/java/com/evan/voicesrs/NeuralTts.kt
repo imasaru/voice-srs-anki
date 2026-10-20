@@ -37,6 +37,38 @@ object NeuralTts {
     const val MAX_RATE = 2.0f
     const val CONNECT_TIMEOUT_MS = 3_000
     const val READ_TIMEOUT_MS = 15_000
+    /** GET /health budget. Connect and read both use this. */
+    const val HEALTH_TIMEOUT_MS = 3_000
+    /** After a failed check, try again on a later speak instead of every utterance. */
+    const val HEALTH_RECHECK_MS = 45_000L
+
+    /**
+     * Neural is used only when the user asked for it and /health succeeded.
+     * A failed check stays on-device until a later check passes.
+     */
+    fun sessionEngine(preferred: EngineChoice, healthOk: Boolean): EngineChoice {
+        return if (preferred == EngineChoice.NEURAL && healthOk) {
+            EngineChoice.NEURAL
+        } else {
+            EngineChoice.ON_DEVICE
+        }
+    }
+
+    /**
+     * Probe at drill start, and again after [recheckMs] while the session is
+     * stuck on-device because the last check failed.
+     */
+    fun shouldProbeNeural(
+        preferred: EngineChoice,
+        healthKnown: Boolean,
+        blocked: Boolean,
+        elapsedSinceProbeMs: Long,
+        recheckMs: Long = HEALTH_RECHECK_MS
+    ): Boolean {
+        if (preferred != EngineChoice.NEURAL) return false
+        if (!healthKnown) return true
+        return blocked && elapsedSinceProbeMs >= recheckMs
+    }
     const val MAX_TEXT = 3000
     const val MAX_CACHE_FILES = 24
 

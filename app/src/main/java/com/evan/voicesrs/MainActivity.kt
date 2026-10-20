@@ -41,6 +41,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var chipHard: Chip
     private lateinit var chipGood: Chip
     private lateinit var chipEasy: Chip
+    private lateinit var progressText: TextView
+    private lateinit var syncChip: Chip
+    private lateinit var errorCard: MaterialCardView
+    private lateinit var errorText: TextView
+    private lateinit var syncButton: Button
+    private lateinit var startButton: Button
+    private lateinit var stopButton: Button
 
     private var pendingStatus = ""
     private var renderedFront = ""
@@ -80,12 +87,21 @@ class MainActivity : AppCompatActivity() {
         chipHard = findViewById(R.id.chipHard)
         chipGood = findViewById(R.id.chipGood)
         chipEasy = findViewById(R.id.chipEasy)
+        progressText = findViewById(R.id.progressText)
+        syncChip = findViewById(R.id.syncChip)
+        errorCard = findViewById(R.id.errorCard)
+        errorText = findViewById(R.id.errorText)
+        syncButton = findViewById(R.id.syncButton)
+        startButton = findViewById(R.id.startButton)
+        stopButton = findViewById(R.id.stopButton)
+        findViewById<Button>(R.id.retryButton).setOnClickListener { ensurePermissionsAndStart() }
+        syncButton.setOnClickListener { syncPending() }
         chipAgain.setOnClickListener { DrillService.submitTestGrade("again") }
         chipHard.setOnClickListener { DrillService.submitTestGrade("hard") }
         chipGood.setOnClickListener { DrillService.submitTestGrade("good") }
         chipEasy.setOnClickListener { DrillService.submitTestGrade("easy") }
-        findViewById<Button>(R.id.startButton).setOnClickListener { ensurePermissionsAndStart() }
-        findViewById<Button>(R.id.stopButton).setOnClickListener {
+        startButton.setOnClickListener { ensurePermissionsAndStart() }
+        stopButton.setOnClickListener {
             stopService(Intent(this, DrillService::class.java))
         }
         findViewById<Button>(R.id.settingsButton).setOnClickListener {
@@ -97,6 +113,9 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         DrillUi.addListener(uiListener)
+        if (DrillService.running != DrillUi.state.drillRunning) {
+            DrillUi.update { it.copy(drillRunning = DrillService.running) }
+        }
         render(DrillUi.state)
     }
 
@@ -129,8 +148,40 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        val pending = GradeSync.pendingCount(filesDir)
+        if (pending != DrillUi.state.pendingSync) {
+            DrillUi.update { it.copy(pendingSync = pending) }
+        }
         refreshCounts()
         render(DrillUi.state)
+    }
+
+    private fun syncPending() {
+        val before = GradeSync.pendingCount(filesDir)
+        if (before == 0) {
+            Toast.makeText(this, getString(R.string.sync_none), Toast.LENGTH_SHORT).show()
+            return
+        }
+        syncButton.isEnabled = false
+        val cfg = Prefs.load(this)
+        Thread {
+            val left = try {
+                GradeSync.sync(filesDir, AnkiConnect(cfg.url, cfg.apiKey), attempts = 4)
+            } catch (_: Exception) {
+                GradeSync.pendingCount(filesDir)
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                DrillUi.update { it.copy(pendingSync = left) }
+                syncButton.isEnabled = true
+                val message = if (left == 0) {
+                    getString(R.string.sync_done)
+                } else {
+                    getString(R.string.sync_still, left)
+                }
+                Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+            }
+        }.start()
     }
 
     private fun refreshCounts() {
@@ -196,11 +247,33 @@ class MainActivity : AppCompatActivity() {
                 heardText.text = state.heard
             }
         }
+        if (state.progressLine.isBlank()) {
+            progressText.visibility = View.GONE
+        } else {
+            progressText.visibility = View.VISIBLE
+            progressText.text = state.progressLine
+        }
+        if (state.pendingSync > 0) {
+            syncChip.visibility = View.VISIBLE
+            syncChip.text = getString(R.string.pending_sync, state.pendingSync)
+            syncButton.visibility = View.VISIBLE
+        } else {
+            syncChip.visibility = View.GONE
+            syncButton.visibility = View.GONE
+        }
+        if (state.showError && state.errorMessage.isNotBlank()) {
+            errorCard.visibility = View.VISIBLE
+            errorText.text = state.errorMessage
+        } else {
+            errorCard.visibility = View.GONE
+        }
         val highlight = state.ratingMicOpen
         chipAgain.isChecked = highlight
         chipHard.isChecked = highlight
         chipGood.isChecked = highlight
         chipEasy.isChecked = highlight
+        startButton.isEnabled = !state.drillRunning
+        stopButton.isEnabled = state.drillRunning
     }
 
     private fun crossfadeStatus(next: String) {
@@ -215,6 +288,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun ensurePermissionsAndStart() {
+        if (DrillUi.state.drillRunning || DrillService.running) return
         val needed = mutableListOf(Manifest.permission.RECORD_AUDIO)
         if (Build.VERSION.SDK_INT >= 33) needed += Manifest.permission.POST_NOTIFICATIONS
         val missing = needed.filter {

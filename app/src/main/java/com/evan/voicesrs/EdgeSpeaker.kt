@@ -18,11 +18,21 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class EdgeSpeaker(private val context: Context) {
 
-    fun healthy(baseUrl: String): Boolean {
+    /**
+     * GET /health. [token] is sent when non-blank (servers that require it).
+     * Both connect and read use [timeoutMs], about 3s, so a dead host cannot
+     * stall the drill. Clip cache is not consulted.
+     */
+    fun healthy(
+        baseUrl: String,
+        token: String? = null,
+        timeoutMs: Int = NeuralTts.HEALTH_TIMEOUT_MS
+    ): Boolean {
         if (baseUrl.isBlank()) return false
         val url = baseUrl.trim().trimEnd('/') + "/health"
+        val budget = timeoutMs.coerceIn(500, 10_000)
         return try {
-            val conn = open(url, "GET", null, null)
+            val conn = open(url, "GET", token, null, budget, budget)
             try {
                 val code = conn.responseCode
                 val body = streamText(conn, code)
@@ -147,11 +157,19 @@ class EdgeSpeaker(private val context: Context) {
         }
     }
 
-    private fun open(url: String, method: String, token: String?, body: String?): HttpURLConnection {
+    private fun open(
+        url: String,
+        method: String,
+        token: String?,
+        body: String?,
+        connectTimeoutMs: Int = NeuralTts.CONNECT_TIMEOUT_MS,
+        readTimeoutMs: Int = NeuralTts.READ_TIMEOUT_MS
+    ): HttpURLConnection {
         val conn = (URL(url).openConnection() as HttpURLConnection)
         conn.requestMethod = method
-        conn.connectTimeout = NeuralTts.CONNECT_TIMEOUT_MS
-        conn.readTimeout = NeuralTts.READ_TIMEOUT_MS
+        conn.connectTimeout = connectTimeoutMs
+        conn.readTimeout = readTimeoutMs
+        conn.useCaches = false
         conn.instanceFollowRedirects = false
         if (!token.isNullOrBlank()) conn.setRequestProperty("X-Token", token)
         if (body != null) {

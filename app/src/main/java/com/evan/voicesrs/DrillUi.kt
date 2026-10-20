@@ -10,7 +10,14 @@ data class DrillUiState(
     val showBack: Boolean = false,
     val heard: String = "",
     val ratingMicOpen: Boolean = false,
-    val engineLabel: String = ""
+    val engineLabel: String = "",
+    /** "Done 4 · Left 16 · Streak 3 · ~8 min". Blank when idle. */
+    val progressLine: String = "",
+    val pendingSync: Int = 0,
+    val showError: Boolean = false,
+    val errorMessage: String = "",
+    /** True while [DrillService] is in a drill session, including after the activity is recreated. */
+    val drillRunning: Boolean = false
 )
 
 object DrillUi {

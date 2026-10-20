@@ -8,9 +8,6 @@ plugins {
 // Baked defaults. Never print these values. Both files stay outside git.
 val edgeTokenFile = File("<local-directory>")
 val edgeTtsToken: String = if (edgeTokenFile.isFile) edgeTokenFile.readText().trim() else ""
-if (edgeTtsToken.isEmpty()) {
-    throw GradleException("Missing Edge TTS token file")
-}
 
 val ankiKeyFile = rootProject.file("local-api-key.txt")
 val ankiApiKey: String = if (ankiKeyFile.isFile) ankiKeyFile.readText().trim() else ""
@@ -39,8 +36,8 @@ android {
         applicationId = "com.evan.voicesrs"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.1.5"
+        versionCode = 7
+        versionName = "0.1.6"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ANKI_API_KEY", javaStringLiteral(ankiApiKey))
         buildConfigField("String", "EDGE_TTS_TOKEN", javaStringLiteral(edgeTtsToken))
@@ -74,6 +71,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
     // org.json is bundled with Android; HttpURLConnection for AnkiConnect.
     testImplementation("junit:junit:4.13.2")
     // org.json on the JVM for unit tests:

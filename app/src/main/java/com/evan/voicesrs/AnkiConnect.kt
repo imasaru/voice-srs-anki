@@ -14,7 +14,8 @@ data class AnkiCard(
     val answerHtml: String,
     val deckName: String,
     /** Ease values the reviewer currently offers (usually [1,2,3,4]; new/learning cards may offer fewer). */
-    val buttons: List<Int>
+    val buttons: List<Int>,
+    val cardId: Long = 0
 )
 
 /**
@@ -49,9 +50,9 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) {
             val code = conn.responseCode
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream
             val text = stream?.readBytes()?.decodeToString() ?: ""
-            if (code !in 200..299) throw AnkiConnectException("HTTP $code from AnkiConnect: $text")
+            if (code !in 200..299) throw AnkiConnectException("HTTP $code from AnkiConnect")
             val resp = JSONObject(text)
-            if (!resp.isNull("error")) throw AnkiConnectException("AnkiConnect error: ${resp.get("error")}")
+            if (!resp.isNull("error")) throw AnkiConnectException("AnkiConnect refused the request")
             return if (resp.isNull("result")) null else resp.get("result")
         } catch (e: AnkiConnectException) {
             throw e
@@ -104,15 +105,81 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) {
      * empty / not in review mode (AnkiConnect returns false).
      */
     fun guiCurrentCard(): AnkiCard? {
-        val r = post("guiCurrentCard") ?: return null
+        val r = try {
+            post("guiCurrentCard")
+        } catch (e: AnkiConnectException) {
+            if (e.message?.contains("not currently active") == true) return null
+            throw e
+        } ?: return null
         if (r == JSONObject.NULL || r == false) return null
         val o = r as JSONObject
         return AnkiCard(
             questionHtml = o.optString("question", ""),
             answerHtml = o.optString("answer", ""),
             deckName = o.optString("deckName", ""),
-            buttons = parseButtons(o.optJSONArray("buttons"))
+            buttons = parseButtons(o.optJSONArray("buttons")),
+            cardId = o.optLong("cardId", 0L)
         )
+    }
+
+    fun preflight(deck: String): PreflightReport {
+        return try {
+            ConnectionPreflight.evaluate(version(), deckNames(), deck, null)
+        } catch (e: Exception) {
+            ConnectionPreflight.evaluate(null, null, deck, e.message)
+        }
+    }
+
+    /** Due and new card ids, capped at [limit]. */
+    fun dueCardIds(deckName: String, limit: Int): List<Long> {
+        val r = post(
+            "findCards",
+            mapOf("query" to "deck:\"$deckName\" (is:due OR is:new)")
+        ) as? JSONArray ?: return emptyList()
+        val n = minOf(r.length(), limit.coerceAtLeast(0))
+        val ids = ArrayList<Long>(n)
+        for (i in 0 until n) {
+            val id = r.optLong(i, 0L)
+            if (id != 0L) ids += id
+        }
+        return ids
+    }
+
+    fun cardsInfo(ids: List<Long>): List<OfflineCard> {
+        if (ids.isEmpty()) return emptyList()
+        val r = post("cardsInfo", mapOf("cards" to ids)) as? JSONArray ?: return emptyList()
+        val out = ArrayList<OfflineCard>(r.length())
+        for (i in 0 until r.length()) {
+            val o = r.optJSONObject(i) ?: continue
+            val id = o.optLong("cardId", 0L)
+            if (id == 0L) continue
+            out += OfflineCard(
+                cardId = id,
+                front = o.optString("question", ""),
+                back = o.optString("answer", ""),
+                buttons = listOf(1, 2, 3, 4)
+            )
+        }
+        return out
+    }
+
+    /** @return one boolean per grade, true when Anki accepted it. */
+    fun answerCards(grades: List<PendingGrade>): List<Boolean> {
+        if (grades.isEmpty()) return emptyList()
+        val answers = grades.map { mapOf("cardId" to it.cardId, "ease" to it.ease) }
+        val r = post("answerCards", mapOf("answers" to answers)) as? JSONArray
+            ?: return List(grades.size) { false }
+        return List(grades.size) { index -> index < r.length() && r.optBoolean(index, false) }
+    }
+
+    fun suspendCards(ids: List<Long>) {
+        if (ids.isEmpty()) return
+        post("suspend", mapOf("cards" to ids, "suspend" to true))
+    }
+
+    fun unsuspendCards(ids: List<Long>) {
+        if (ids.isEmpty()) return
+        post("unsuspend", mapOf("cards" to ids))
     }
 
     /** Number of cards due now in the named deck. */

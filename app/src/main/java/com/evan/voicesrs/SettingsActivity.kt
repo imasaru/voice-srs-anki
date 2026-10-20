@@ -49,7 +49,13 @@ class SettingsActivity : AppCompatActivity() {
         val neuralVoiceView: MaterialAutoCompleteTextView = findViewById(R.id.neuralVoiceInput)
         val neuralUrlView: TextInputEditText = findViewById(R.id.neuralUrlInput)
         val neuralTokenView: TextInputEditText = findViewById(R.id.neuralTokenInput)
+        val keyStatus: TextView = findViewById(R.id.keyStatus)
+        val tokenStatus: TextView = findViewById(R.id.tokenStatus)
         val neuralStatus: TextView = findViewById(R.id.neuralStatus)
+        val offlineSwitch: MaterialSwitch = findViewById(R.id.offlineBatchSwitch)
+        val batchSizeView: TextInputEditText = findViewById(R.id.batchSizeInput)
+        val goalModeView: MaterialAutoCompleteTextView = findViewById(R.id.goalModeInput)
+        val goalAmountView: TextInputEditText = findViewById(R.id.goalAmountInput)
         val testVoiceInput: TextInputEditText = findViewById(R.id.testVoiceInput)
         val testVoiceButton: Button = findViewById(R.id.testVoiceButton)
         val testVoiceStatus: TextView = findViewById(R.id.testVoiceStatus)
@@ -58,12 +64,33 @@ class SettingsActivity : AppCompatActivity() {
 
         val cfg = Prefs.load(this)
         urlView.setText(cfg.url)
-        keyView.setText(cfg.apiKey)
+        keyView.setText("")
+        keyStatus.text = getString(
+            if (cfg.apiKey.isNotBlank()) R.string.settings_key_saved else R.string.settings_key_missing
+        )
         deckView.setText(cfg.deck)
         neuralUrlView.setText(cfg.neuralUrl)
-        neuralTokenView.setText(cfg.neuralToken)
+        neuralTokenView.setText("")
+        tokenStatus.text = getString(
+            if (cfg.neuralToken.isNotBlank()) R.string.settings_token_saved else R.string.settings_token_missing
+        )
         speedSwitch.isChecked = cfg.speedMode
         showCardSwitch.isChecked = cfg.showCard
+        offlineSwitch.isChecked = cfg.offlineBatch
+        batchSizeView.setText(cfg.offlineBatchSize.toString())
+        val goalLabels = listOf(
+            getString(R.string.settings_goal_off),
+            getString(R.string.settings_goal_cards),
+            getString(R.string.settings_goal_minutes)
+        )
+        val goalLabel = when (cfg.goalMode) {
+            GoalModes.CARDS -> getString(R.string.settings_goal_cards)
+            GoalModes.MINUTES -> getString(R.string.settings_goal_minutes)
+            else -> getString(R.string.settings_goal_off)
+        }
+        bindChoices(goalModeView, goalLabels, goalLabel)
+        val shownAmount = if (cfg.goalMode == GoalModes.MINUTES) cfg.goalMinutes else cfg.goalCards
+        goalAmountView.setText(shownAmount.toString())
         if (testVoiceInput.text.isNullOrBlank()) {
             testVoiceInput.setText(getString(R.string.test_voice_sample))
         }
@@ -126,20 +153,31 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.saveButton).setOnClickListener {
             val voiceName = selectedDeviceVoice(voiceView)
             savedDeviceVoice = voiceName
+            val goalMode = when (goalModeView.text.toString().trim()) {
+                getString(R.string.settings_goal_cards) -> GoalModes.CARDS
+                getString(R.string.settings_goal_minutes) -> GoalModes.MINUTES
+                else -> GoalModes.OFF
+            }
+            val amount = goalAmountView.text.toString().trim().toIntOrNull()
             Prefs.save(
                 this,
                 AnkiConfig(
                     url = urlView.text.toString().trim().ifBlank { Prefs.DEFAULT_URL },
-                    apiKey = keyView.text.toString().trim(),
+                    apiKey = keyView.text.toString().trim().ifBlank { cfg.apiKey },
                     deck = deckView.text.toString().trim().ifBlank { Prefs.DEFAULT_DECK },
                     ttsRate = TtsRate.fromProgress(rateSlider.value.roundToInt()),
                     ttsVoice = voiceName,
                     ttsEngine = selectedEngine(engineView),
                     neuralUrl = neuralUrlView.text.toString().trim().ifBlank { Prefs.DEFAULT_NEURAL_URL },
-                    neuralToken = neuralTokenView.text.toString().trim(),
+                    neuralToken = neuralTokenView.text.toString().trim().ifBlank { cfg.neuralToken },
                     neuralVoice = neuralVoiceView.text.toString().trim().ifBlank { NeuralTts.DEFAULT_VOICE },
                     speedMode = speedSwitch.isChecked,
-                    showCard = showCardSwitch.isChecked
+                    showCard = showCardSwitch.isChecked,
+                    offlineBatch = offlineSwitch.isChecked,
+                    offlineBatchSize = batchSizeView.text.toString().trim().toIntOrNull() ?: cfg.offlineBatchSize,
+                    goalMode = goalMode,
+                    goalCards = if (goalMode == GoalModes.MINUTES) cfg.goalCards else (amount ?: cfg.goalCards),
+                    goalMinutes = if (goalMode == GoalModes.MINUTES) (amount ?: cfg.goalMinutes) else cfg.goalMinutes
                 )
             )
             Toast.makeText(this, "Settings saved.", Toast.LENGTH_SHORT).show()
@@ -150,8 +188,12 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.testConnectionButton).setOnClickListener {
             testResultView.text = "Testing…"
             val url = urlView.text.toString().trim().ifBlank { Prefs.DEFAULT_URL }
-            val key = keyView.text.toString().trim().ifBlank { Prefs.DEFAULT_API_KEY }
+            val key = keyView.text.toString().trim().ifBlank { cfg.apiKey }
             val deck = deckView.text.toString().trim().ifBlank { Prefs.DEFAULT_DECK }
+            if (key.isBlank()) {
+                testResultView.text = getString(R.string.settings_key_missing)
+                return@setOnClickListener
+            }
             Thread {
                 val sb = StringBuilder()
                 try {
@@ -175,7 +217,7 @@ class SettingsActivity : AppCompatActivity() {
             val deviceVoice = selectedDeviceVoice(voiceView)
             val neuralVoice = neuralVoiceView.text.toString().trim().ifBlank { NeuralTts.DEFAULT_VOICE }
             val neuralUrl = neuralUrlView.text.toString().trim().ifBlank { Prefs.DEFAULT_NEURAL_URL }
-            val neuralToken = neuralTokenView.text.toString().trim().ifBlank { BuildConfig.EDGE_TTS_TOKEN }
+            val neuralToken = neuralTokenView.text.toString().trim().ifBlank { cfg.neuralToken }
             testing = true
             testVoiceButton.isEnabled = false
             testVoiceStatus.text = getString(R.string.test_voice_playing)
@@ -218,7 +260,7 @@ class SettingsActivity : AppCompatActivity() {
         deckStatus: TextView
     ) {
         val url = urlView.text.toString().trim().ifBlank { Prefs.DEFAULT_URL }
-        val key = keyView.text.toString().trim().ifBlank { Prefs.DEFAULT_API_KEY }
+        val key = keyView.text.toString().trim().ifBlank { Prefs.load(this).apiKey }
         val kept = deckView.text.toString()
         deckStatus.text = getString(R.string.settings_decks_loading)
         Thread {
@@ -254,11 +296,11 @@ class SettingsActivity : AppCompatActivity() {
     ) {
         bindChoices(voiceView, NeuralTts.FALLBACK_VOICES, savedVoice)
         val url = urlView.text.toString().trim().ifBlank { Prefs.DEFAULT_NEURAL_URL }
-        val token = tokenView.text.toString().trim().ifBlank { BuildConfig.EDGE_TTS_TOKEN }
+        val token = tokenView.text.toString().trim().ifBlank { Prefs.load(this).neuralToken }
         Thread {
             val speaker = EdgeSpeaker(applicationContext)
             val remote = speaker.fetchVoices(url, token)
-            val up = speaker.healthy(url)
+            val up = speaker.healthy(url, token)
             val names = NeuralTts.pickerNames(remote)
             runOnUiThread {
                 if (destroyed) return@runOnUiThread

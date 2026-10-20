@@ -36,6 +36,26 @@
             android:text="@string/state_ready"
             android:textAppearance="?attr/textAppearanceTitleMedium" />
 
+        <TextView
+            android:id="@+id/progressText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:visibility="gone" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/syncChip"
+            style="@style/Widget.Material3.Chip.Assist"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:clickable="false"
+            android:focusable="false"
+            android:text="0 pending sync"
+            android:visibility="gone"
+            app:chipMinHeight="32dp" />
+
         <com.google.android.material.chip.Chip
             android:id="@+id/engineChip"
             style="@style/Widget.Material3.Chip.Assist"
