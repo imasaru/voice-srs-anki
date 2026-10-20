@@ -9,15 +9,22 @@ class GradeGate {
     /** False until a card is on screen (and again after the session ends): taps are ignored. */
     private var open = false
     private var claimedEase: Int? = null
+    /** False while only the question is showing: grades are ignored until [reveal]. */
+    private var revealed = false
 
-    @Synchronized fun newCard() { claimed = false; claimedEase = null; open = true }
+    @Synchronized fun newCard() { claimed = false; claimedEase = null; open = true; revealed = false }
+
+    /** The answer is now shown/spoken: rating controls appear and grades are accepted. */
+    @Synchronized fun reveal() { if (open) revealed = true }
+
+    @Synchronized fun isRevealed(): Boolean = open && revealed
 
     /** No card on screen (session ended or not started yet). */
-    @Synchronized fun close() { open = false; claimed = false; claimedEase = null }
+    @Synchronized fun close() { open = false; claimed = false; claimedEase = null; revealed = false }
 
     /** Returns true only for the first claim on the current card. */
     @Synchronized fun tryClaim(ease: Int?): Boolean {
-        if (!open || claimed) return false
+        if (!open || !revealed || claimed) return false
         claimed = true
         claimedEase = ease
         return true
@@ -27,7 +34,8 @@ class GradeGate {
      * Resolve a voice grade against an earlier claim: returns the ease that must be used.
      * The first claim wins, so a voice grade after a tap keeps the tapped ease.
      */
-    @Synchronized fun resolveVoice(ease: Int): Int {
+    @Synchronized fun resolveVoice(ease: Int): Int? {
+        if (!open || !revealed) return null
         if (!claimed) { claimed = true; claimedEase = ease; return ease }
         return claimedEase ?: ease
     }

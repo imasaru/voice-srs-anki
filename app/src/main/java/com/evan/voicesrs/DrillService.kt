@@ -493,6 +493,7 @@ class DrillService : Service(), VoiceIo {
             gradeGate.close()
             pendingGrades.clear()
             publishDrillRunning(false)
+            runCatching { DrillUi.update { it.copy(ratingVisible = false, selectedEase = null) } }
             runCatching {
                 DrillUi.update {
                     val cleared = it.copy(drillRunning = false, ratingMicOpen = false)
@@ -531,6 +532,7 @@ class DrillService : Service(), VoiceIo {
                     frontHtml = AnkiText.toDisplayHtml(questionHtml),
                     backHtml = "",
                     showBack = false,
+                    ratingVisible = false,
                     heard = "",
                     ratingMicOpen = false,
                     selectedEase = null
@@ -539,13 +541,19 @@ class DrillService : Service(), VoiceIo {
         }
     }
 
-    private fun showAnswerUi(answerHtml: String) {
+    private fun showAnswerUi(answerHtml: String) = synchronized(gradeGate) {
+        synchronized(injectLock) {
+            // Drop anything tapped while only the question was showing, then open grading.
+            pendingGrades.clear()
+            gradeGate.reveal()
+        }
         runCatching {
             DrillUi.update {
                 it.copy(
                     status = "Answer",
                     backHtml = AnkiText.toDisplayHtml(answerHtml),
                     showBack = true,
+                    ratingVisible = true,
                     ratingMicOpen = false
                 )
             }
@@ -655,6 +663,10 @@ class DrillService : Service(), VoiceIo {
             if (action is VoiceAction.Grade && grading) {
                 // Voice grade: claim the card and highlight its chip. A tap that came first wins.
                 val used = gradeGate.resolveVoice(action.ease)
+                if (used == null) {
+                    Log.i(TAG, "voice grade ignored: answer not revealed")
+                    return afterListen(result)
+                }
                 runCatching { DrillUi.update { it.copy(selectedEase = used) } }
                 Log.i(TAG, "grade chip highlighted ease=$used")
                 if (used != action.ease) {

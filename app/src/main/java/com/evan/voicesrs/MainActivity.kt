@@ -96,10 +96,10 @@ class MainActivity : AppCompatActivity() {
         stopButton = findViewById(R.id.stopButton)
         findViewById<Button>(R.id.retryButton).setOnClickListener { ensurePermissionsAndStart() }
         syncButton.setOnClickListener { syncPending() }
-        chipAgain.setOnClickListener { DrillService.submitTestGrade("again"); render(DrillUi.state) }
-        chipHard.setOnClickListener { DrillService.submitTestGrade("hard"); render(DrillUi.state) }
-        chipGood.setOnClickListener { DrillService.submitTestGrade("good"); render(DrillUi.state) }
-        chipEasy.setOnClickListener { DrillService.submitTestGrade("easy"); render(DrillUi.state) }
+        chipAgain.setOnClickListener { if (DrillUi.state.ratingVisible) DrillService.submitTestGrade("again"); render(DrillUi.state) }
+        chipHard.setOnClickListener { if (DrillUi.state.ratingVisible) DrillService.submitTestGrade("hard"); render(DrillUi.state) }
+        chipGood.setOnClickListener { if (DrillUi.state.ratingVisible) DrillService.submitTestGrade("good"); render(DrillUi.state) }
+        chipEasy.setOnClickListener { if (DrillUi.state.ratingVisible) DrillService.submitTestGrade("easy"); render(DrillUi.state) }
         startButton.setOnClickListener { ensurePermissionsAndStart() }
         stopButton.setOnClickListener {
             stopService(Intent(this, DrillService::class.java))
@@ -270,7 +270,11 @@ class MainActivity : AppCompatActivity() {
             errorCard.visibility = View.GONE
         }
         // Single selection driven by service state: only the chosen grade is highlighted.
-        val sel = state.selectedEase
+        // Rating chips appear only once the answer is revealed.
+        val ratingVis = if (state.ratingVisible) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.gradeGuideLabel).visibility = ratingVis
+        findViewById<View>(R.id.gradeChips).visibility = ratingVis
+        val sel = if (state.ratingVisible) state.selectedEase else null
         chipAgain.isChecked = sel == 1
         chipHard.isChecked = sel == 2
         chipGood.isChecked = sel == 3

@@ -8,6 +8,8 @@ data class DrillUiState(
     val frontHtml: String = "",
     val backHtml: String = "",
     val showBack: Boolean = false,
+    /** Rating chips are shown only after the answer is revealed; hidden on the question. */
+    val ratingVisible: Boolean = false,
     val heard: String = "",
     val ratingMicOpen: Boolean = false,
     val engineLabel: String = "",

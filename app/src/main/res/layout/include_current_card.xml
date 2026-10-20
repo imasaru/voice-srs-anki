@@ -66,13 +66,15 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="@string/grade_guide"
-            android:textAppearance="?attr/textAppearanceLabelLarge" />
+            android:textAppearance="?attr/textAppearanceLabelLarge"
+            android:visibility="gone" />
 
         <com.google.android.material.chip.ChipGroup
             android:id="@+id/gradeChips"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
+            android:visibility="gone"
             app:chipSpacingHorizontal="8dp"
             app:singleLine="false"
             app:singleSelection="true">
