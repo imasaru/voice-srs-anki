@@ -11,6 +11,8 @@
     <application
         android:name=".VoiceSrsApp"
         android:label="Voice SRS"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.VoiceSrs"
         android:allowBackup="true"
         android:usesCleartextTraffic="true">

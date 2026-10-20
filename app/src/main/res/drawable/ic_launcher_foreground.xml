@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- back card (stack hint) -->
+    <path android:fillColor="#8CC5CAE9"
+        android:pathData="M40,33h30a4,4 0 0 1 4,4v34a4,4 0 0 1 -4,4h-30a4,4 0 0 1 -4,-4v-34a4,4 0 0 1 4,-4z"/>
+    <!-- front card -->
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M36,37h32a4,4 0 0 1 4,4v34a4,4 0 0 1 -4,4h-32a4,4 0 0 1 -4,-4v-34a4,4 0 0 1 4,-4z"/>
+    <!-- sound wave bars -->
+    <path android:fillColor="#FF283593"
+        android:pathData="M39,55.5a1.5,1.5 0 0 1 3,0v5a1.5,1.5 0 0 1 -3,0z
+        M45,51.5a1.5,1.5 0 0 1 3,0v13a1.5,1.5 0 0 1 -3,0z
+        M51,46.5a1.5,1.5 0 0 1 3,0v23a1.5,1.5 0 0 1 -3,0z
+        M57,50.5a1.5,1.5 0 0 1 3,0v15a1.5,1.5 0 0 1 -3,0z
+        M63,54.5a1.5,1.5 0 0 1 3,0v7a1.5,1.5 0 0 1 -3,0z"/>
+</vector>
