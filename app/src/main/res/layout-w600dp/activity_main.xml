@@ -61,7 +61,8 @@
             android:layout_weight="1"
             android:orientation="vertical">
 
-            <!-- At most ~45% so a long card cannot squeeze the chat list to 0 height. -->
+            <!-- 45% leaves a few lines of the question once card padding is tight.
+                 The chat keeps 55% so one exchange (card, answer, reply) stays on screen. -->
             <include
                 layout="@layout/include_current_card"
                 android:layout_width="match_parent"

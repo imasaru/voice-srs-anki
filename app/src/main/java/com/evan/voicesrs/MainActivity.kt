@@ -139,7 +139,7 @@ class MainActivity : AppCompatActivity() {
         showAnswerButton = findViewById(R.id.showAnswerButton)
         showAnswerButton.setOnClickListener { DrillService.submitShowAnswer() }
         bindSilentIndicators()
-        findViewById<Button>(R.id.retryButton).setOnClickListener { ensurePermissionsAndStart() }
+        findViewById<Button>(R.id.retryButton).setOnClickListener { retryDrill() }
         syncButton.setOnClickListener { syncPending() }
         chipAgain.setOnClickListener { if (DrillUi.state.ratingVisible) DrillService.submitTestGrade("again"); render(DrillUi.state) }
         chipHard.setOnClickListener { if (DrillUi.state.ratingVisible) DrillService.submitTestGrade("hard"); render(DrillUi.state) }
@@ -262,8 +262,10 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Unfolded chat stays up whenever AI is on, including an empty thread.
-     * The card then keeps about 45% of the pane. With AI off the chat hides
-     * and the card fills the pane. Folded layout has no chat section.
+     * The card keeps 45% so a few lines of the question stay readable, and the
+     * chat keeps 55% so the latest card, answer, and reply fit together.
+     * With AI off the chat hides and the card fills the pane. Folded layout
+     * has no chat section.
      */
     private fun applyAiChrome() {
         val section = findViewById<View>(R.id.chatSection) ?: return
@@ -280,6 +282,14 @@ class MainActivity : AppCompatActivity() {
             lp.height = 0
             lp.weight = weight
             currentCard.layoutParams = lp
+        }
+        if (enabled) {
+            val chatLp = section.layoutParams as? LinearLayout.LayoutParams
+            if (chatLp != null && (chatLp.weight != 55f || chatLp.height != 0)) {
+                chatLp.height = 0
+                chatLp.weight = 55f
+                section.layoutParams = chatLp
+            }
         }
     }
 
@@ -492,6 +502,26 @@ class MainActivity : AppCompatActivity() {
             stateText.text = pendingStatus
             stateText.animate().alpha(1f).setDuration(160).start()
         }.start()
+    }
+
+    /**
+     * Retry is on the error card, including while the failed session is still
+     * speaking. A plain start is ignored until that session exits, so the tap
+     * does nothing for the whole utterance. Ask the service to abandon it and
+     * start a new one. If the service is already gone, start normally.
+     */
+    private fun retryDrill() {
+        if (DrillService.running) {
+            try {
+                val intent = Intent(this, DrillService::class.java).setAction(DrillService.ACTION_RETRY)
+                ContextCompat.startForegroundService(this, intent)
+            } catch (e: Exception) {
+                Log.e("MainActivity", "retry failed", e)
+                Toast.makeText(this, "Could not retry: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        } else {
+            ensurePermissionsAndStart()
+        }
     }
 
     private fun ensurePermissionsAndStart() {

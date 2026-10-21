@@ -117,7 +117,8 @@ class ChatAdapter(
             if (shown.body.isNotBlank()) {
                 body.visibility = View.VISIBLE
                 body.text = shown.body
-                body.maxLines = if (expanded) Integer.MAX_VALUE else 12
+                body.maxLines = if (expanded) Integer.MAX_VALUE else 8
+                body.ellipsize = if (expanded) null else TextUtils.TruncateAt.END
             } else {
                 body.visibility = View.GONE
                 body.text = ""

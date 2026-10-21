@@ -68,6 +68,8 @@ class DrillService : Service(), VoiceIo {
 
     companion object {
         const val ACTION_STOP = "com.evan.voicesrs.action.STOP"
+        /** Abandon the in-flight session (usually still speaking an error) and start another. */
+        const val ACTION_RETRY = "com.evan.voicesrs.action.RETRY"
         const val ACTION_TEST_GRADE = "com.evan.voicesrs.TEST_GRADE"
         const val ACTION_TEST_SHOW_ANSWER = "com.evan.voicesrs.TEST_SHOW_ANSWER"
         const val EXTRA_GRADE = "grade"
@@ -170,6 +172,8 @@ class DrillService : Service(), VoiceIo {
 
     private var sessionThread: Thread? = null
     private val stopRequested = AtomicBoolean(false)
+    /** Set by [ACTION_RETRY] so the session thread loops instead of stopping the service. */
+    private val pendingRestart = AtomicBoolean(false)
     /** Per utterance. [speak] clears it; a rating tap sets it so TTS stops. */
     @Volatile private var speechInterrupted = false
     /** This card was claimed by a tap. Cleared when that grade is taken or the next question starts. */
@@ -314,8 +318,27 @@ class DrillService : Service(), VoiceIo {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.i(TAG, "onStartCommand action=" + intent?.action)
         if (intent?.action == ACTION_STOP) {
+            pendingRestart.set(false)
             requestStop()
             return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_RETRY) {
+            val restarting = synchronized(this) {
+                if (sessionThread?.isAlive == true) {
+                    pendingRestart.set(true)
+                    stopRequested.set(true)
+                    speechInterrupted = true
+                    speakLatch?.countDown()
+                    try { tts?.stop() } catch (_: Exception) {}
+                    sessionThread?.interrupt()
+                    Log.i(TAG, "retry: restarting session")
+                    true
+                } else {
+                    false
+                }
+            }
+            if (restarting) return START_NOT_STICKY
+            Log.i(TAG, "retry: no session, starting")
         }
         // Main-thread service starts are serialized. Snapshot only when a new session will start,
         // so a settings change during a running drill waits until the next session.
@@ -494,6 +517,17 @@ class DrillService : Service(), VoiceIo {
     }
 
     private fun runSession() {
+        while (!destroyed) {
+            Thread.interrupted()
+            stopRequested.set(false)
+            pendingRestart.set(false)
+            runSessionOnce()
+            if (!pendingRestart.get() || destroyed) break
+            Log.i(TAG, "retry: new session")
+        }
+    }
+
+    private fun runSessionOnce() {
         Log.i(TAG, "runSession start")
         if (sessionSilent) Log.i(TAG, "silent mode: mic disabled")
         if (stopRequested.get()) return
@@ -567,7 +601,9 @@ class DrillService : Service(), VoiceIo {
             speak(message)
         } catch (e: Exception) {
             Log.e(TAG, "session failure", e)
-            speak("Something went wrong. Drill stopped.")
+            val message = "Something went wrong. Drill stopped."
+            showFailure(message, title = "Drill stopped")
+            speak(message)
         } finally {
             runCatching { explainSession?.stop() }
             explainSession = null
@@ -585,13 +621,14 @@ class DrillService : Service(), VoiceIo {
                         awaitingShowAnswer = false
                     )
                     when {
+                        pendingRestart.get() -> cleared
                         stopRequested.get() -> cleared.copy(status = "Stopped")
                         it.status in TRANSIENT_STATUS -> cleared.copy(status = "Drill complete")
                         else -> cleared
                     }
                 }
             }
-            stopSelf()
+            if (!pendingRestart.get()) stopSelf()
         }
     }
 

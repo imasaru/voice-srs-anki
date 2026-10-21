@@ -113,7 +113,10 @@ class ChatPane(
             // Only an unread explanation can start the dwell timer. Otherwise a turn seen
             // while still Queued/Generating is marked read early and its badge never clears.
             if (!turn.unread) continue
-            val section = child.findViewById<View>(R.id.explSection) ?: continue
+            val section = child.findViewById<View>(R.id.explSection)
+                ?: child.findViewById<View>(R.id.aiBubble)
+                ?: continue
+            if (section.visibility != View.VISIBLE) continue
             visible[turn.turnId] = visibleFraction(section)
         }
         val unreadIds = adapter.currentList.filter { it.unread }.map { it.turnId }.toSet()
