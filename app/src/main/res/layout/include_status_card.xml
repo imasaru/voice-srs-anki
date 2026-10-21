@@ -87,7 +87,7 @@
             android:layout_marginTop="12dp"
             android:clickable="false"
             android:focusable="false"
-            android:text="@string/engine_neural"
+            android:text="@string/engine_checking"
             app:chipMinHeight="32dp" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

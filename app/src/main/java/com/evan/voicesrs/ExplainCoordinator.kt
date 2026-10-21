@@ -102,7 +102,7 @@ class ExplainSession private constructor(
             ease = ease,
             cardId = cardId,
             noteId = noteId,
-            frontText = AnkiText.stripHtml(front),
+            frontText = BubbleModel.fullQuestion(front).ifBlank { AnkiText.stripHtml(front) },
             backText = AnkiText.stripHtml(back),
             contentHash = hash,
             transcript = transcript,

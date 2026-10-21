@@ -420,11 +420,24 @@ class DrillService : Service(), VoiceIo {
             val ease: Int,
             val elapsedMs: Long,
             val transcript: String = "",
-            val answerHtml: String = ""
+            val answerHtml: String = "",
+            /** Question HTML from the same card object as [answerHtml]. */
+            val questionHtml: String = ""
         ) : CardStep()
         data object Skipped : CardStep()
         data object Paused : CardStep()
         data object Blank : CardStep()
+        /** Reviewer card changed. The loop fetches guiCurrentCard again. */
+        data object Resync : CardStep()
+    }
+
+    private sealed class Revealed {
+        data class Answer(
+            val questionHtml: String,
+            val answerHtml: String,
+            val buttons: List<Int>
+        ) : Revealed()
+        data object Changed : Revealed()
     }
 
     private fun publishDrillRunning(active: Boolean) {
@@ -454,9 +467,10 @@ class DrillService : Service(), VoiceIo {
         if (preferred != EngineChoice.NEURAL) {
             neuralHealthKnown = true
             neuralBlocked = true
-            showEngine(TtsEngines.LABEL_DEVICE)
+            showEngine(EngineLabel.of(preferred, false))
             return
         }
+        if (!neuralHealthKnown) showEngine(EngineLabel.of(preferred, null))
         lastNeuralHealthAt = SystemClock.elapsedRealtime()
         val ok = try {
             EdgeSpeaker(this).healthy(cfg.neuralUrl, cfg.neuralToken, NeuralTts.HEALTH_TIMEOUT_MS)
@@ -467,10 +481,10 @@ class DrillService : Service(), VoiceIo {
         neuralBlocked = !ok
         if (NeuralTts.sessionEngine(preferred, ok) == EngineChoice.NEURAL) {
             Log.i(TAG, "neural health ok")
-            showEngine(TtsEngines.LABEL_NEURAL)
+            showEngine(EngineLabel.of(preferred, true))
         } else {
             Log.i(TAG, "neural health fail")
-            showEngine(TtsEngines.LABEL_DEVICE)
+            showEngine(EngineLabel.of(preferred, false))
         }
     }
 
@@ -617,7 +631,7 @@ class DrillService : Service(), VoiceIo {
         }
     }
 
-    private fun showAnswerUi(answerHtml: String) = synchronized(gradeGate) {
+    private fun showAnswerUi(questionHtml: String, answerHtml: String) = synchronized(gradeGate) {
         synchronized(injectLock) {
             // Drop anything tapped while only the question was showing, then open grading.
             pendingGrades.clear()
@@ -627,6 +641,7 @@ class DrillService : Service(), VoiceIo {
             DrillUi.update {
                 it.copy(
                     status = "Answer",
+                    frontHtml = if (questionHtml.isBlank()) it.frontHtml else AnkiText.displayHtml(questionHtml),
                     backHtml = AnkiText.displayHtml(answerHtml),
                     showBack = true,
                     ratingVisible = true,
@@ -660,7 +675,10 @@ class DrillService : Service(), VoiceIo {
             Prefs.load(this)
         } catch (e: Exception) {
             Log.w(TAG, "prefs load failed during speak", e)
-            if (speakOnDevice(text)) Log.i(TAG, "TTS engine=on-device ok")
+            if (speakOnDevice(text)) {
+                Log.i(TAG, "TTS engine=on-device ok")
+                showEngine(EngineLabel.of(EngineChoice.ON_DEVICE, false))
+            }
             return
         }
         if (useNeuralNow(cfg)) {
@@ -678,14 +696,14 @@ class DrillService : Service(), VoiceIo {
             }
             if (ok) {
                 Log.i(TAG, "TTS engine=neural ok")
-                showEngine(TtsEngines.LABEL_NEURAL)
+                showEngine(EngineLabel.of(EngineChoice.NEURAL, true))
                 return
             }
             // A tap or Stop already ended this utterance. Do not replay it on-device.
             if (stopRequested.get() || speechInterrupted) return
             if (speakOnDevice(text)) {
                 Log.i(TAG, "TTS engine=neural fail; fallback on-device ok")
-                showEngine(TtsEngines.LABEL_DEVICE)
+                showEngine(EngineLabel.of(EngineChoice.NEURAL, false))
             } else {
                 Log.w(TAG, "TTS engine=neural fail; fallback on-device failed")
             }
@@ -693,7 +711,7 @@ class DrillService : Service(), VoiceIo {
         }
         if (speakOnDevice(text)) {
             Log.i(TAG, "TTS engine=on-device ok")
-            showEngine(TtsEngines.LABEL_DEVICE)
+            showEngine(EngineLabel.of(EngineChoice.ON_DEVICE, false))
         } else {
             Log.w(TAG, "TTS engine=on-device failed")
         }
@@ -915,6 +933,8 @@ class DrillService : Service(), VoiceIo {
         publish(progress, store)
         var lastSkipId = 0L
         var goalSpoken = false
+        var resyncs = 0
+        var resyncHalt = false
         while (!stopRequested.get()) {
             val elapsed = SystemClock.elapsedRealtime() - started
             if (!goalSpoken && progress.goalReached(cfg.goalMode, cfg.goalCards, cfg.goalMinutes, elapsed)) {
@@ -938,24 +958,53 @@ class DrillService : Service(), VoiceIo {
             ) {
                 anki.guiShowAnswer()
                 val shown = anki.guiCurrentCard()
-                (shown?.answerHtml ?: card.answerHtml) to (shown?.buttons ?: card.buttons)
+                val same = CardIdentity.sameCard(card.cardId, shown)
+                if (same == null) {
+                    Log.w(TAG, CardIdentity.mismatchLog(card.cardId, shown?.cardId))
+                    Revealed.Changed
+                } else {
+                    Revealed.Answer(same.questionHtml, same.answerHtml, same.buttons)
+                }
             }
             when (step) {
                 CardStep.Paused -> {
                     unsuspendSkipped(anki, store)
                     return
                 }
+                CardStep.Resync -> {
+                    resyncs += 1
+                    if (CardIdentity.shouldStop(resyncs)) {
+                        val message = "The card on screen changed. Drill stopped."
+                        Log.w(TAG, message)
+                        speak(message)
+                        resyncHalt = true
+                        break
+                    }
+                }
                 CardStep.Blank -> {
                     Log.w(TAG, "empty question; marking good")
-                    anki.guiAnswerCard(GradeMapper.toAvailableEase(3, card.buttons))
-                    runCatching {
-                        explainSession?.noteSeen(card.cardId)
-                        explainSession?.prefetchOnline(anki)
+                    if (!stillCurrent(anki, card)) {
+                        resyncs += 1
+                        if (CardIdentity.shouldStop(resyncs)) {
+                            val message = "The card on screen changed. Drill stopped."
+                            Log.w(TAG, message)
+                            speak(message)
+                            resyncHalt = true
+                            break
+                        }
+                    } else {
+                        anki.guiAnswerCard(GradeMapper.toAvailableEase(3, card.buttons))
+                        resyncs = 0
+                        runCatching {
+                            explainSession?.noteSeen(card.cardId)
+                            explainSession?.prefetchOnline(anki)
+                        }
                     }
                 }
                 CardStep.Skipped -> {
                     lastSkipId = card.cardId
                     skipOnline(anki, cfg.deck, card, store)
+                    resyncs = 0
                     runCatching {
                         explainSession?.noteSeen(card.cardId)
                         explainSession?.prefetchOnline(anki)
@@ -963,17 +1012,34 @@ class DrillService : Service(), VoiceIo {
                 }
                 is CardStep.Graded -> {
                     lastSkipId = 0L
-                    // Ease is already final. The turn is recorded before any explanation request.
-                    runCatching {
-                        explainSession?.recordOnline(
-                            anki, card.cardId, card.questionHtml, step.answerHtml, step.transcript, step.ease
-                        )
+                    if (!stillCurrent(anki, card)) {
+                        resyncs += 1
+                        if (CardIdentity.shouldStop(resyncs)) {
+                            val message = "The card on screen changed. Drill stopped."
+                            Log.w(TAG, message)
+                            speak(message)
+                            resyncHalt = true
+                            break
+                        }
+                    } else {
+                        anki.guiAnswerCard(step.ease)
+                        resyncs = 0
+                        // Ease is applied first. recordOnline calls cardsInfo and must not run before the grade.
+                        runCatching {
+                            explainSession?.recordOnline(
+                                anki,
+                                card.cardId,
+                                step.questionHtml.ifBlank { card.questionHtml },
+                                step.answerHtml,
+                                step.transcript,
+                                step.ease
+                            )
+                        }
+                        progress.recordGrade(step.ease, step.elapsedMs)
+                        publish(progress, store)
+                        Log.i(TAG, "graded ease=${step.ease}")
+                        runCatching { explainSession?.prefetchOnline(anki) }
                     }
-                    anki.guiAnswerCard(step.ease)
-                    progress.recordGrade(step.ease, step.elapsedMs)
-                    publish(progress, store)
-                    Log.i(TAG, "graded ease=${step.ease}")
-                    runCatching { explainSession?.prefetchOnline(anki) }
                 }
             }
             val after = SystemClock.elapsedRealtime() - started
@@ -984,7 +1050,7 @@ class DrillService : Service(), VoiceIo {
             }
         }
         unsuspendSkipped(anki, store)
-        if (!stopRequested.get() && !goalSpoken) {
+        if (!stopRequested.get() && !goalSpoken && !resyncHalt) {
             val summary = if (progress.done == 0) {
                 showStatus("No cards due")
                 "No cards were due. Drill complete."
@@ -994,6 +1060,16 @@ class DrillService : Service(), VoiceIo {
             speak(summary)
             runCatching { anki.sync() }
         }
+    }
+
+    /** True when the desktop reviewer still has [card]. Logs and returns false on a change. */
+    private fun stillCurrent(anki: AnkiConnect, card: AnkiCard): Boolean {
+        val current = anki.guiCurrentCard()
+        if (CardIdentity.beforeGrade(card.cardId, current?.cardId) == CardIdentity.Verdict.PROCEED) {
+            return true
+        }
+        Log.w(TAG, CardIdentity.mismatchLog(card.cardId, current?.cardId))
+        return false
     }
 
     private fun runOffline(
@@ -1024,10 +1100,11 @@ class DrillService : Service(), VoiceIo {
                 ListenWindow.waitMs(cfg.listenWaitSec),
                 cfg.relistenOnce
             ) {
-                card.back to card.buttons
+                Revealed.Answer(card.front, card.back, card.buttons)
             }
             when (step) {
                 CardStep.Paused -> return
+                CardStep.Resync -> Log.w(TAG, "offline resync ignored")
                 CardStep.Blank -> {
                     Log.w(TAG, "offline card had an empty question")
                     runCatching {
@@ -1073,7 +1150,8 @@ class DrillService : Service(), VoiceIo {
     /**
      * Question, optional commands, answer, then a grade.
      * [reveal] runs once the spoken answer is about to be shown. Online mode
-     * uses it to call guiShowAnswer and refresh the answer HTML.
+     * uses it to call guiShowAnswer and keep the question and answer on one card.
+     * [Revealed.Changed] does not speak or show the other card's answer.
      */
     private fun drillOne(
         questionHtml: String,
@@ -1082,7 +1160,7 @@ class DrillService : Service(), VoiceIo {
         buttons: List<Int>,
         listenWaitMs: Long,
         relistenOnce: Boolean,
-        reveal: () -> Pair<String, List<Int>>
+        reveal: () -> Revealed
     ): CardStep {
         val question = AnkiText.spokenText(questionHtml)
         if (question.isBlank()) return CardStep.Blank
@@ -1120,11 +1198,15 @@ class DrillService : Service(), VoiceIo {
             if (!awaitShowAnswer()) return CardStep.Paused
         }
         if (stopRequested.get()) return CardStep.Paused
-        val (answerHtml, answerButtons) = reveal()
+        val revealed = reveal()
+        if (revealed is Revealed.Changed) return CardStep.Resync
+        val answer = revealed as Revealed.Answer
+        val answerHtml = answer.answerHtml
+        val answerButtons = answer.buttons
         val answerBody = AnkiText.answerOnly(answerHtml)
         val answerText = AnkiText.spokenText(answerBody)
         Log.d(TAG, "tts answer: $answerText")
-        showAnswerUi(answerBody)
+        showAnswerUi(answer.questionHtml, answerBody)
         if (answerText.isNotBlank()) speak(answerText)
         if (stopRequested.get()) return CardStep.Paused
         val gradeButtons = answerButtons.ifEmpty { buttons }
@@ -1132,20 +1214,20 @@ class DrillService : Service(), VoiceIo {
             if (gradeGate.isClaimed()) gradeGate.ease() else null
         }
         if (tapped != null) {
-            return gradedByTap(tapped, gradeButtons, started, transcript, answerHtml)
+            return gradedByTap(tapped, gradeButtons, started, transcript, answerHtml, answer.questionHtml)
         }
         if (sessionSilent) {
             showStatus("Rate this card")
             val ease = awaitSilentGrade()
             if (ease == null || stopRequested.get()) return CardStep.Paused
-            return gradedByTap(ease, gradeButtons, started, transcript, answerHtml)
+            return gradedByTap(ease, gradeButtons, started, transcript, answerHtml, answer.questionHtml)
         }
         showStatus("Rate this card")
         setGrading(true)
         return try {
             val ease = grader.grade(
                 GradeContext(
-                    AnkiCard(questionHtml, answerBody, "", gradeButtons),
+                    AnkiCard(answer.questionHtml.ifBlank { questionHtml }, answerBody, "", gradeButtons),
                     answerText,
                     cardIndex = cardIndex,
                     speedMode = speedMode,
@@ -1160,9 +1242,15 @@ class DrillService : Service(), VoiceIo {
             )
             if (tapGrade) {
                 val raw = synchronized(gradeGate) { gradeGate.ease() } ?: ease
-                return gradedByTap(raw, gradeButtons, started, transcript, answerHtml)
+                return gradedByTap(raw, gradeButtons, started, transcript, answerHtml, answer.questionHtml)
             }
-            CardStep.Graded(ease, SystemClock.elapsedRealtime() - started, transcript, answerHtml)
+            CardStep.Graded(
+                ease,
+                SystemClock.elapsedRealtime() - started,
+                transcript,
+                answerHtml,
+                answer.questionHtml
+            )
         } catch (_: SkipRequested) {
             CardStep.Skipped
         } catch (_: PauseRequested) {
@@ -1178,7 +1266,8 @@ class DrillService : Service(), VoiceIo {
                 GradeMapper.toAvailableEase(3, answerButtons.ifEmpty { buttons }),
                 SystemClock.elapsedRealtime() - started,
                 transcript,
-                answerHtml
+                answerHtml,
+                answer.questionHtml
             )
         } finally {
             setGrading(false)
@@ -1264,7 +1353,8 @@ class DrillService : Service(), VoiceIo {
         buttons: List<Int>,
         startedElapsed: Long,
         transcript: String,
-        answerHtml: String
+        answerHtml: String,
+        questionHtml: String = ""
     ): CardStep.Graded {
         val ease = GradeMapper.toAvailableEase(rawEase, buttons)
         Log.i(TAG, "graded by tap ease=$ease")
@@ -1272,7 +1362,13 @@ class DrillService : Service(), VoiceIo {
         synchronized(gradeGate) {
             synchronized(injectLock) { pendingGrades.clear() }
         }
-        return CardStep.Graded(ease, SystemClock.elapsedRealtime() - startedElapsed, transcript, answerHtml)
+        return CardStep.Graded(
+            ease,
+            SystemClock.elapsedRealtime() - startedElapsed,
+            transcript,
+            answerHtml,
+            questionHtml
+        )
     }
 
     /** Hear-back + dead-mic accounting for microphone transcripts. Tap words skip this. */

@@ -130,20 +130,28 @@ object ExplainQueue {
         }
         var lastUi = 0L
         try {
-            val text = client.complete(
+            val raw = client.complete(
                 baseUrl = cfg.aiBaseUrl,
                 apiKey = cfg.aiApiKey,
                 model = cfg.aiModel,
                 system = PromptBuilder.SYSTEM,
                 user = PromptBuilder.userMessage(job.front, job.back),
-                cancelled = { job.cancelRequested }
+                cancelled = { job.cancelRequested },
+                onThinking = {
+                    val id = job.turnId ?: return@complete
+                    ReviewLog.markThinking(id)
+                }
             ) { partial ->
                 val id = job.turnId ?: return@complete
+                val shown = BubbleModel.visibleExplanation(partial, job.front, job.back)
+                if (shown.isBlank()) return@complete
                 val now = System.currentTimeMillis()
                 if (now - lastUi < 250L) return@complete
                 lastUi = now
-                ReviewLog.markStreaming(id, partial)
+                ReviewLog.markStreaming(id, shown)
             }
+            val text = BubbleModel.visibleExplanation(raw, job.front, job.back)
+            if (text.isBlank()) throw AiException(AiMessages.NO_TEXT, retryable = false)
             AiCache.put(
                 context,
                 ExplanationRow(

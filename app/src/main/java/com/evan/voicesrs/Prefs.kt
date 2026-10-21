@@ -43,8 +43,8 @@ data class AnkiConfig(
     val needsNeuralToken: Boolean = false,
     /** Master switch for AI explanations. Off until the user turns it on. */
     val aiEnabled: Boolean = false,
-    val aiBaseUrl: String = "http://192.0.2.10:11434/v1",
-    val aiModel: String = "qwen3:8b",
+    val aiBaseUrl: String = "http://example.local/v1",
+    val aiModel: String = "scottlowry/Ornith-1.5-35B-A3B-oQ5e-mtp:precise",
     /** Optional. Stored only in encrypted prefs. Never logged. */
     val aiApiKey: String = "",
     val aiLookahead: Int = 2,
@@ -89,8 +89,8 @@ object Prefs {
     const val DEFAULT_BATCH_SIZE = 20
     const val DEFAULT_GOAL_CARDS = 20
     const val DEFAULT_GOAL_MINUTES = 10
-    const val DEFAULT_AI_URL = "http://192.0.2.10:11434/v1"
-    const val DEFAULT_AI_MODEL = "qwen3:8b"
+    const val DEFAULT_AI_URL = "http://example.local/v1"
+    const val DEFAULT_AI_MODEL = "scottlowry/Ornith-1.5-35B-A3B-oQ5e-mtp:precise"
     const val DEFAULT_AI_LOOKAHEAD = 2
 
     /**

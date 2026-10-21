@@ -17,7 +17,8 @@ import androidx.recyclerview.widget.RecyclerView
  */
 class ChatPane(
     private val list: RecyclerView,
-    private val unreadView: TextView
+    private val unreadView: TextView,
+    private val emptyView: TextView? = null
 ) {
     private val adapter = ChatAdapter(
         onExplExpanded = { id -> sample(id) },
@@ -80,6 +81,7 @@ class ChatPane(
     }
 
     private fun render(turns: List<ReviewTurn>) {
+        emptyView?.visibility = if (turns.isEmpty()) View.VISIBLE else View.GONE
         val n = turns.count { it.unread }
         unreadView.text = if (n == 1) {
             unreadView.context.getString(R.string.chat_unread_one)

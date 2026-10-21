@@ -54,33 +54,72 @@
         </ScrollView>
 
         <LinearLayout
+            android:id="@+id/reviewPane"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_marginStart="@dimen/pane_gap"
             android:layout_weight="1"
             android:orientation="vertical">
 
+            <!-- At most ~45% so a long card cannot squeeze the chat list to 0 height. -->
             <include
                 layout="@layout/include_current_card"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
+                android:layout_height="0dp"
+                android:layout_marginBottom="12dp"
+                android:layout_weight="45" />
 
-            <TextView
-                android:id="@+id/chatUnread"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:clickable="false"
-                android:focusable="false"
-                android:paddingBottom="4dp"
-                android:textAppearance="?attr/textAppearanceTitleSmall" />
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/chatList"
+            <LinearLayout
+                android:id="@+id/chatSection"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:layout_weight="1"
-                android:clipToPadding="false"
-                android:scrollbars="vertical" />
+                android:layout_weight="55"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:id="@+id/chatHeader"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingBottom="4dp">
+
+                    <TextView
+                        android:id="@+id/chatTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/chat_title"
+                        android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+                    <TextView
+                        android:id="@+id/chatUnread"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:clickable="false"
+                        android:focusable="false"
+                        android:paddingStart="8dp"
+                        android:textAppearance="?attr/textAppearanceTitleSmall" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/chatEmpty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:text="@string/chat_empty"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/chatList"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:clipToPadding="false"
+                    android:scrollbars="vertical" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

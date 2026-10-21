@@ -476,7 +476,7 @@ class SettingsActivity : AppCompatActivity() {
         val aiEnabledSwitch: MaterialSwitch = findViewById(R.id.aiEnabledSwitch)
         val aiBaseUrlLayout: TextInputLayout = findViewById(R.id.aiBaseUrlLayout)
         val aiBaseUrlInput: TextInputEditText = findViewById(R.id.aiBaseUrlInput)
-        val aiModelInput: TextInputEditText = findViewById(R.id.aiModelInput)
+        val aiModelInput: MaterialAutoCompleteTextView = findViewById(R.id.aiModelInput)
         val aiKeyInput: TextInputEditText = findViewById(R.id.aiKeyInput)
         val aiKeyStatus: TextView = findViewById(R.id.aiKeyStatus)
         val aiLookaheadLayout: TextInputLayout = findViewById(R.id.aiLookaheadLayout)
@@ -536,6 +536,34 @@ class SettingsActivity : AppCompatActivity() {
         track(aiModelInput) { commitAiModel() }
         track(aiKeyInput) { commitAiKey() }
         track(aiLookaheadInput) { commitAiLookahead() }
+        fun loadAiModels() {
+            val raw = aiBaseUrlInput.text?.toString()?.trim().orEmpty()
+            val url = raw.ifBlank { Prefs.DEFAULT_AI_URL }
+            if (!url.startsWith("http://") && !url.startsWith("https://")) return
+            val key = aiKeyInput.text?.toString()?.trim().orEmpty().ifBlank { held.aiApiKey }
+            val kept = aiModelInput.text?.toString().orEmpty()
+            Thread {
+                val ids = try {
+                    AiClient().listModels(url, key) { destroyed }
+                } catch (_: Exception) {
+                    null
+                }
+                runOnUiThread {
+                    if (destroyed || ids == null) return@runOnUiThread
+                    val current = aiModelInput.text?.toString()?.ifBlank { kept }.orEmpty().ifBlank { kept }
+                    val items = ArrayList(ids)
+                    if (current.isNotBlank() && current !in items) items.add(0, current)
+                    val selected = current.ifBlank { Prefs.DEFAULT_AI_MODEL }
+                    bindChoices(aiModelInput, items, selected) { picked ->
+                        val model = picked.trim().ifBlank { Prefs.DEFAULT_AI_MODEL }
+                        if (aiModelInput.text?.toString() != model) aiModelInput.setText(model, false)
+                        persist { it.copy(aiModel = model) }
+                    }
+                }
+            }.start()
+        }
+        findViewById<View>(R.id.aiModelRefresh).setOnClickListener { loadAiModels() }
+        loadAiModels()
         flushTexts = {
             commitUrl()
             commitKey()
@@ -563,22 +591,22 @@ class SettingsActivity : AppCompatActivity() {
             button.isEnabled = false
             aiTestResult.text = getString(R.string.settings_ai_testing)
             Thread {
-                val started = SystemClock.elapsedRealtime()
                 val message = try {
                     val client = AiClient()
                     client.probe(url, key) { destroyed }
-                    client.complete(
+                    val started = SystemClock.elapsedRealtime()
+                    val reply = client.complete(
                         baseUrl = url,
                         apiKey = key,
                         model = model,
                         system = "Reply with the single word ok.",
                         user = "Say ok.",
-                        maxTokens = 16,
+                        maxTokens = AiTimeouts.TEST_MAX_TOKENS,
                         cancelled = { destroyed }
                     )
-                    "OK ${SystemClock.elapsedRealtime() - started} ms"
+                    ConnectionSummary.aiOk(model, SystemClock.elapsedRealtime() - started, reply)
                 } catch (e: Exception) {
-                    AiClient.publicMessage(e)
+                    ConnectionSummary.failure(e)
                 }
                 runOnUiThread {
                     if (destroyed) return@runOnUiThread
@@ -730,17 +758,15 @@ class SettingsActivity : AppCompatActivity() {
             return
         }
         Thread {
-            val sb = StringBuilder()
-            try {
+            val text = try {
                 val anki = AnkiConnect(url, key)
-                sb.appendLine("version: ${anki.version()}")
-                sb.appendLine("decks: ${anki.deckNames()}")
-                sb.appendLine("due in '" + deck + "': " + anki.dueCount(deck))
-                sb.append("connection OK")
+                val version = anki.version()
+                val decks = anki.deckNames()
+                val due = anki.dueCount(deck)
+                ConnectionSummary.ankiOk(version, decks.size, deck, due)
             } catch (e: Exception) {
-                sb.append("FAILED: " + e.javaClass.simpleName + ": " + e.message)
+                ConnectionSummary.failure(e)
             }
-            val text = sb.toString()
             runOnUiThread {
                 if (destroyed || gen != checkGen) return@runOnUiThread
                 testResultView.text = text

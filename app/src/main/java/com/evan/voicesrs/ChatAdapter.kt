@@ -1,5 +1,6 @@
 package com.evan.voicesrs
 
+import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -8,18 +9,18 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.chip.Chip
 
 /**
- * One bubble per graded turn, oldest at the top.
- * Explanation updates rebind through [PAYLOAD] so the row stays put.
+ * One exchange per graded card: card bubble, user bubble, AI bubble.
+ * Oldest at the top; [ChatPane] uses stackFromEnd so the newest sits at the
+ * bottom. Explanation updates rebind through [PAYLOAD] so the row stays put.
  */
 class ChatAdapter(
     private val onExplExpanded: (Long) -> Unit,
     private val onRetry: (Long) -> Unit
 ) : ListAdapter<ReviewTurn, ChatAdapter.Holder>(DIFF) {
 
-    private val backOpen = HashSet<Long>()
+    private val cardOpen = HashSet<Long>()
     private val explOpen = HashSet<Long>()
 
     fun expandedIds(): Set<Long> = explOpen.toSet()
@@ -38,13 +39,14 @@ class ChatAdapter(
             bind(holder, getItem(position))
         } else {
             val turn = getItem(position)
-            holder.bindBack(turn, turn.turnId in backOpen)
+            holder.bindCard(turn, turn.turnId in cardOpen)
+            holder.bindUser(turn)
             holder.bindExplanation(turn, turn.turnId in explOpen)
         }
     }
 
     private fun bind(holder: Holder, turn: ReviewTurn) {
-        holder.bindTurn(turn, turn.turnId in backOpen, turn.turnId in explOpen)
+        holder.bindTurn(turn, turn.turnId in cardOpen, turn.turnId in explOpen)
     }
 
     private fun toggle(set: HashSet<Long>, id: Long): Boolean {
@@ -60,103 +62,73 @@ class ChatAdapter(
     }
 
     inner class Holder(view: View) : RecyclerView.ViewHolder(view) {
-        private val front: TextView = view.findViewById(R.id.chatFront)
-        private val back: TextView = view.findViewById(R.id.chatBack)
-        private val youSaid: TextView = view.findViewById(R.id.chatYouSaid)
-        private val rating: Chip = view.findViewById(R.id.chatRating)
+        private val card: TextView = view.findViewById(R.id.cardBubble)
+        private val user: TextView = view.findViewById(R.id.userBubble)
+        private val ai: View = view.findViewById(R.id.aiBubble)
         private val section: View = view.findViewById(R.id.explSection)
         private val badge: TextView = view.findViewById(R.id.explBadge)
         private val status: TextView = view.findViewById(R.id.explStatus)
         private val body: TextView = view.findViewById(R.id.explBody)
-        private val more: TextView = view.findViewById(R.id.explMore)
         private val retry: Button = view.findViewById(R.id.explRetry)
 
-        fun bindTurn(turn: ReviewTurn, backExpanded: Boolean, explExpanded: Boolean) {
-            front.text = turn.frontText
-            youSaid.text = itemView.context.getString(
-                R.string.chat_you_said,
-                turn.transcript.ifBlank { itemView.context.getString(R.string.chat_no_answer) }
-            )
-            rating.text = easeLabel(turn.ease)
-            back.setOnClickListener {
-                toggle(backOpen, turn.turnId)
+        fun bindTurn(turn: ReviewTurn, cardExpanded: Boolean, explExpanded: Boolean) {
+            card.setOnClickListener {
+                toggle(cardOpen, turn.turnId)
                 notifyTurn(turn.turnId)
             }
-            more.setOnClickListener { toggleExpl(turn.turnId) }
+            ai.setOnClickListener { toggleExpl(turn.turnId) }
             retry.setOnClickListener { onRetry(turn.turnId) }
-            bindBack(turn, backExpanded)
+            bindCard(turn, cardExpanded)
+            bindUser(turn)
             bindExplanation(turn, explExpanded)
         }
 
-        fun bindBack(turn: ReviewTurn, expanded: Boolean) {
-            back.text = turn.backText
-            back.maxLines = if (expanded) Integer.MAX_VALUE else 2
+        fun bindCard(turn: ReviewTurn, expanded: Boolean) {
+            card.text = BubbleModel.cardText(turn.frontText, expanded)
+            card.maxLines = if (expanded) Integer.MAX_VALUE else 1
+            card.ellipsize = if (expanded) null else TextUtils.TruncateAt.END
+        }
+
+        fun bindUser(turn: ReviewTurn) {
+            user.text = BubbleModel.userLabel(turn.transcript, turn.ease)
         }
 
         fun bindExplanation(turn: ReviewTurn, expanded: Boolean) {
-            val state = turn.explanation
-            if (state is ExplState.None) {
+            val shown = BubbleModel.displayAi(
+                turn.explanation,
+                turn.frontText,
+                turn.backText,
+                turn.unread
+            )
+            if (!shown.visible) {
+                ai.visibility = View.GONE
                 section.visibility = View.GONE
                 return
             }
+            ai.visibility = View.VISIBLE
             section.visibility = View.VISIBLE
-            val freshUnread = turn.unread && state is ExplState.Ready && !state.cached
-            badge.visibility = if (freshUnread) View.VISIBLE else View.GONE
-            when (state) {
-                ExplState.None -> Unit
-                ExplState.Queued -> showStatus(itemView.context.getString(R.string.expl_queued))
-                ExplState.Pending -> showStatus(itemView.context.getString(R.string.expl_generating))
-                is ExplState.Streaming -> {
-                    status.visibility = View.VISIBLE
-                    status.text = itemView.context.getString(R.string.expl_generating)
-                    showBody(state.partial, expanded = false, more = false)
-                    retry.visibility = View.GONE
-                }
-                is ExplState.Ready -> {
-                    status.visibility = View.GONE
-                    showBody(state.text, expanded, more = state.text.isNotBlank())
-                    retry.visibility = View.GONE
-                }
-                is ExplState.Error -> {
-                    status.visibility = View.VISIBLE
-                    status.text = state.message
-                    body.visibility = View.GONE
-                    more.visibility = View.GONE
-                    retry.visibility = if (state.retryable) View.VISIBLE else View.GONE
-                }
+            badge.visibility = if (shown.unread) View.VISIBLE else View.GONE
+            if (shown.status.isNotEmpty()) {
+                status.visibility = View.VISIBLE
+                status.text = shown.status
+            } else {
+                status.visibility = View.GONE
             }
-        }
-
-        private fun showStatus(text: String) {
-            status.visibility = View.VISIBLE
-            status.text = text
-            body.visibility = View.GONE
-            more.visibility = View.GONE
-            retry.visibility = View.GONE
-        }
-
-        private fun showBody(text: String, expanded: Boolean, more: Boolean) {
-            body.visibility = if (text.isBlank()) View.GONE else View.VISIBLE
-            body.text = text
-            body.maxLines = if (expanded) Integer.MAX_VALUE else 3
-            this.more.visibility = if (more) View.VISIBLE else View.GONE
-            this.more.text = itemView.context.getString(
-                if (expanded) R.string.expl_show_less else R.string.expl_show_more
-            )
+            if (shown.body.isNotBlank()) {
+                body.visibility = View.VISIBLE
+                body.text = shown.body
+                body.maxLines = if (expanded) Integer.MAX_VALUE else 12
+            } else {
+                body.visibility = View.GONE
+                body.text = ""
+            }
+            retry.visibility = if (shown.retry) View.VISIBLE else View.GONE
         }
 
         private fun toggleExpl(id: Long) {
             val open = toggle(explOpen, id)
             notifyTurn(id)
             if (open) onExplExpanded(id)
-        }
-
-        private fun easeLabel(ease: Int?): String = when (ease) {
-            1 -> itemView.context.getString(R.string.grade_again)
-            2 -> itemView.context.getString(R.string.grade_hard)
-            3 -> itemView.context.getString(R.string.grade_good)
-            4 -> itemView.context.getString(R.string.grade_easy)
-            else -> ""
         }
     }
 

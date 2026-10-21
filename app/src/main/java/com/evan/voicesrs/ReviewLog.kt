@@ -24,7 +24,7 @@ sealed interface ExplState {
     data object None : ExplState
     data object Queued : ExplState
     data object Pending : ExplState
-    data class Streaming(val partial: String) : ExplState
+    data class Streaming(val partial: String, val thinking: Boolean = false) : ExplState
     data class Ready(val text: String, val cached: Boolean) : ExplState
     data class Error(val message: String, val retryable: Boolean) : ExplState
 }
@@ -114,6 +114,14 @@ object ReviewLog {
     fun markStreaming(turnId: Long, partial: String) = replace(turnId) { turn ->
         if (turn.explanation is ExplState.Ready) turn
         else turn.copy(explanation = ExplState.Streaming(partial))
+    }
+
+    /** Reasoning tokens arrived and the answer text is still empty. */
+    fun markThinking(turnId: Long) = replace(turnId) { turn ->
+        val state = turn.explanation
+        if (state is ExplState.Ready || state is ExplState.Error) turn
+        else if (state is ExplState.Streaming && (state.partial.isNotBlank() || state.thinking)) turn
+        else turn.copy(explanation = ExplState.Streaming(partial = "", thinking = true))
     }
 
     /**

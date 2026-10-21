@@ -4,17 +4,23 @@ import org.json.JSONObject
 
 /**
  * Incremental Server-Sent Events parser for OpenAI-style chat streams.
- * Accepts chunks split mid-line. Reads `choices[0].delta.content` and
- * `choices[0].message.content`. Stops at a `data: [DONE]` line.
+ * Accepts chunks split mid-line. Visible text is `delta.content` /
+ * `message.content` only. `reasoning_content` and `reasoning` are activity,
+ * not the answer. A chunk whose model is `keepalive` is ignored.
+ * Stops at a `data: [DONE]` line.
  */
 class SseParser {
     private val pending = StringBuilder()
     private val raw = StringBuilder()
+    private var reasoningOnLast = false
     var done: Boolean = false
+        private set
+    var finishReason: String? = null
         private set
 
     /** Content pieces completed by this chunk. Incomplete lines stay buffered. */
     fun push(chunk: String): List<String> {
+        reasoningOnLast = false
         if (done || chunk.isEmpty()) return emptyList()
         pending.append(chunk)
         val out = ArrayList<String>()
@@ -34,17 +40,24 @@ class SseParser {
                 pending.setLength(0)
                 break
             }
-            val piece = deltaContent(data) ?: continue
-            if (piece.isEmpty()) continue
-            raw.append(piece)
-            out += piece
+            val piece = parseEvent(data) ?: continue
+            if (piece.finish != null) finishReason = piece.finish
+            if (piece.keepalive) continue
+            if (piece.reasoning) reasoningOnLast = true
+            val content = piece.content
+            if (content.isNullOrEmpty()) continue
+            raw.append(content)
+            out += content
         }
         return out
     }
 
+    /** True when the last [push] saw reasoning tokens and no keepalive-only noise. */
+    fun consumedReasoning(): Boolean = reasoningOnLast
+
     fun rawText(): String = raw.toString()
 
-    /** Accumulated text with `<think>…</think>` removed. */
+    /** Accumulated answer text with `<think>…</think>` removed. */
     fun visibleText(): String = ThinkStrip.strip(raw.toString())
 }
 
@@ -52,6 +65,11 @@ object ThinkStrip {
     private val closed = Regex("(?is)<think\\b[^>]*>.*?</think>")
     private val opener = Regex("(?i)<think\\b[^>]*>")
 
+    /**
+     * Drops closed think blocks, and an unclosed `<think>` through the end of
+     * the string (a leading unclosed block removes the whole remainder).
+     * Leading and trailing whitespace is removed.
+     */
     fun strip(raw: String): String {
         var s = closed.replace(raw, "")
         val open = opener.find(s)
@@ -60,41 +78,71 @@ object ThinkStrip {
     }
 }
 
-/** Non-stream chat completion body. */
+/** Non-stream chat completion body. Reasoning is reported, never returned as content. */
 object ChatJson {
-    fun messageContent(body: String): String? {
+    data class Completion(
+        val content: String?,
+        val reasoning: Boolean,
+        val finishReason: String?
+    )
+
+    fun parse(body: String): Completion? {
         val obj = try {
             JSONObject(body)
         } catch (_: Exception) {
             return null
         }
         val choice = obj.optJSONArray("choices")?.optJSONObject(0) ?: return null
-        val message = choice.optJSONObject("message")
-        if (message != null && message.has("content") && !message.isNull("content")) {
-            return message.optString("content", "")
+        val finish = finishOf(choice)
+        val node = choice.optJSONObject("message") ?: choice.optJSONObject("delta")
+            ?: return Completion(null, false, finish)
+        val content = if (node.has("content") && !node.isNull("content")) {
+            node.optString("content", "")
+        } else {
+            null
         }
-        val delta = choice.optJSONObject("delta")
-        if (delta != null && delta.has("content") && !delta.isNull("content")) {
-            return delta.optString("content", "")
-        }
-        return null
+        val reasoning = nonEmpty(node, "reasoning_content") || nonEmpty(node, "reasoning")
+        return Completion(content, reasoning, finish)
     }
+
+    fun messageContent(body: String): String? = parse(body)?.content
 }
 
-private fun deltaContent(data: String): String? {
+private data class StreamEvent(
+    val content: String?,
+    val reasoning: Boolean,
+    val keepalive: Boolean,
+    val finish: String?
+)
+
+private fun parseEvent(data: String): StreamEvent? {
     val obj = try {
         JSONObject(data)
     } catch (_: Exception) {
         return null
     }
+    if (obj.optString("model", "") == "keepalive") {
+        return StreamEvent(null, false, true, null)
+    }
     val choice = obj.optJSONArray("choices")?.optJSONObject(0) ?: return null
-    val delta = choice.optJSONObject("delta")
-    if (delta != null && delta.has("content") && !delta.isNull("content")) {
-        return delta.optString("content", "")
+    val finish = finishOf(choice)
+    val node = choice.optJSONObject("delta") ?: choice.optJSONObject("message")
+        ?: return StreamEvent(null, false, false, finish)
+    val content = if (node.has("content") && !node.isNull("content")) {
+        node.optString("content", "")
+    } else {
+        null
     }
-    val message = choice.optJSONObject("message")
-    if (message != null && message.has("content") && !message.isNull("content")) {
-        return message.optString("content", "")
-    }
-    return null
+    val reasoning = nonEmpty(node, "reasoning_content") || nonEmpty(node, "reasoning")
+    return StreamEvent(content, reasoning, false, finish)
+}
+
+private fun finishOf(choice: JSONObject): String? {
+    if (!choice.has("finish_reason") || choice.isNull("finish_reason")) return null
+    return choice.optString("finish_reason", "").ifBlank { null }
+}
+
+private fun nonEmpty(node: JSONObject, key: String): Boolean {
+    if (!node.has(key) || node.isNull(key)) return false
+    return node.optString(key, "").isNotEmpty()
 }

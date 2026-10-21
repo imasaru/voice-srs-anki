@@ -9,6 +9,8 @@ import android.util.Log
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.transition.Fade
 import android.transition.TransitionManager
 import android.view.Menu
@@ -16,6 +18,7 @@ import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import android.widget.Toast
@@ -65,6 +68,17 @@ class MainActivity : AppCompatActivity() {
     /** Last [DrillUiState.drillRunning] applied by [uiListener]; used to refresh due on session end. */
     private var lastDrillRunning = false
     private var chatPane: ChatPane? = null
+    /** Null while a home neural probe is in flight and no result has landed yet. */
+    private var homeHealth: Boolean? = null
+    private var engineProbeGen = 0
+    private val engineHandler = Handler(Looper.getMainLooper())
+    private val engineProbeTick = object : Runnable {
+        override fun run() {
+            if (isDestroyed) return
+            startEngineProbe(reset = false)
+            engineHandler.postDelayed(this, ENGINE_PROBE_MS)
+        }
+    }
 
     private val reviewListener: (List<ReviewTurn>) -> Unit = {
         runOnUiThread {
@@ -78,7 +92,10 @@ class MainActivity : AppCompatActivity() {
             val ended = lastDrillRunning && !snapshot.drillRunning
             lastDrillRunning = snapshot.drillRunning
             render(snapshot)
-            if (ended) refreshCounts()
+            if (ended) {
+                refreshCounts()
+                startEngineProbe(reset = true)
+            }
         }
     }
 
@@ -140,8 +157,9 @@ class MainActivity : AppCompatActivity() {
         val chatList = findViewById<RecyclerView>(R.id.chatList)
         val chatUnread = findViewById<TextView>(R.id.chatUnread)
         if (chatList != null && chatUnread != null) {
-            chatPane = ChatPane(chatList, chatUnread).also { it.attach() }
+            chatPane = ChatPane(chatList, chatUnread, findViewById(R.id.chatEmpty)).also { it.attach() }
         }
+        applyAiChrome()
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -210,15 +228,21 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         chatPane?.setResumed(true)
+        applyAiChrome()
         val pending = GradeSync.pendingCount(filesDir)
         if (pending != DrillUi.state.pendingSync) {
             DrillUi.update { it.copy(pendingSync = pending) }
         }
         refreshCounts()
+        engineHandler.removeCallbacks(engineProbeTick)
+        startEngineProbe(reset = true)
+        engineHandler.postDelayed(engineProbeTick, ENGINE_PROBE_MS)
         render(DrillUi.state)
     }
 
     override fun onPause() {
+        engineHandler.removeCallbacks(engineProbeTick)
+        engineProbeGen++
         chatPane?.setResumed(false)
         super.onPause()
     }
@@ -230,9 +254,61 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        engineHandler.removeCallbacks(engineProbeTick)
         chatPane?.detach()
         chatPane = null
         super.onDestroy()
+    }
+
+    /**
+     * Unfolded chat stays up whenever AI is on, including an empty thread.
+     * The card then keeps about 45% of the pane. With AI off the chat hides
+     * and the card fills the pane. Folded layout has no chat section.
+     */
+    private fun applyAiChrome() {
+        val section = findViewById<View>(R.id.chatSection) ?: return
+        val enabled = try {
+            Prefs.load(this).aiEnabled
+        } catch (_: Exception) {
+            false
+        }
+        val vis = if (enabled) View.VISIBLE else View.GONE
+        if (section.visibility != vis) section.visibility = vis
+        val lp = currentCard.layoutParams as? LinearLayout.LayoutParams ?: return
+        val weight = if (enabled) 45f else 1f
+        if (lp.weight != weight || lp.height != 0) {
+            lp.height = 0
+            lp.weight = weight
+            currentCard.layoutParams = lp
+        }
+    }
+
+    /** Edge /health on a background thread. The drill's own label wins while it runs. */
+    private fun startEngineProbe(reset: Boolean) {
+        val cfg = try {
+            Prefs.load(this)
+        } catch (_: Exception) {
+            return
+        }
+        val configured = TtsEngines.preferred(cfg.ttsEngine)
+        if (configured != EngineChoice.NEURAL) {
+            homeHealth = false
+            if (!DrillService.running) render(DrillUi.state)
+            return
+        }
+        if (reset) homeHealth = null
+        if (homeHealth == null && !DrillService.running) render(DrillUi.state)
+        val gen = ++engineProbeGen
+        val url = cfg.neuralUrl
+        val token = cfg.neuralToken
+        Thread {
+            val ok = EdgeSpeaker(applicationContext).healthy(url, token, NeuralTts.HEALTH_TIMEOUT_MS)
+            runOnUiThread {
+                if (isDestroyed || gen != engineProbeGen) return@runOnUiThread
+                homeHealth = ok
+                if (!DrillService.running) render(DrillUi.state)
+            }
+        }.start()
     }
 
     private fun syncPending() {
@@ -292,12 +368,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun render(state: DrillUiState) {
         val cfg = Prefs.load(this)
-        val engine = state.engineLabel.ifBlank {
-            if (TtsEngines.preferred(cfg.ttsEngine) == EngineChoice.NEURAL) {
-                getString(R.string.engine_neural)
-            } else {
-                getString(R.string.engine_device)
-            }
+        val configured = TtsEngines.preferred(cfg.ttsEngine)
+        val engine = if (DrillService.running) {
+            state.engineLabel.ifBlank { EngineLabel.of(configured, null) }
+        } else {
+            EngineLabel.of(configured, if (configured == EngineChoice.NEURAL) homeHealth else false)
         }
         if (engineChip.text.toString() != engine) engineChip.text = engine
         crossfadeStatus(state.status.ifBlank { getString(R.string.state_ready) })
@@ -441,5 +516,9 @@ class MainActivity : AppCompatActivity() {
             Log.e("MainActivity", "startForegroundService failed", e)
             Toast.makeText(this, "Could not start drill: ${e.message}", Toast.LENGTH_LONG).show()
         }
+    }
+
+    companion object {
+        private const val ENGINE_PROBE_MS = 60_000L
     }
 }

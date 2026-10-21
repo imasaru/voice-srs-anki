@@ -17,16 +17,53 @@ class AiHttpException(val code: Int) : IOException("HTTP $code")
 /** The server rejected `stream: true`. The client retries once without streaming. */
 class StreamRejected : Exception("stream rejected")
 
+/**
+ * Streaming finished with no visible `content` deltas (reasoning-only, think-only,
+ * or keepalive). The client retries once without streaming.
+ */
+class EmptyStream : Exception("empty stream")
+
 /** A finished call that produced nothing useful, or a client-side reject. */
 class AiException(message: String, val retryable: Boolean) : Exception(message)
 
 object AiTimeouts {
-    const val CONNECT_MS = 5_000
-    const val FIRST_TOKEN_MS = 90_000
-    const val TOTAL_MS = 180_000
-    const val IDLE_MS = 30_000
+    const val CONNECT_MS = 10_000
+    const val FIRST_TOKEN_MS = 180_000
+    const val TOTAL_MS = 300_000
+    const val IDLE_MS = 60_000
     const val TEMPERATURE = 0.2
-    const val MAX_TOKENS = 300
+
+    /** Explanation completions. Reasoning models need room past the visible answer. */
+    const val MAX_TOKENS = 4_096
+
+    /** Settings Test button. Must leave room for a reasoning preamble. */
+    const val TEST_MAX_TOKENS = 2_048
+
+    /**
+     * Per-provider ceiling. 0 keeps [MAX_TOKENS] and [TEST_MAX_TOKENS].
+     * A positive value replaces the requested budget for every completion.
+     */
+    const val PROVIDER_MAX_TOKENS = 0
+
+    fun budget(requested: Int): Int {
+        if (PROVIDER_MAX_TOKENS > 0) return PROVIDER_MAX_TOKENS
+        return requested
+    }
+}
+
+/** User-visible model failures. Reasoning is never the answer. */
+object AiMessages {
+    const val NO_TEXT = "Model returned no text"
+    const val BUDGET =
+        "Model used its whole token budget on reasoning; try a :no-think model or raise max tokens"
+    const val THINKING = "Thinking…"
+
+    fun require(content: String, finishReason: String?): String {
+        val text = ThinkStrip.strip(content)
+        if (text.isNotBlank()) return text
+        if (finishReason == "length") throw AiException(BUDGET, retryable = false)
+        throw AiException(NO_TEXT, retryable = false)
+    }
 }
 
 /**
@@ -40,7 +77,7 @@ class AiClient {
         val conn = open(baseUrl, apiKey, "GET", "/models")
         try {
             conn.connectTimeout = AiTimeouts.CONNECT_MS
-            conn.readTimeout = AiTimeouts.FIRST_TOKEN_MS
+            conn.readTimeout = AiTimeouts.CONNECT_MS
             val code = conn.responseCode
             if (cancelled()) throw AiCancelled()
             if (code !in 200..299) throw AiHttpException(code)
@@ -49,10 +86,28 @@ class AiClient {
         }
     }
 
+    /** Model ids from `GET /models`. Empty when the body is not a model list. */
+    fun listModels(baseUrl: String, apiKey: String, cancelled: () -> Boolean = { false }): List<String> {
+        if (cancelled()) throw AiCancelled()
+        val conn = open(baseUrl, apiKey, "GET", "/models")
+        try {
+            conn.connectTimeout = AiTimeouts.CONNECT_MS
+            conn.readTimeout = AiTimeouts.CONNECT_MS
+            val code = conn.responseCode
+            if (cancelled()) throw AiCancelled()
+            if (code !in 200..299) throw AiHttpException(code)
+            val body = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            return ModelList.parse(body)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     /**
      * One chat completion. Tries SSE first. A stream rejection falls back to
      * a single JSON body. Think blocks are stripped before the text is returned.
-     * [onDelta] receives the visible text so far, already think-stripped.
+     * Reasoning tokens reset the idle timer and call [onThinking]. They are not
+     * part of the returned text. [onDelta] receives the visible text so far.
      */
     fun complete(
         baseUrl: String,
@@ -62,14 +117,17 @@ class AiClient {
         user: String,
         maxTokens: Int = AiTimeouts.MAX_TOKENS,
         cancelled: () -> Boolean = { false },
+        onThinking: () -> Unit = {},
         onDelta: (String) -> Unit = {}
     ): String {
         if (cancelled()) throw AiCancelled()
+        val budget = AiTimeouts.budget(maxTokens)
         return try {
-            completeOnce(baseUrl, apiKey, model, system, user, maxTokens, stream = true, cancelled, onDelta)
-        } catch (_: StreamRejected) {
+            completeOnce(baseUrl, apiKey, model, system, user, budget, stream = true, cancelled, onThinking, onDelta)
+        } catch (e: Exception) {
+            if (e !is StreamRejected && e !is EmptyStream) throw e
             if (cancelled()) throw AiCancelled()
-            completeOnce(baseUrl, apiKey, model, system, user, maxTokens, stream = false, cancelled, onDelta)
+            completeOnce(baseUrl, apiKey, model, system, user, budget, stream = false, cancelled, onThinking, onDelta)
         }
     }
 
@@ -82,6 +140,7 @@ class AiClient {
         maxTokens: Int,
         stream: Boolean,
         cancelled: () -> Boolean,
+        onThinking: () -> Unit,
         onDelta: (String) -> Unit
     ): String {
         val started = System.currentTimeMillis()
@@ -106,22 +165,13 @@ class AiClient {
             if (stream && code in STREAM_REJECT) throw StreamRejected()
             if (code !in 200..299) throw AiHttpException(code)
             val type = conn.contentType.orEmpty()
-            val asSse = stream && (type.contains("event-stream") || type.isBlank())
-            val text = if (asSse) {
-                readSse(conn, started, cancelled, onDelta)
+            val eventStream = type.contains("event-stream")
+            val jsonType = type.contains("json")
+            val text = if (eventStream || (stream && !jsonType)) {
+                readSse(conn, started, cancelled, onThinking, onDelta)
             } else {
-                val raw = readBody(conn, started, cancelled)
-                if (raw.trimStart().startsWith("data:")) {
-                    val parser = SseParser()
-                    parser.push(raw)
-                    ThinkStrip.strip(parser.visibleText())
-                } else {
-                    val content = ChatJson.messageContent(raw)
-                        ?: throw AiException("The model returned no text", retryable = true)
-                    ThinkStrip.strip(content)
-                }
+                finishBody(readBody(conn, started, cancelled))
             }
-            if (text.isBlank()) throw AiException("The model returned no text", retryable = true)
             onDelta(text)
             return text
         } finally {
@@ -133,6 +183,7 @@ class AiClient {
         conn: HttpURLConnection,
         started: Long,
         cancelled: () -> Boolean,
+        onThinking: () -> Unit,
         onDelta: (String) -> Unit
     ): String {
         conn.readTimeout = SLICE_MS
@@ -170,13 +221,13 @@ class AiClient {
                     head.startsWith("{") -> mode = 2
                     head.startsWith("data:") || head.startsWith(":") -> {
                         mode = 1
-                        note(parser, parser.push(undecided.toString()), onDelta)
-                        if (parser.rawText().isNotEmpty()) saw = true
+                        note(parser, parser.push(undecided.toString()), onThinking, onDelta)
+                        if (parser.rawText().isNotEmpty() || parser.consumedReasoning()) saw = true
                     }
                     undecided.length > 64 -> {
                         mode = 1
-                        note(parser, parser.push(undecided.toString()), onDelta)
-                        if (parser.rawText().isNotEmpty()) saw = true
+                        note(parser, parser.push(undecided.toString()), onThinking, onDelta)
+                        if (parser.rawText().isNotEmpty() || parser.consumedReasoning()) saw = true
                     }
                 }
                 continue
@@ -186,22 +237,46 @@ class AiClient {
                 continue
             }
             val pieces = parser.push(chunk)
-            if (pieces.isNotEmpty()) {
+            val reasoning = parser.consumedReasoning()
+            if (pieces.isNotEmpty() || reasoning) {
                 saw = true
                 idle = 0
-                onDelta(parser.visibleText())
+            }
+            if (reasoning && parser.visibleText().isBlank()) onThinking()
+            if (pieces.isNotEmpty()) {
+                val visible = parser.visibleText()
+                if (visible.isNotBlank()) onDelta(visible)
             }
         }
         if (mode == 2 || (mode == 0 && undecided.toString().trimStart().startsWith("{"))) {
-            val content = ChatJson.messageContent(undecided.toString())
-                ?: throw AiException("The model returned no text", retryable = true)
-            return ThinkStrip.strip(content)
+            return finishBody(undecided.toString())
         }
-        return parser.visibleText()
+        if (parser.visibleText().isBlank()) throw EmptyStream()
+        return AiMessages.require(parser.rawText(), parser.finishReason)
     }
 
-    private fun note(parser: SseParser, pieces: List<String>, onDelta: (String) -> Unit) {
-        if (pieces.isNotEmpty()) onDelta(parser.visibleText())
+    private fun note(
+        parser: SseParser,
+        pieces: List<String>,
+        onThinking: () -> Unit,
+        onDelta: (String) -> Unit
+    ) {
+        if (parser.consumedReasoning() && parser.visibleText().isBlank()) onThinking()
+        if (pieces.isNotEmpty()) {
+            val visible = parser.visibleText()
+            if (visible.isNotBlank()) onDelta(visible)
+        }
+    }
+
+    private fun finishBody(raw: String): String {
+        val head = raw.trimStart()
+        if (head.startsWith("data:")) {
+            val parser = SseParser()
+            parser.push(raw)
+            return AiMessages.require(parser.rawText(), parser.finishReason)
+        }
+        val parsed = ChatJson.parse(raw) ?: throw AiException(AiMessages.NO_TEXT, retryable = false)
+        return AiMessages.require(parsed.content.orEmpty(), parsed.finishReason)
     }
 
     private fun readBody(conn: HttpURLConnection, started: Long, cancelled: () -> Boolean): String {
@@ -209,7 +284,9 @@ class AiClient {
         val reader = InputStreamReader(conn.inputStream, Charsets.UTF_8)
         val buf = CharArray(1024)
         val out = StringBuilder()
+        var waited = 0
         var idle = 0
+        var saw = false
         while (true) {
             if (cancelled()) throw AiCancelled()
             if (System.currentTimeMillis() - started > AiTimeouts.TOTAL_MS) {
@@ -218,11 +295,17 @@ class AiClient {
             val n = try {
                 reader.read(buf)
             } catch (e: SocketTimeoutException) {
-                idle += SLICE_MS
-                if (idle >= AiTimeouts.TOTAL_MS) throw e
+                if (!saw) {
+                    waited += SLICE_MS
+                    if (waited >= AiTimeouts.FIRST_TOKEN_MS) throw e
+                } else {
+                    idle += SLICE_MS
+                    if (idle >= AiTimeouts.IDLE_MS) throw e
+                }
                 continue
             }
             if (n < 0) break
+            saw = true
             idle = 0
             out.append(buf, 0, n)
         }
@@ -235,6 +318,7 @@ class AiClient {
         conn.requestMethod = method
         conn.connectTimeout = AiTimeouts.CONNECT_MS
         conn.readTimeout = AiTimeouts.FIRST_TOKEN_MS
+        // header only when the user actually set a key.
         if (apiKey.isNotBlank()) conn.setRequestProperty("Authorization", "Bearer $apiKey")
         return conn
     }
