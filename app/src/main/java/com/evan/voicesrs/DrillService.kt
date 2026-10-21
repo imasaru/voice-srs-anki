@@ -48,7 +48,10 @@ import java.util.concurrent.atomic.AtomicReference
  * ERROR_CLIENT immediately, and calling stopListening() from onError feeds
  * that error back into itself (a tight ERROR_CLIENT loop). Each session is a
  * new recognizer. ERROR_CLIENT and ERROR_RECOGNIZER_BUSY destroy it and wait
- * before one recreate; they never call startListening from the error callback.
+ * before one recreate. A silent NO_MATCH or SPEECH_TIMEOUT before speech
+ * starts posts another recognizer for the same token until the listen
+ * deadline. Neither path calls startListening from the error callback, and
+ * nothing calls stopListening().
  *
  * The listen-cue tone is played and stopped BEFORE startListening so it
  * cannot leak into the open microphone.
@@ -68,13 +71,14 @@ class DrillService : Service(), VoiceIo {
         const val NOTIF_ID = 1
         private const val TAG = "DrillService"
         private const val WAKELOCK_TIMEOUT_MS = 45 * 60 * 1000L
-        private const val ANSWER_LISTEN_TIMEOUT_MS = 30_000L
         private const val SPEAK_CAP_MS = 120_000L
         /** Tone length. The mic stays closed until [LISTEN_CUE_WAIT_MS] elapses. */
         private const val LISTEN_CUE_TONE_MS = 150
         private const val LISTEN_CUE_WAIT_MS = 400L
         /** One delayed recreate after CLIENT/BUSY. Not an immediate re-listen. */
         private const val CLIENT_BACKOFF_MS = 700L
+        /** Latch wait past the listen deadline: client backoff plus main-thread slack. */
+        private const val LISTEN_LATCH_SLACK_MS = CLIENT_BACKOFF_MS + 5_000L
         private const val NEXT_LISTEN_BACKOFF_MS = 1000L
 
         @Volatile var running = false
@@ -164,6 +168,15 @@ class DrillService : Service(), VoiceIo {
     private var inFlightClaimed = false
     /** At most one delayed recreate per listen session. */
     private var clientRetryUsed = false
+    /** True after onBeginningOfSpeech for this listen. Silence restarts require this to stay false. */
+    @Volatile private var speechBegan = false
+    private var silenceRestarts = 0
+    private var listenDeadlineMs = 0L
+    private var listenWaitMs = ListenWindow.DEFAULT_WAIT_SEC * 1000L
+    private var listenSilenceMs = ListenWindow.DEFAULT_SILENCE_MS
+    private var listenExtrasLogged = false
+    /** End-of-speech silence from the settings snapshot taken at session start. */
+    @Volatile private var configuredSilenceMs = ListenWindow.DEFAULT_SILENCE_MS
     private val errorGate = AtomicBoolean(false)
     private val injectLock = Any()
     /** elapsedRealtime deadline: do not open the mic before this. */
@@ -429,6 +442,7 @@ class DrillService : Service(), VoiceIo {
                 return
             }
             val cfg = Prefs.load(this)
+            configuredSilenceMs = ListenWindow.normalizeSilenceMs(cfg.endSilenceMs)
             refreshNeuralHealth(cfg, force = true)
             DrillUi.update {
                 it.copy(
@@ -529,7 +543,7 @@ class DrillService : Service(), VoiceIo {
             DrillUi.update {
                 it.copy(
                     status = "Reading the question",
-                    frontHtml = AnkiText.toDisplayHtml(questionHtml),
+                    frontHtml = AnkiText.displayHtml(questionHtml),
                     backHtml = "",
                     showBack = false,
                     ratingVisible = false,
@@ -551,7 +565,7 @@ class DrillService : Service(), VoiceIo {
             DrillUi.update {
                 it.copy(
                     status = "Answer",
-                    backHtml = AnkiText.toDisplayHtml(answerHtml),
+                    backHtml = AnkiText.displayHtml(answerHtml),
                     showBack = true,
                     ratingVisible = true,
                     ratingMicOpen = false
@@ -637,7 +651,31 @@ class DrillService : Service(), VoiceIo {
 
     override fun stopped(): Boolean = stopRequested.get() || destroyed
 
-    override fun listen(timeoutMs: Long): String? {
+    override fun listen(timeoutMs: Long): String? = afterListen(captureListen(timeoutMs))
+
+    /**
+     * Answer phase. A null window can prompt once and listen again. The pair is
+     * one dead-mic sample, so a quiet think plus the retry does not abort early.
+     */
+    private fun listenForAnswer(timeoutMs: Long, relistenOnce: Boolean, speedMode: Boolean): String? {
+        val first = captureListen(timeoutMs)
+        val didRelisten = ListenWindow.shouldRelistenAnswer(first, relistenOnce, stopped(), speedMode)
+        val second = if (!didRelisten) {
+            null
+        } else {
+            Log.i(TAG, "relisten answer")
+            speak(ListenWindow.ANSWER_RELISTEN_CUE)
+            if (stopped()) {
+                null
+            } else {
+                beep()
+                captureListen(timeoutMs)
+            }
+        }
+        return afterListen(ListenWindow.healthSample(first, second, didRelisten))
+    }
+
+    private fun captureListen(timeoutMs: Long): String? {
         val scripted = SpeechHooks.scripted
         val result = if (scripted != null && scripted.enabled()) {
             // Poll in short slices so a chip tap (queued grade) is honoured during a scripted listen,
@@ -665,18 +703,18 @@ class DrillService : Service(), VoiceIo {
                 val used = gradeGate.resolveVoice(action.ease)
                 if (used == null) {
                     Log.i(TAG, "voice grade ignored: answer not revealed")
-                    return afterListen(result)
+                    return result
                 }
                 runCatching { DrillUi.update { it.copy(selectedEase = used) } }
                 Log.i(TAG, "grade chip highlighted ease=$used")
                 if (used != action.ease) {
                     Log.i(TAG, "voice grade ease=${action.ease} ignored; tapped ease=$used wins")
                     pendingGrades.clear()
-                    return afterListen(GradeGate.wordOf(used))
+                    return GradeGate.wordOf(used)
                 }
             }
         }
-        return afterListen(result)
+        return result
     }
 
     private fun logAction(action: VoiceAction) {
@@ -800,7 +838,14 @@ class DrillService : Service(), VoiceIo {
                 break
             }
             anki.guiShowQuestion()
-            val step = drillOne(card.questionHtml, progress.done, cfg.speedMode, card.buttons) {
+            val step = drillOne(
+                card.questionHtml,
+                progress.done,
+                cfg.speedMode,
+                card.buttons,
+                ListenWindow.waitMs(cfg.listenWaitSec),
+                cfg.relistenOnce
+            ) {
                 anki.guiShowAnswer()
                 val shown = anki.guiCurrentCard()
                 (shown?.answerHtml ?: card.answerHtml) to (shown?.buttons ?: card.buttons)
@@ -866,7 +911,14 @@ class DrillService : Service(), VoiceIo {
                 goalSpoken = true
                 break
             }
-            val step = drillOne(card.front, progress.done, cfg.speedMode, card.buttons) {
+            val step = drillOne(
+                card.front,
+                progress.done,
+                cfg.speedMode,
+                card.buttons,
+                ListenWindow.waitMs(cfg.listenWaitSec),
+                cfg.relistenOnce
+            ) {
                 card.back to card.buttons
             }
             when (step) {
@@ -911,9 +963,11 @@ class DrillService : Service(), VoiceIo {
         cardIndex: Int,
         speedMode: Boolean,
         buttons: List<Int>,
+        listenWaitMs: Long,
+        relistenOnce: Boolean,
         reveal: () -> Pair<String, List<Int>>
     ): CardStep {
-        val question = AnkiText.stripHtml(questionHtml)
+        val question = AnkiText.spokenText(questionHtml)
         if (question.isBlank()) return CardStep.Blank
         val started = SystemClock.elapsedRealtime()
         showQuestionUi(questionHtml)
@@ -923,7 +977,7 @@ class DrillService : Service(), VoiceIo {
             if (stopRequested.get()) return CardStep.Paused
             showStatus("Listening for your answer")
             beep()
-            val action = GradeMapper.parse(listen(ANSWER_LISTEN_TIMEOUT_MS))
+            val action = GradeMapper.parse(listenForAnswer(listenWaitMs, relistenOnce, speedMode))
             when (action) {
                 VoiceAction.Repeat -> {
                     repeats++
@@ -940,8 +994,10 @@ class DrillService : Service(), VoiceIo {
         }
         if (stopRequested.get()) return CardStep.Paused
         val (answerHtml, answerButtons) = reveal()
-        val answerText = AnkiText.stripHtml(answerHtml)
-        showAnswerUi(answerHtml)
+        val answerBody = AnkiText.answerOnly(answerHtml)
+        val answerText = AnkiText.spokenText(answerBody)
+        Log.d(TAG, "tts answer: $answerText")
+        showAnswerUi(answerBody)
         if (answerText.isNotBlank()) speak(answerText)
         if (stopRequested.get()) return CardStep.Paused
         showStatus("Rate this card")
@@ -949,10 +1005,11 @@ class DrillService : Service(), VoiceIo {
         return try {
             val ease = grader.grade(
                 GradeContext(
-                    AnkiCard(questionHtml, answerHtml, "", answerButtons.ifEmpty { buttons }),
+                    AnkiCard(questionHtml, answerBody, "", answerButtons.ifEmpty { buttons }),
                     answerText,
                     cardIndex = cardIndex,
-                    speedMode = speedMode
+                    speedMode = speedMode,
+                    listenTimeoutMs = listenWaitMs
                 ),
                 this
             )
@@ -1023,6 +1080,7 @@ class DrillService : Service(), VoiceIo {
         }
 
         val latch = CountDownLatch(1)
+        val openedAt = SystemClock.elapsedRealtime()
         val token = synchronized(injectLock) {
             val queued = if (grading) pendingGrades.poll() else null
             if (queued != null) {
@@ -1035,14 +1093,21 @@ class DrillService : Service(), VoiceIo {
             inFlightClaimed = false
             clientRetryUsed = false
             errorGate.set(false)
+            speechBegan = false
+            silenceRestarts = 0
+            listenExtrasLogged = false
+            listenWaitMs = timeoutMs
+            listenSilenceMs = configuredSilenceMs
+            listenDeadlineMs = openedAt + timeoutMs
             ++listenToken
         }
+        val delay = (listenDeadlineMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
         handler.postDelayed({
             if (token == listenToken) finishListen(null)
-        }, timeoutMs)
+        }, delay)
         mainHandler.post { beginListenOnMain(token) }
         try {
-            if (!latch.await(timeoutMs + CLIENT_BACKOFF_MS + 5_000, TimeUnit.MILLISECONDS)) {
+            if (!latch.await(delay + LISTEN_LATCH_SLACK_MS, TimeUnit.MILLISECONDS)) {
                 Log.w(TAG, "listen latch timed out")
                 finishListen(null)
             }
@@ -1051,6 +1116,25 @@ class DrillService : Service(), VoiceIo {
             finishListen(null)
         }
         return listenResult.get()
+    }
+
+    /** Main thread. The listen token is still the one [beginListenOnMain] was given. */
+    private fun sessionOpen(session: Int): Boolean {
+        if (destroyed || stopRequested.get()) return false
+        synchronized(injectLock) {
+            return listenActive && session == listenToken && !inFlightClaimed
+        }
+    }
+
+    /**
+     * A tap that landed in the queue during a restart gap, before the mic opens again.
+     * Null when grading is closed or another delivery already claimed this listen.
+     */
+    private fun pollQueuedGrade(): String? {
+        synchronized(injectLock) {
+            if (!grading || !listenActive || inFlightClaimed) return null
+            return pendingGrades.poll()
+        }
     }
 
     /** @return false if the drill was stopped while waiting. */
@@ -1152,7 +1236,13 @@ class DrillService : Service(), VoiceIo {
 
     /** Main thread. Drops any previous recognizer and starts a new session. */
     private fun beginListenOnMain(session: Int) {
-        if (destroyed || !listenActive || session != listenToken) return
+        if (!sessionOpen(session)) return
+        val queued = pollQueuedGrade()
+        if (queued != null) {
+            if (!deliverTestGrade(queued)) pendingGrades.add(queued)
+            return
+        }
+        if (!sessionOpen(session)) return
         if (grading) {
             runCatching {
                 DrillUi.update { it.copy(ratingMicOpen = true, status = "Listening for your grade") }
@@ -1163,10 +1253,18 @@ class DrillService : Service(), VoiceIo {
             finishListen(null)
             return
         }
+        val waitMs = listenWaitMs
+        val silenceMs = listenSilenceMs.toLong()
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.US.toString())
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, silenceMs)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, silenceMs)
+        }
+        if (!listenExtrasLogged) {
+            listenExtrasLogged = true
+            Log.i(TAG, "listen extras wait=$waitMs silence=$silenceMs")
         }
         try {
             recognizer?.startListening(intent)
@@ -1174,6 +1272,21 @@ class DrillService : Service(), VoiceIo {
         } catch (e: Exception) {
             Log.w(TAG, "startListening failed", e)
             finishListen(null)
+        }
+    }
+
+    /** Posted from onError. Same token, no cue. A queued tap in the gap wins over the new mic. */
+    private fun restartSilenceListen(session: Int) {
+        mainHandler.post {
+            if (!sessionOpen(session)) return@post
+            val left = listenDeadlineMs - SystemClock.elapsedRealtime()
+            if (left < ListenWindow.MIN_REMAINING_MS) {
+                finishListen(null)
+                return@post
+            }
+            destroyRecognizerOnMain()
+            if (!sessionOpen(session)) return@post
+            beginListenOnMain(session)
         }
     }
 
@@ -1230,7 +1343,10 @@ class DrillService : Service(), VoiceIo {
             if (!current()) return
             Log.i(TAG, "listen ready")
         }
-        override fun onBeginningOfSpeech() {}
+        override fun onBeginningOfSpeech() {
+            if (!current()) return
+            speechBegan = true
+        }
         override fun onRmsChanged(rmsdB: Float) {}
         override fun onBufferReceived(buffer: ByteArray) {}
         override fun onEndOfSpeech() {}
@@ -1262,18 +1378,29 @@ class DrillService : Service(), VoiceIo {
                     error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
             // Detach before any cancel/destroy so this callback cannot chain.
             try { recognizer?.setRecognitionListener(null) } catch (_: Exception) {}
-            if (retryable && !clientRetryUsed && !destroyed) {
+            // A tap already owns this listen. finishListen(null) would drop it.
+            if (synchronized(injectLock) { inFlightClaimed }) return
+            if (retryable && !clientRetryUsed && sessionOpen(session)) {
                 clientRetryUsed = true
                 Log.i(TAG, "recognizer backoff: $error")
                 mainHandler.post {
-                    if (!listenActive || session != listenToken || destroyed) return@post
+                    if (!sessionOpen(session)) return@post
                     destroyRecognizerOnMain()
                     mainHandler.postDelayed({
-                        if (!listenActive || session != listenToken || destroyed) return@postDelayed
+                        if (!sessionOpen(session)) return@postDelayed
                         Log.i(TAG, "recreate recognizer after backoff")
                         beginListenOnMain(session)
                     }, CLIENT_BACKOFF_MS)
                 }
+                return
+            }
+            val now = SystemClock.elapsedRealtime()
+            if (ListenWindow.shouldRestart(speechBegan, error, now, listenDeadlineMs, silenceRestarts)
+                && sessionOpen(session)) {
+                silenceRestarts += 1
+                val remaining = listenDeadlineMs - now
+                Log.i(TAG, "listen restart: silence n=$silenceRestarts remainingMs=$remaining")
+                restartSilenceListen(session)
                 return
             }
             if (retryable) {

@@ -1,8 +1,12 @@
 package com.evan.voicesrs
 
 /**
- * Pure-Kotlin HTML -> spoken-text for Anki card fields (unit-testable, no Android deps).
+ * Pure-Kotlin HTML cleanup for Anki card fields (unit-testable, no Android deps).
  * Strips tags, decodes common entities, collapses whitespace.
+ *
+ * Kengio decks hide a spoken script in `.spoken` (CSS `display:none`) and put a
+ * longer on-screen explanation in `.screen-only`. [spokenText] and [displayHtml]
+ * honor those classes. Cards with neither class match [stripHtml] / [toDisplayHtml].
  */
 object AnkiText {
     private val scriptStyle = Regex("<(script|style)[^>]*>.*?</\\1>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
@@ -16,6 +20,20 @@ object AnkiText {
     )
     private val numericEntity = Regex("&#(\\d+);")
     private val hexEntity = Regex("&#x([0-9a-fA-F]+);")
+    /** Anki's default back template is `{{FrontSide}}<hr id=answer>`. */
+    private val answerDivider = Regex(
+        """<hr[^>]*\bid\s*=\s*["']?answer["']?[^>]*>""",
+        RegexOption.IGNORE_CASE
+    )
+    /** A CSS declaration, so `display:none` inside another property does not match. */
+    private val displayNoneDecl = Regex(
+        """(?:^|;)\s*display\s*:\s*none\b""",
+        RegexOption.IGNORE_CASE
+    )
+    private val voidTags = setOf(
+        "area", "base", "br", "col", "embed", "hr", "img", "input",
+        "link", "meta", "param", "source", "track", "wbr"
+    )
 
     private val namedEntities = mapOf(
         "nbsp" to " ", "amp" to "&", "lt" to "<", "gt" to ">",
@@ -34,9 +52,42 @@ object AnkiText {
     }
 
     /**
+     * Text to speak for one card side.
+     *
+     * If the side has an element classed `spoken`, only those elements are spoken.
+     * Otherwise the visible side is spoken. Elements classed `screen-only`, and
+     * elements with inline `display:none`, are always dropped. A `.spoken` element
+     * is the replacement, so it is kept even when it also has inline `display:none`.
+     * The result then goes through [stripHtml].
+     *
+     * Does not look for the answer divider. Call [answerOnly] first on a back.
+     */
+    fun spokenText(html: String): String {
+        val spoken = extractInners(html) { attrs -> hasClass(attrs, "spoken") }
+        val source = if (spoken.isNotEmpty()) spoken.joinToString("\n") else html
+        val cleaned = removeElements(source) { attrs ->
+            if (hasClass(attrs, "spoken")) false
+            else hasClass(attrs, "screen-only") || isInlineDisplayNone(attrs)
+        }
+        return stripHtml(cleaned)
+    }
+
+    /**
+     * HTML after the first `<hr id=answer>` divider. Anki's default back
+     * template starts with `{{FrontSide}}`, so the raw answer repeats the
+     * question. If the marker is missing, or the remainder is blank once
+     * tags are stripped, returns [html] unchanged.
+     */
+    fun answerOnly(html: String): String {
+        val match = answerDivider.find(html) ?: return html
+        val after = html.substring(match.range.last + 1)
+        return if (stripHtml(after).isBlank()) html else after
+    }
+
+    /**
      * Sanitized HTML for on-screen cards. Keeps line breaks and basic emphasis.
      * Drops images, [sound:…] tags, media, scripts, and styles.
-     * Safe to pass to HtmlCompat. Spoken TTS still uses [stripHtml].
+     * Safe to pass to HtmlCompat. Spoken TTS uses [spokenText].
      */
     fun toDisplayHtml(html: String): String {
         var s = html.replace("\u0000", "").replace("\u0001", "")
@@ -74,6 +125,18 @@ object AnkiText {
         return s.trim()
     }
 
+    /**
+     * On-screen HTML. Drops `.spoken` and inline `display:none`. Keeps `.screen-only`.
+     * Then the same sanitizer as [toDisplayHtml]. Cards with none of those markers
+     * match [toDisplayHtml] exactly.
+     */
+    fun displayHtml(html: String): String {
+        val cleaned = removeElements(html) { attrs ->
+            hasClass(attrs, "spoken") || isInlineDisplayNone(attrs)
+        }
+        return toDisplayHtml(cleaned)
+    }
+
     private fun decodeEntities(s: String): String {
         var out = s
         out = numericEntity.replace(out) { m ->
@@ -84,5 +147,218 @@ object AnkiText {
         }
         for ((name, ch) in namedEntities) out = out.replace("&$name;", ch)
         return out
+    }
+
+    private data class TagMatch(
+        val name: String,
+        val attrs: String,
+        val start: Int,
+        val tagEnd: Int,
+        val selfClosing: Boolean,
+        val closing: Boolean
+    )
+
+    private data class ElementRange(
+        val start: Int,
+        val end: Int,
+        val innerStart: Int,
+        val innerEnd: Int
+    )
+
+    private data class CloseSpan(val contentEnd: Int, val elementEnd: Int)
+
+    /** Whole class token. `class="x spoken"` matches; `bespoken` does not. Quotes may be ' " or absent. */
+    private fun hasClass(attrs: String, className: String): Boolean {
+        val value = attrValue(attrs, "class") ?: return false
+        return value.split(Regex("\\s+")).any { it == className }
+    }
+
+    private fun isInlineDisplayNone(attrs: String): Boolean {
+        val style = attrValue(attrs, "style") ?: return false
+        return displayNoneDecl.containsMatchIn(style)
+    }
+
+    /** First matching attribute. Names are case-insensitive. Values inside other attributes are ignored. */
+    private fun attrValue(attrs: String, wanted: String): String? {
+        var i = 0
+        while (i < attrs.length) {
+            while (i < attrs.length && attrs[i].isWhitespace()) i++
+            if (i >= attrs.length) return null
+            if (attrs[i] == '/') {
+                i++
+                continue
+            }
+            val nameStart = i
+            while (i < attrs.length && (attrs[i].isLetterOrDigit() || attrs[i] == '-' || attrs[i] == ':')) i++
+            if (i == nameStart) {
+                i++
+                continue
+            }
+            val name = attrs.substring(nameStart, i)
+            while (i < attrs.length && attrs[i].isWhitespace()) i++
+            if (i >= attrs.length || attrs[i] != '=') {
+                if (name.equals(wanted, ignoreCase = true)) return ""
+                continue
+            }
+            i++
+            while (i < attrs.length && attrs[i].isWhitespace()) i++
+            if (i >= attrs.length) {
+                return if (name.equals(wanted, ignoreCase = true)) "" else null
+            }
+            val value: String
+            val q = attrs[i]
+            if (q == '"' || q == '\'') {
+                val start = ++i
+                while (i < attrs.length && attrs[i] != q) i++
+                value = attrs.substring(start, i)
+                if (i < attrs.length) i++
+            } else {
+                val start = i
+                while (i < attrs.length && !attrs[i].isWhitespace()) i++
+                value = attrs.substring(start, i)
+            }
+            if (name.equals(wanted, ignoreCase = true)) return value
+        }
+        return null
+    }
+
+    private fun isVoid(name: String) = name.lowercase() in voidTags
+
+    /**
+     * Next tag at or after [from]. Skips comments. `>` inside a quoted attribute
+     * does not end the tag. Returns null when nothing tag-like remains.
+     */
+    private fun nextTag(html: String, from: Int): TagMatch? {
+        var i = from
+        while (i < html.length) {
+            val lt = html.indexOf('<', i)
+            if (lt < 0 || lt + 1 >= html.length) return null
+            if (html.startsWith("<!--", lt)) {
+                val end = html.indexOf("-->", lt + 4)
+                i = if (end < 0) html.length else end + 3
+                continue
+            }
+            val c1 = html[lt + 1]
+            if (c1 == '!' || c1 == '?') {
+                val end = html.indexOf('>', lt + 2)
+                i = if (end < 0) html.length else end + 1
+                continue
+            }
+            val closing = c1 == '/'
+            var nameStart = if (closing) lt + 2 else lt + 1
+            if (closing) {
+                while (nameStart < html.length && html[nameStart].isWhitespace()) nameStart++
+            }
+            if (nameStart >= html.length || !html[nameStart].isLetter()) {
+                i = lt + 1
+                continue
+            }
+            var j = nameStart + 1
+            while (j < html.length && (html[j].isLetterOrDigit() || html[j] == '-' || html[j] == ':')) j++
+            val name = html.substring(nameStart, j)
+            var k = j
+            var quote: Char? = null
+            while (k < html.length) {
+                val ch = html[k]
+                if (quote != null) {
+                    if (ch == quote) quote = null
+                } else if (ch == '"' || ch == '\'') {
+                    quote = ch
+                } else if (ch == '>') {
+                    break
+                }
+                k++
+            }
+            val raw = if (k >= html.length) html.substring(j) else html.substring(j, k)
+            val selfClosing = raw.trimEnd().endsWith('/')
+            val attrs = raw.trim().removeSuffix("/").trim()
+            val tagEnd = if (k >= html.length) html.length else k + 1
+            return TagMatch(name, attrs, lt, tagEnd, selfClosing, closing)
+        }
+        return null
+    }
+
+    /** Matching close for [tagName], counting nested tags of the same name. Script and style bodies are opaque. */
+    private fun matchingClose(html: String, tagName: String, contentStart: Int): CloseSpan {
+        var depth = 1
+        var i = contentStart
+        while (i < html.length) {
+            val tag = nextTag(html, i) ?: return CloseSpan(html.length, html.length)
+            if (tag.tagEnd <= i) return CloseSpan(html.length, html.length)
+            if (!tag.closing &&
+                (tag.name.equals("script", true) || tag.name.equals("style", true)) &&
+                !tag.name.equals(tagName, true) &&
+                !tag.selfClosing && !isVoid(tag.name)
+            ) {
+                i = matchingClose(html, tag.name, tag.tagEnd).elementEnd
+                continue
+            }
+            if (tag.name.equals(tagName, true)) {
+                if (tag.closing) {
+                    depth--
+                    if (depth == 0) return CloseSpan(tag.start, tag.tagEnd)
+                } else if (!tag.selfClosing && !isVoid(tag.name)) {
+                    depth++
+                }
+            }
+            i = tag.tagEnd
+        }
+        return CloseSpan(html.length, html.length)
+    }
+
+    private fun findNextElement(html: String, from: Int, predicate: (String) -> Boolean): ElementRange? {
+        var i = from
+        while (i < html.length) {
+            val tag = nextTag(html, i) ?: return null
+            if (tag.tagEnd <= i) return null
+            if (tag.closing) {
+                i = tag.tagEnd
+                continue
+            }
+            if ((tag.name.equals("script", true) || tag.name.equals("style", true)) &&
+                !tag.selfClosing && !isVoid(tag.name)
+            ) {
+                i = matchingClose(html, tag.name, tag.tagEnd).elementEnd
+                continue
+            }
+            if (predicate(tag.attrs)) {
+                if (tag.selfClosing || isVoid(tag.name)) {
+                    return ElementRange(tag.start, tag.tagEnd, tag.tagEnd, tag.tagEnd)
+                }
+                val close = matchingClose(html, tag.name, tag.tagEnd)
+                return ElementRange(tag.start, close.elementEnd, tag.tagEnd, close.contentEnd)
+            }
+            i = tag.tagEnd
+        }
+        return null
+    }
+
+    private fun extractInners(html: String, predicate: (String) -> Boolean): List<String> {
+        val out = ArrayList<String>()
+        var i = 0
+        while (i < html.length) {
+            val el = findNextElement(html, i, predicate) ?: break
+            if (el.end <= i) break
+            out.add(html.substring(el.innerStart, el.innerEnd))
+            i = el.end
+        }
+        return out
+    }
+
+    /** Returns [html] unchanged when nothing matches, so unspecialized cards stay byte-identical. */
+    private fun removeElements(html: String, predicate: (String) -> Boolean): String {
+        val sb = StringBuilder()
+        var i = 0
+        var removed = false
+        while (i < html.length) {
+            val el = findNextElement(html, i, predicate) ?: break
+            if (el.end <= i) break
+            sb.append(html, i, el.start)
+            i = el.end
+            removed = true
+        }
+        if (!removed) return html
+        sb.append(html, i, html.length)
+        return sb.toString()
     }
 }

@@ -10,7 +10,7 @@ data class AnkiConfig(
     val url: String,
     val apiKey: String,
     val deck: String,
-    /** TextToSpeech rate, clamped to [TtsRate.MIN]..[TtsRate.MAX]. */
+    /** Speech rate, clamped to [TtsRate.MIN]..[TtsRate.MAX]. Slider covers up to [TtsRate.SLIDER_MAX]. */
     val ttsRate: Float = TtsRate.DEFAULT,
     /** On-device TextToSpeech voice name. Blank means the engine's system default. */
     val ttsVoice: String = "",
@@ -21,6 +21,12 @@ data class AnkiConfig(
     val neuralVoice: String = NeuralTts.DEFAULT_VOICE,
     /** Skip spoken rating guides and the "I heard" readback. */
     val speedMode: Boolean = false,
+    /** Seconds to wait for speech to start. One of [ListenWindow.WAIT_SEC_CHOICES]. */
+    val listenWaitSec: Int = ListenWindow.DEFAULT_WAIT_SEC,
+    /** End-of-speech silence hint, in milliseconds. One of [ListenWindow.SILENCE_MS_CHOICES]. */
+    val endSilenceMs: Int = ListenWindow.DEFAULT_SILENCE_MS,
+    /** After a silent answer window, prompt once and listen again. */
+    val relistenOnce: Boolean = true,
     /** Show the card front and back on the main screen. */
     val showCard: Boolean = true,
     /** Fetch a batch and grade locally. Off by default. */
@@ -50,6 +56,9 @@ object Prefs {
     private const val KEY_NEURAL_TOKEN = "neural_token"
     private const val KEY_NEURAL_VOICE = "neural_voice"
     private const val KEY_SPEED_MODE = "speed_mode"
+    private const val KEY_LISTEN_WAIT_SEC = "listen_wait_sec"
+    private const val KEY_END_SILENCE_MS = "end_silence_ms"
+    private const val KEY_RELISTEN_ONCE = "relisten_once"
     private const val KEY_SHOW_CARD = "show_card"
     private const val KEY_OFFLINE = "offline_batch"
     private const val KEY_BATCH_SIZE = "offline_batch_size"
@@ -127,9 +136,12 @@ object Prefs {
             .putString(KEY_NEURAL_URL, cfg.neuralUrl.ifBlank { DEFAULT_NEURAL_URL })
             .putString(KEY_NEURAL_VOICE, cfg.neuralVoice.ifBlank { NeuralTts.DEFAULT_VOICE })
             .putBoolean(KEY_SPEED_MODE, cfg.speedMode)
+            .putInt(KEY_LISTEN_WAIT_SEC, ListenWindow.normalizeWaitSec(cfg.listenWaitSec))
+            .putInt(KEY_END_SILENCE_MS, ListenWindow.normalizeSilenceMs(cfg.endSilenceMs))
+            .putBoolean(KEY_RELISTEN_ONCE, cfg.relistenOnce)
             .putBoolean(KEY_SHOW_CARD, cfg.showCard)
             .putBoolean(KEY_OFFLINE, cfg.offlineBatch)
-            .putInt(KEY_BATCH_SIZE, cfg.offlineBatchSize.coerceIn(1, 100))
+            .putInt(KEY_BATCH_SIZE, cfg.offlineBatchSize.coerceIn(DrillSettings.MIN_BATCH, DrillSettings.MAX_BATCH))
             .putString(KEY_GOAL_MODE, GoalModes.normalize(cfg.goalMode))
             .putInt(KEY_GOAL_CARDS, cfg.goalCards.coerceIn(1, 500))
             .putInt(KEY_GOAL_MINUTES, cfg.goalMinutes.coerceIn(1, 180))
@@ -160,9 +172,17 @@ object Prefs {
             neuralVoice = p.getString(KEY_NEURAL_VOICE, NeuralTts.DEFAULT_VOICE).orEmpty()
                 .ifBlank { NeuralTts.DEFAULT_VOICE },
             speedMode = p.getBoolean(KEY_SPEED_MODE, false),
+            listenWaitSec = ListenWindow.normalizeWaitSec(
+                p.getInt(KEY_LISTEN_WAIT_SEC, ListenWindow.DEFAULT_WAIT_SEC)
+            ),
+            endSilenceMs = ListenWindow.normalizeSilenceMs(
+                p.getInt(KEY_END_SILENCE_MS, ListenWindow.DEFAULT_SILENCE_MS)
+            ),
+            relistenOnce = p.getBoolean(KEY_RELISTEN_ONCE, true),
             showCard = p.getBoolean(KEY_SHOW_CARD, true),
             offlineBatch = p.getBoolean(KEY_OFFLINE, false),
-            offlineBatchSize = p.getInt(KEY_BATCH_SIZE, DEFAULT_BATCH_SIZE).coerceIn(1, 100),
+            offlineBatchSize = p.getInt(KEY_BATCH_SIZE, DEFAULT_BATCH_SIZE)
+                .coerceIn(DrillSettings.MIN_BATCH, DrillSettings.MAX_BATCH),
             goalMode = GoalModes.normalize(p.getString(KEY_GOAL_MODE, GoalModes.OFF)),
             goalCards = p.getInt(KEY_GOAL_CARDS, DEFAULT_GOAL_CARDS).coerceIn(1, 500),
             goalMinutes = p.getInt(KEY_GOAL_MINUTES, DEFAULT_GOAL_MINUTES).coerceIn(1, 180)

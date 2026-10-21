@@ -6,10 +6,13 @@ import org.junit.Test
 /** Fake VoiceIo with scripted transcripts. */
 private class FakeIo(private val transcripts: List<String?>) : VoiceIo {
     val spoken = mutableListOf<String>()
+    val timeouts = mutableListOf<Long>()
     var listenCalls = 0
     override fun speak(text: String) { spoken.add(text) }
-    override fun listen(timeoutMs: Long): String? =
-        if (listenCalls < transcripts.size) transcripts[listenCalls++] else null
+    override fun listen(timeoutMs: Long): String? {
+        timeouts.add(timeoutMs)
+        return if (listenCalls < transcripts.size) transcripts[listenCalls++] else null
+    }
     override fun beep() {}
 }
 
@@ -44,6 +47,21 @@ class VoiceSelfGraderTest {
     @Test
     fun `good maps to ease 3`() {
         assertEquals(3, VoiceSelfGrader().grade(ctx(), FakeIo(listOf("good"))))
+    }
+
+    @Test
+    fun `grade listen uses the configured wait`() {
+        val io = FakeIo(listOf("good"))
+        val custom = GradeContext(card, "the answer", listenTimeoutMs = 15_000L)
+        assertEquals(3, VoiceSelfGrader().grade(custom, io))
+        assertEquals(listOf(15_000L), io.timeouts)
+    }
+
+    @Test
+    fun `grade listen defaults to the grader wait`() {
+        val io = FakeIo(listOf("again", "good"))
+        assertEquals(1, VoiceSelfGrader().grade(ctx(), io))
+        assertEquals(listOf(Grader.LISTEN_TIMEOUT_MS), io.timeouts)
     }
 
     @Test

@@ -1,18 +1,25 @@
 package com.evan.voicesrs
 
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.view.View
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.Filter
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import android.widget.TextView
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
@@ -43,6 +50,9 @@ class SettingsActivity : AppCompatActivity() {
         val deckStatus: TextView = findViewById(R.id.deckStatus)
         val rateLabel: TextView = findViewById(R.id.rateLabel)
         val rateSlider: Slider = findViewById(R.id.rateSlider)
+        val rateCustomLink: TextView = findViewById(R.id.ttsRateCustomLink)
+        val rateCustomLayout: TextInputLayout = findViewById(R.id.ttsRateCustomLayout)
+        val rateCustomInput: TextInputEditText = findViewById(R.id.ttsRateCustomInput)
         val voiceView: MaterialAutoCompleteTextView = findViewById(R.id.voiceSpinner)
         val voiceStatus: TextView = findViewById(R.id.voiceStatus)
         val engineView: MaterialAutoCompleteTextView = findViewById(R.id.engineInput)
@@ -53,14 +63,20 @@ class SettingsActivity : AppCompatActivity() {
         val tokenStatus: TextView = findViewById(R.id.tokenStatus)
         val neuralStatus: TextView = findViewById(R.id.neuralStatus)
         val offlineSwitch: MaterialSwitch = findViewById(R.id.offlineBatchSwitch)
+        val batchLayout: TextInputLayout = findViewById(R.id.batchSizeLayout)
         val batchSizeView: TextInputEditText = findViewById(R.id.batchSizeInput)
         val goalModeView: MaterialAutoCompleteTextView = findViewById(R.id.goalModeInput)
+        val goalAmountLayout: TextInputLayout = findViewById(R.id.goalAmountLayout)
         val goalAmountView: TextInputEditText = findViewById(R.id.goalAmountInput)
+        val goalBatchHint: TextView = findViewById(R.id.goalBatchHint)
         val testVoiceInput: TextInputEditText = findViewById(R.id.testVoiceInput)
         val testVoiceButton: Button = findViewById(R.id.testVoiceButton)
         val testVoiceStatus: TextView = findViewById(R.id.testVoiceStatus)
         val speedSwitch: MaterialSwitch = findViewById(R.id.speedModeSwitch)
         val showCardSwitch: MaterialSwitch = findViewById(R.id.showCardSwitch)
+        val listenWaitView: MaterialAutoCompleteTextView = findViewById(R.id.listenWaitInput)
+        val endSilenceView: MaterialAutoCompleteTextView = findViewById(R.id.endSilenceInput)
+        val relistenSwitch: MaterialSwitch = findViewById(R.id.relistenSwitch)
 
         val cfg = Prefs.load(this)
         urlView.setText(cfg.url)
@@ -76,6 +92,23 @@ class SettingsActivity : AppCompatActivity() {
         )
         speedSwitch.isChecked = cfg.speedMode
         showCardSwitch.isChecked = cfg.showCard
+        val waitLabels = ListenWindow.WAIT_SEC_CHOICES.map {
+            getString(R.string.settings_listen_wait_choice, it)
+        }
+        val silenceLabels = ListenWindow.SILENCE_MS_CHOICES.map {
+            getString(R.string.settings_end_silence_choice, it)
+        }
+        bindChoices(
+            listenWaitView,
+            waitLabels,
+            getString(R.string.settings_listen_wait_choice, ListenWindow.normalizeWaitSec(cfg.listenWaitSec))
+        )
+        bindChoices(
+            endSilenceView,
+            silenceLabels,
+            getString(R.string.settings_end_silence_choice, ListenWindow.normalizeSilenceMs(cfg.endSilenceMs))
+        )
+        relistenSwitch.isChecked = cfg.relistenOnce
         offlineSwitch.isChecked = cfg.offlineBatch
         batchSizeView.setText(cfg.offlineBatchSize.toString())
         val goalLabels = listOf(
@@ -95,12 +128,131 @@ class SettingsActivity : AppCompatActivity() {
             testVoiceInput.setText(getString(R.string.test_voice_sample))
         }
 
-        rateSlider.value = TtsRate.toProgress(cfg.ttsRate).toFloat()
-        fun showRate(value: Float) {
-            rateLabel.text = getString(R.string.settings_tts_rate_value, TtsRate.fromProgress(value.roundToInt()))
+        // Opaque typed color, so the disabled text color does not stack on the input alpha.
+        val batchTextColor = ColorStateList.valueOf(batchSizeView.currentTextColor)
+        val batchHintDefault = batchLayout.defaultHintTextColor
+        val batchHintFocused = batchLayout.hintTextColor
+        val batchHintBase = batchHintDefault?.defaultColor ?: batchSizeView.currentHintTextColor
+        var batchUiOn: Boolean? = null
+        fun goalModeFromField(): String = when (goalModeView.text.toString().trim()) {
+            getString(R.string.settings_goal_cards) -> GoalModes.CARDS
+            getString(R.string.settings_goal_minutes) -> GoalModes.MINUTES
+            else -> GoalModes.OFF
         }
-        showRate(rateSlider.value)
-        rateSlider.addOnChangeListener { _, value, _ -> showRate(value) }
+        fun refreshDrillFields() {
+            val offlineOn = offlineSwitch.isChecked
+            if (batchUiOn != offlineOn) {
+                batchUiOn = offlineOn
+                val alpha = DrillSettings.fieldAlpha(offlineOn)
+                batchSizeView.isEnabled = offlineOn
+                batchSizeView.setTextColor(batchTextColor)
+                batchSizeView.alpha = alpha
+                // Label color carries the same alpha. Layout alpha stays 1 so it does not stack.
+                if (offlineOn) {
+                    batchLayout.setDefaultHintTextColor(batchHintDefault)
+                    batchLayout.setHintTextColor(batchHintFocused)
+                } else {
+                    val hintAlpha = (alpha * 255f).roundToInt().coerceIn(0, 255)
+                    val faded = ColorStateList.valueOf(
+                        Color.argb(
+                            hintAlpha,
+                            Color.red(batchHintBase),
+                            Color.green(batchHintBase),
+                            Color.blue(batchHintBase)
+                        )
+                    )
+                    batchLayout.setDefaultHintTextColor(faded)
+                    batchLayout.setHintTextColor(faded)
+                }
+                batchLayout.findViewById<TextView>(
+                    com.google.android.material.R.id.textinput_helper_text
+                )?.alpha = alpha
+            }
+
+            val mode = goalModeFromField()
+            goalAmountLayout.visibility = if (DrillSettings.showGoalAmount(mode)) View.VISIBLE else View.GONE
+            goalAmountLayout.suffixText = DrillSettings.goalSuffix(mode).ifEmpty { null }
+            val showHint = DrillSettings.showGoalBatchHint(
+                mode,
+                offlineOn,
+                goalAmountView.text?.toString().orEmpty(),
+                batchSizeView.text?.toString().orEmpty(),
+                cfg.offlineBatchSize
+            )
+            goalBatchHint.visibility = if (showHint) View.VISIBLE else View.GONE
+        }
+        offlineSwitch.setOnCheckedChangeListener { _, _ -> refreshDrillFields() }
+        goalModeView.setOnItemClickListener { _, _, _, _ -> refreshDrillFields() }
+        goalModeView.doAfterTextChanged { refreshDrillFields() }
+        batchSizeView.doAfterTextChanged { refreshDrillFields() }
+        goalAmountView.doAfterTextChanged { refreshDrillFields() }
+        goalBatchHint.text = DrillSettings.GOAL_BATCH_HINT
+        refreshDrillFields()
+
+        var spokenRate = TtsRate.clamp(cfg.ttsRate)
+        var rateCommitGuard = false
+        fun showRate(rate: Float) {
+            rateLabel.text = if (TtsRate.isCustom(rate)) {
+                getString(R.string.settings_tts_rate_custom, rate)
+            } else {
+                getString(R.string.settings_tts_rate_value, rate)
+            }
+            val progress = TtsRate.toProgress(rate).toFloat()
+            if (rateSlider.value != progress) rateSlider.value = progress
+        }
+        fun commitCustomRate(hideOnSuccess: Boolean): Boolean {
+            val parsed = TtsRate.parse(rateCustomInput.text?.toString().orEmpty())
+            if (parsed == null) {
+                rateCustomLayout.error = getString(R.string.settings_tts_rate_error)
+                return false
+            }
+            rateCustomLayout.error = null
+            spokenRate = parsed
+            val shown = TtsRate.format(parsed)
+            if (rateCustomInput.text?.toString() != shown) rateCustomInput.setText(shown)
+            showRate(spokenRate)
+            if (hideOnSuccess) {
+                rateCommitGuard = true
+                rateCustomLayout.visibility = View.GONE
+                rateCustomInput.clearFocus()
+                rateCommitGuard = false
+            }
+            return true
+        }
+        showRate(spokenRate)
+        rateSlider.addOnChangeListener { _, value, fromUser ->
+            if (!fromUser) return@addOnChangeListener
+            spokenRate = TtsRate.fromProgress(value.roundToInt())
+            rateLabel.text = getString(R.string.settings_tts_rate_value, spokenRate)
+            if (rateCustomLayout.visibility == View.VISIBLE) {
+                rateCustomLayout.error = null
+                rateCustomInput.setText(TtsRate.format(spokenRate))
+            }
+        }
+        rateCustomLink.setOnClickListener {
+            if (rateCustomLayout.visibility == View.VISIBLE) {
+                commitCustomRate(hideOnSuccess = true)
+                return@setOnClickListener
+            }
+            rateCustomLayout.error = null
+            rateCustomInput.setText(TtsRate.format(spokenRate))
+            rateCustomLayout.visibility = View.VISIBLE
+            rateCustomInput.requestFocus()
+            rateCustomInput.setSelection(rateCustomInput.text?.length ?: 0)
+        }
+        rateCustomInput.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId != EditorInfo.IME_ACTION_DONE) return@setOnEditorActionListener false
+            if (commitCustomRate(hideOnSuccess = true)) {
+                val imm = getSystemService(InputMethodManager::class.java)
+                imm?.hideSoftInputFromWindow(rateCustomInput.windowToken, 0)
+            }
+            true
+        }
+        rateCustomInput.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus && !rateCommitGuard && rateCustomLayout.visibility == View.VISIBLE) {
+                commitCustomRate(hideOnSuccess = false)
+            }
+        }
 
         val engineLabels = listOf(TtsEngines.CHOICE_NEURAL, TtsEngines.CHOICE_DEVICE)
         val engineLabel = if (TtsEngines.preferred(cfg.ttsEngine) == EngineChoice.ON_DEVICE) {
@@ -151,21 +303,30 @@ class SettingsActivity : AppCompatActivity() {
         loadNeural(neuralUrlView, neuralTokenView, neuralVoiceView, neuralStatus, cfg.neuralVoice)
 
         findViewById<Button>(R.id.saveButton).setOnClickListener {
+            if (rateCustomLayout.visibility == View.VISIBLE && !commitCustomRate(hideOnSuccess = true)) {
+                return@setOnClickListener
+            }
             val voiceName = selectedDeviceVoice(voiceView)
             savedDeviceVoice = voiceName
-            val goalMode = when (goalModeView.text.toString().trim()) {
-                getString(R.string.settings_goal_cards) -> GoalModes.CARDS
-                getString(R.string.settings_goal_minutes) -> GoalModes.MINUTES
-                else -> GoalModes.OFF
-            }
+            val goalMode = goalModeFromField()
             val amount = goalAmountView.text.toString().trim().toIntOrNull()
+            val batch = DrillSettings.clampBatch(
+                batchSizeView.text?.toString().orEmpty(),
+                cfg.offlineBatchSize
+            )
+            if (batch.rewriteField) {
+                batchSizeView.setText(batch.text)
+            }
+            if (batch.cappedAtMax) {
+                batchLayout.helperText = DrillSettings.CLAMPED_NOTE
+            }
             Prefs.save(
                 this,
                 AnkiConfig(
                     url = urlView.text.toString().trim().ifBlank { Prefs.DEFAULT_URL },
                     apiKey = keyView.text.toString().trim().ifBlank { cfg.apiKey },
                     deck = deckView.text.toString().trim().ifBlank { Prefs.DEFAULT_DECK },
-                    ttsRate = TtsRate.fromProgress(rateSlider.value.roundToInt()),
+                    ttsRate = spokenRate,
                     ttsVoice = voiceName,
                     ttsEngine = selectedEngine(engineView),
                     neuralUrl = neuralUrlView.text.toString().trim().ifBlank { Prefs.DEFAULT_NEURAL_URL },
@@ -173,14 +334,20 @@ class SettingsActivity : AppCompatActivity() {
                     neuralVoice = neuralVoiceView.text.toString().trim().ifBlank { NeuralTts.DEFAULT_VOICE },
                     speedMode = speedSwitch.isChecked,
                     showCard = showCardSwitch.isChecked,
+                    listenWaitSec = ListenWindow.waitSecFromLabel(listenWaitView.text.toString()),
+                    endSilenceMs = ListenWindow.silenceMsFromLabel(endSilenceView.text.toString()),
+                    relistenOnce = relistenSwitch.isChecked,
                     offlineBatch = offlineSwitch.isChecked,
-                    offlineBatchSize = batchSizeView.text.toString().trim().toIntOrNull() ?: cfg.offlineBatchSize,
+                    offlineBatchSize = batch.value,
                     goalMode = goalMode,
                     goalCards = if (goalMode == GoalModes.MINUTES) cfg.goalCards else (amount ?: cfg.goalCards),
                     goalMinutes = if (goalMode == GoalModes.MINUTES) (amount ?: cfg.goalMinutes) else cfg.goalMinutes
                 )
             )
             Toast.makeText(this, "Settings saved.", Toast.LENGTH_SHORT).show()
+            if (batch.cappedAtMax) {
+                Toast.makeText(this, DrillSettings.CLAMPED_NOTE, Toast.LENGTH_SHORT).show()
+            }
             finish()
         }
 
@@ -211,8 +378,11 @@ class SettingsActivity : AppCompatActivity() {
 
         testVoiceButton.setOnClickListener {
             if (testing) return@setOnClickListener
+            if (rateCustomLayout.visibility == View.VISIBLE && !commitCustomRate(hideOnSuccess = false)) {
+                return@setOnClickListener
+            }
             val phrase = testVoiceInput.text.toString().trim().ifBlank { getString(R.string.test_voice_sample) }
-            val rate = TtsRate.fromProgress(rateSlider.value.roundToInt())
+            val rate = spokenRate
             val engine = selectedEngine(engineView)
             val deviceVoice = selectedDeviceVoice(voiceView)
             val neuralVoice = neuralVoiceView.text.toString().trim().ifBlank { NeuralTts.DEFAULT_VOICE }

@@ -20,6 +20,10 @@ interface Grader {
      * @return ease 1..4 to submit via guiAnswerCard.
      */
     fun grade(ctx: GradeContext, io: VoiceIo): Int
+
+    companion object {
+        const val LISTEN_TIMEOUT_MS = 20_000L
+    }
 }
 
 /** What the grader needs to know about the current card. */
@@ -30,7 +34,9 @@ data class GradeContext(
     /** 0-based index of this card in the current drill. */
     val cardIndex: Int = 0,
     /** When true, skip the spoken rating guide and the one retry guide. */
-    val speedMode: Boolean = false
+    val speedMode: Boolean = false,
+    /** How long each grade listen waits. The drill passes the saved listen wait. */
+    val listenTimeoutMs: Long = Grader.LISTEN_TIMEOUT_MS
 )
 
 /** Blocking voice I/O owned by the drill service. */
@@ -57,7 +63,7 @@ class VoiceSelfGrader : Grader {
         if (opening != null) io.speak(opening)
         var reprompted = false
         while (true) {
-            when (val action = GradeMapper.parse(io.listen(LISTEN_TIMEOUT_MS))) {
+            when (val action = GradeMapper.parse(io.listen(ctx.listenTimeoutMs))) {
                 VoiceAction.Repeat -> {
                     io.speak(ctx.spokenAnswer)
                     continue
@@ -79,9 +85,5 @@ class VoiceSelfGrader : Grader {
                 }
             }
         }
-    }
-
-    companion object {
-        const val LISTEN_TIMEOUT_MS = 20_000L
     }
 }

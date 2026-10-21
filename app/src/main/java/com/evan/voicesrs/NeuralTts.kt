@@ -28,12 +28,22 @@ enum class EngineChoice { NEURAL, ON_DEVICE }
 
 /**
  * Pure helpers for the Edge neural server.
- * The server maps a float multiplier to edge "+N%" and clamps 0.5–2.0.
- * The slider value is sent as-is after the same clamp.
+ *
+ * Effective max is 2.0×, which the server sends as "+100%".
+ * The configured speech server clamps the float multiplier to
+ * 0.5–2.0, then `pct = round((r - 1) * 100)` with a sign (`0.5×` is "-50%",
+ * `1.0×` is "+0%", `2.0×` is "+100%"). The edge-tts library only checks
+ * `^[+-]\d+%$` and has no numeric ceiling. Its maintainer documents Microsoft's
+ * prosody range as 0.5×–2× the original audio, and the server enforces that.
+ * A custom rate above 2.0× is therefore spoken at 2.0× on the neural path.
+ * On-device [android.speech.tts.TextToSpeech.setSpeechRate] uses [TtsRate.MAX]
+ * (4.0×) and is not limited here. The client clamp matches the server so the
+ * cache key is the rate that is actually synthesized.
  */
 object NeuralTts {
     const val DEFAULT_VOICE = "en-US-AriaNeural"
     const val MIN_RATE = 0.5f
+    /** Server `rate_str` ceiling. 2.0× → "+100%". See the class KDoc. */
     const val MAX_RATE = 2.0f
     const val CONNECT_TIMEOUT_MS = 3_000
     const val READ_TIMEOUT_MS = 15_000
@@ -81,11 +91,23 @@ object NeuralTts {
         "ja-JP-KeitaNeural"
     )
 
-    /** Rate sent to POST /speak. Identity for the 0.5–1.5 slider. */
+    /**
+     * Rate sent to POST /speak. Clamped to the server's 0.5–2.0×.
+     * Above [MAX_RATE] the server would reduce the value before synthesis.
+     */
     fun serverRate(slider: Float): Float {
-        if (slider.isNaN()) return 1f
+        if (slider.isNaN() || slider.isInfinite()) return 1f
         val clamped = slider.coerceIn(MIN_RATE, MAX_RATE)
         return (clamped * 100f).roundToInt() / 100f
+    }
+
+    /**
+     * Percent string the Edge server's `rate_str` produces for [slider].
+     * Effective range is "-50%".."+100%".
+     */
+    fun serverPercent(slider: Float): String {
+        val pct = ((serverRate(slider) - 1f) * 100f).roundToInt()
+        return String.format(Locale.US, "%+d%%", pct)
     }
 
     /** Stable token so 0.9 and 0.90 share a cache entry. */

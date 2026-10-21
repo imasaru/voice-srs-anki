@@ -8,13 +8,26 @@ import org.junit.Test
 
 class NeuralTtsTest {
     @Test
-    fun `server rate passes the slider through and clamps to the server range`() {
+    fun `server rate clamps to the edge server effective max of 2x`() {
+        // server.py rate_str clamps 0.5–2.0 and emits "+N%". 2.0× is "+100%".
+        // edge-tts only checks ^[+-]\d+%$ and would accept a larger percent,
+        // but the server never sends one. Custom 4.0× is spoken at 2.0×.
+        assertEquals(2.0f, NeuralTts.MAX_RATE, 0.001f)
         assertEquals(1.2f, NeuralTts.serverRate(1.2f), 0.001f)
         assertEquals(0.5f, NeuralTts.serverRate(0.5f), 0.001f)
         assertEquals(1.5f, NeuralTts.serverRate(1.5f), 0.001f)
+        assertEquals(2.0f, NeuralTts.serverRate(2.0f), 0.001f)
         assertEquals(0.5f, NeuralTts.serverRate(0.1f), 0.001f)
+        assertEquals(2.0f, NeuralTts.serverRate(2.6f), 0.001f)
         assertEquals(2.0f, NeuralTts.serverRate(3f), 0.001f)
+        assertEquals(2.0f, NeuralTts.serverRate(4f), 0.001f)
         assertEquals(1f, NeuralTts.serverRate(Float.NaN), 0.001f)
+        assertEquals("+0%", NeuralTts.serverPercent(1f))
+        assertEquals("+20%", NeuralTts.serverPercent(1.2f))
+        assertEquals("-50%", NeuralTts.serverPercent(0.5f))
+        assertEquals("+100%", NeuralTts.serverPercent(2f))
+        assertEquals("+100%", NeuralTts.serverPercent(2.6f))
+        assertEquals("+100%", NeuralTts.serverPercent(4f))
     }
 
     @Test

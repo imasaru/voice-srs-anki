@@ -7,6 +7,9 @@ package com.evan.voicesrs
  * The drill must fail LOUD instead of silently rolling through cards of dead
  * air: when [maxConsecutiveNulls] nulls happen in a row, the caller speaks a
  * warning and aborts via [MicDeadException].
+ *
+ * An answer re-listen is one sample. The caller passes [ListenWindow.healthSample]
+ * so a silent window plus its retry does not count as two strikes.
  */
 class ListenHealthTracker(private val maxConsecutiveNulls: Int = 3) {
     private var consecutiveNulls = 0
