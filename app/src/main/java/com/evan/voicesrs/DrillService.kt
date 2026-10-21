@@ -596,14 +596,12 @@ class DrillService : Service(), VoiceIo {
             Log.e(TAG, "microphone judged dead; drill aborted")
         } catch (e: AnkiConnectException) {
             Log.e(TAG, "AnkiConnect failure", e)
-            val message = "Connection problem. ${e.message}. Drill stopped."
-            showFailure(message, title = "Drill stopped: can't reach Anki")
-            speak(message)
+            showFailure(DrillErrors.ANKI, title = DrillErrors.STOPPED)
+            speak(DrillErrors.ANKI)
         } catch (e: Exception) {
             Log.e(TAG, "session failure", e)
-            val message = "Something went wrong. Drill stopped."
-            showFailure(message, title = "Drill stopped")
-            speak(message)
+            showFailure(DrillErrors.GENERIC, title = DrillErrors.STOPPED)
+            speak(DrillErrors.GENERIC)
         } finally {
             runCatching { explainSession?.stop() }
             explainSession = null
@@ -884,13 +882,14 @@ class DrillService : Service(), VoiceIo {
         }
     }
 
-    private fun showFailure(message: String, title: String = "") {
+    private fun showFailure(message: String, title: String = DrillErrors.STOPPED) {
         DrillUi.update {
             it.copy(
                 showError = true,
                 errorMessage = message,
-                errorTitle = title,
-                status = "Anki offline",
+                errorTitle = title.ifBlank { DrillErrors.STOPPED },
+                // Status is always on screen; QA dumps truncate other nodes at 80 chars.
+                status = DrillErrors.STOPPED,
                 ratingMicOpen = false
             )
         }

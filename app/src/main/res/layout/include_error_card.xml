@@ -20,6 +20,7 @@
             android:id="@+id/errorTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:importantForAccessibility="yes"
             android:text="@string/error_title"
             android:textAppearance="?attr/textAppearanceTitleMedium"
             android:textColor="?attr/colorError" />
@@ -29,6 +30,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
+            android:importantForAccessibility="yes"
             android:textAppearance="?attr/textAppearanceBodyLarge" />
 
         <Button

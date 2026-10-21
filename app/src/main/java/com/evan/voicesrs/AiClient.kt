@@ -147,10 +147,15 @@ class AiClient {
         val conn = open(baseUrl, apiKey, "POST", "/chat/completions")
         try {
             conn.doOutput = true
+            conn.useCaches = false
             conn.connectTimeout = AiTimeouts.CONNECT_MS
             conn.readTimeout = AiTimeouts.FIRST_TOKEN_MS
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("Accept", if (stream) "text/event-stream" else "application/json")
+            conn.setRequestProperty("Connection", "close")
+            // Send the body in one known-length write. Chunked/Expect: 100-continue
+            // deadlocks a naive reverse proxy (the emulator relay) until read timeout.
+            conn.setRequestProperty("Expect", "")
             val body = JSONObject()
                 .put("model", model)
                 .put("temperature", AiTimeouts.TEMPERATURE)
@@ -159,7 +164,9 @@ class AiClient {
                 .put("messages", JSONArray()
                     .put(JSONObject().put("role", "system").put("content", system))
                     .put(JSONObject().put("role", "user").put("content", user)))
-            conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            val bytes = body.toString().toByteArray(Charsets.UTF_8)
+            conn.setFixedLengthStreamingMode(bytes.size)
+            conn.outputStream.use { it.write(bytes) }
             if (cancelled()) throw AiCancelled()
             val code = conn.responseCode
             if (stream && code in STREAM_REJECT) throw StreamRejected()
@@ -316,8 +323,11 @@ class AiClient {
         val root = baseUrl.trim().trimEnd('/')
         val conn = (URL(root + path)).openConnection() as HttpURLConnection
         conn.requestMethod = method
+        conn.useCaches = false
         conn.connectTimeout = AiTimeouts.CONNECT_MS
         conn.readTimeout = AiTimeouts.FIRST_TOKEN_MS
+        conn.setRequestProperty("Connection", "close")
+        conn.setRequestProperty("Expect", "")
         // header only when the user actually set a key.
         if (apiKey.isNotBlank()) conn.setRequestProperty("Authorization", "Bearer $apiKey")
         return conn
