@@ -121,13 +121,52 @@ class AiClient {
         onDelta: (String) -> Unit = {}
     ): String {
         if (cancelled()) throw AiCancelled()
+        val messages = JSONArray()
+            .put(JSONObject().put("role", "system").put("content", system))
+            .put(JSONObject().put("role", "user").put("content", user))
+        return completeMessages(baseUrl, apiKey, model, messages, maxTokens, cancelled, onThinking, onDelta)
+    }
+
+    /**
+     * Multi-turn chat. [system] is the first message. [messages] are the
+     * user and assistant turns that follow (the card, then the thread).
+     */
+    fun completeChat(
+        baseUrl: String,
+        apiKey: String,
+        model: String,
+        system: String,
+        messages: List<PromptBuilder.ChatMsg>,
+        maxTokens: Int = AiTimeouts.MAX_TOKENS,
+        cancelled: () -> Boolean = { false },
+        onThinking: () -> Unit = {},
+        onDelta: (String) -> Unit = {}
+    ): String {
+        if (cancelled()) throw AiCancelled()
+        val array = JSONArray().put(JSONObject().put("role", "system").put("content", system))
+        for (message in messages) {
+            array.put(JSONObject().put("role", message.role).put("content", message.content))
+        }
+        return completeMessages(baseUrl, apiKey, model, array, maxTokens, cancelled, onThinking, onDelta)
+    }
+
+    private fun completeMessages(
+        baseUrl: String,
+        apiKey: String,
+        model: String,
+        messages: JSONArray,
+        maxTokens: Int,
+        cancelled: () -> Boolean,
+        onThinking: () -> Unit,
+        onDelta: (String) -> Unit
+    ): String {
         val budget = AiTimeouts.budget(maxTokens)
         return try {
-            completeOnce(baseUrl, apiKey, model, system, user, budget, stream = true, cancelled, onThinking, onDelta)
+            completeOnce(baseUrl, apiKey, model, messages, budget, stream = true, cancelled, onThinking, onDelta)
         } catch (e: Exception) {
             if (e !is StreamRejected && e !is EmptyStream) throw e
             if (cancelled()) throw AiCancelled()
-            completeOnce(baseUrl, apiKey, model, system, user, budget, stream = false, cancelled, onThinking, onDelta)
+            completeOnce(baseUrl, apiKey, model, messages, budget, stream = false, cancelled, onThinking, onDelta)
         }
     }
 
@@ -135,8 +174,7 @@ class AiClient {
         baseUrl: String,
         apiKey: String,
         model: String,
-        system: String,
-        user: String,
+        messages: JSONArray,
         maxTokens: Int,
         stream: Boolean,
         cancelled: () -> Boolean,
@@ -161,9 +199,7 @@ class AiClient {
                 .put("temperature", AiTimeouts.TEMPERATURE)
                 .put("max_tokens", maxTokens)
                 .put("stream", stream)
-                .put("messages", JSONArray()
-                    .put(JSONObject().put("role", "system").put("content", system))
-                    .put(JSONObject().put("role", "user").put("content", user)))
+                .put("messages", messages)
             val bytes = body.toString().toByteArray(Charsets.UTF_8)
             conn.setFixedLengthStreamingMode(bytes.size)
             conn.outputStream.use { it.write(bytes) }

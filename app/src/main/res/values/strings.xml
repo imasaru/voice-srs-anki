@@ -113,6 +113,14 @@
     <string name="expl_show_more">Show more</string>
     <string name="expl_show_less">Show less</string>
     <string name="expl_retry">Retry</string>
+    <string name="silent_switch">🔇 Silent mode</string>
+    <string name="silent_switch_sub">No voice: questions and answers are text only</string>
+    <string name="chat_new_divider">● New</string>
+    <string name="thread_reply">💬 Reply in thread</string>
+    <string name="thread_title">Thread</string>
+    <string name="thread_hint">Ask about this card</string>
+    <string name="thread_send">Send</string>
+    <string name="thread_you">You</string>
     <string name="section_ai">AI explanations</string>
     <string name="settings_ai_enable">Explain cards</string>
     <string name="settings_ai_url">Model server URL</string>

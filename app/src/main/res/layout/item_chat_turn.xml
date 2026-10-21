@@ -14,7 +14,7 @@
         android:layout_marginEnd="56dp"
         android:background="@drawable/bg_bubble_card"
         android:ellipsize="end"
-        android:maxLines="1"
+        android:maxLines="2"
         android:minHeight="48dp"
         android:paddingStart="14dp"
         android:paddingTop="10dp"
@@ -38,7 +38,7 @@
         android:paddingEnd="14dp"
         android:paddingBottom="10dp"
         android:textAppearance="?attr/textAppearanceBodyLarge"
-        android:textColor="?attr/colorOnPrimary" />
+        android:textColor="@color/bubble_user_on" />
 
     <!-- Left, distinct colour: explanation only. Never the prompt. -->
     <LinearLayout
@@ -71,7 +71,7 @@
                 android:gravity="center_vertical"
                 android:text="@string/expl_badge"
                 android:textAppearance="?attr/textAppearanceLabelLarge"
-                android:textColor="?attr/colorOnTertiaryContainer"
+                android:textColor="@color/bubble_ai_on"
                 android:visibility="gone" />
 
             <TextView
@@ -79,14 +79,14 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textAppearance="?attr/textAppearanceBodyMedium"
-                android:textColor="?attr/colorOnTertiaryContainer" />
+                android:textColor="@color/bubble_ai_on" />
 
             <TextView
                 android:id="@+id/explBody"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textAppearance="?attr/textAppearanceBodyMedium"
-                android:textColor="?attr/colorOnTertiaryContainer"
+                android:textColor="@color/bubble_ai_on"
                 android:visibility="gone" />
 
             <Button
@@ -96,7 +96,23 @@
                 android:layout_height="wrap_content"
                 android:minHeight="48dp"
                 android:text="@string/expl_retry"
+                android:textColor="@color/bubble_ai_on"
                 android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/threadLink"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="start"
+        android:layout_marginTop="2dp"
+        android:background="?attr/selectableItemBackground"
+        android:minHeight="48dp"
+        android:gravity="center_vertical"
+        android:paddingStart="4dp"
+        android:paddingEnd="8dp"
+        android:text="@string/thread_reply"
+        android:textAppearance="?attr/textAppearanceLabelLarge"
+        android:textColor="?attr/colorPrimary" />
 </LinearLayout>

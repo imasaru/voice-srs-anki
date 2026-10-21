@@ -53,74 +53,40 @@
             </LinearLayout>
         </ScrollView>
 
-        <LinearLayout
+        <FrameLayout
             android:id="@+id/reviewPane"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_marginStart="@dimen/pane_gap"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:layout_weight="1">
 
-            <!-- 45% leaves a few lines of the question once card padding is tight.
-                 The chat keeps 55% so one exchange (card, answer, reply) stays on screen. -->
-            <include
-                layout="@layout/include_current_card"
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/chatList"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_marginBottom="12dp"
-                android:layout_weight="45" />
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:scrollbars="vertical" />
 
-            <LinearLayout
-                android:id="@+id/chatSection"
+            <TextView
+                android:id="@+id/chatEmpty"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="55"
-                android:orientation="vertical">
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:text="@string/chat_empty"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="?attr/colorOnSurfaceVariant" />
 
-                <LinearLayout
-                    android:id="@+id/chatHeader"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:paddingBottom="4dp">
-
-                    <TextView
-                        android:id="@+id/chatTitle"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/chat_title"
-                        android:textAppearance="?attr/textAppearanceTitleMedium" />
-
-                    <TextView
-                        android:id="@+id/chatUnread"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:clickable="false"
-                        android:focusable="false"
-                        android:paddingStart="8dp"
-                        android:textAppearance="?attr/textAppearanceTitleSmall" />
-                </LinearLayout>
-
-                <TextView
-                    android:id="@+id/chatEmpty"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:paddingTop="8dp"
-                    android:paddingBottom="8dp"
-                    android:text="@string/chat_empty"
-                    android:textAppearance="?attr/textAppearanceBodyMedium"
-                    android:textColor="?attr/colorOnSurfaceVariant" />
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/chatList"
-                    android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_weight="1"
-                    android:clipToPadding="false"
-                    android:scrollbars="vertical" />
-            </LinearLayout>
-        </LinearLayout>
+            <TextView
+                android:id="@+id/chatUnread"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:clickable="false"
+                android:focusable="false"
+                android:paddingStart="8dp"
+                android:paddingEnd="4dp"
+                android:textAppearance="?attr/textAppearanceTitleSmall"
+                android:visibility="gone" />
+        </FrameLayout>
     </LinearLayout>
 </LinearLayout>

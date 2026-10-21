@@ -483,22 +483,6 @@
                         android:text="@string/section_listening"
                         android:textAppearance="?attr/textAppearanceTitleMedium" />
 
-                    <com.google.android.material.materialswitch.MaterialSwitch
-                        android:id="@+id/silentModeSwitch"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:minHeight="48dp"
-                        android:text="@string/settings_silent_mode"
-                        android:textAppearance="?attr/textAppearanceBodyLarge" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:text="@string/settings_silent_mode_help"
-                        android:textAppearance="?attr/textAppearanceBodySmall" />
-
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"

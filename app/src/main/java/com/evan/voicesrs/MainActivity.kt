@@ -9,8 +9,6 @@ import android.util.Log
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.transition.Fade
 import android.transition.TransitionManager
 import android.view.Menu
@@ -38,17 +36,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var deckNameView: TextView
     private lateinit var dueCountView: TextView
     private lateinit var stateText: TextView
-    private lateinit var engineChip: Chip
-    private lateinit var currentCard: MaterialCardView
-    private lateinit var frontLabel: TextView
-    private lateinit var cardFront: TextView
-    private lateinit var backLabel: TextView
-    private lateinit var cardBack: TextView
-    private lateinit var heardText: TextView
-    private lateinit var chipAgain: Chip
-    private lateinit var chipHard: Chip
-    private lateinit var chipGood: Chip
-    private lateinit var chipEasy: Chip
+    private var currentCard: MaterialCardView? = null
+    private var frontLabel: TextView? = null
+    private var cardFront: TextView? = null
+    private var backLabel: TextView? = null
+    private var cardBack: TextView? = null
+    private var heardText: TextView? = null
+    private var chipAgain: Chip? = null
+    private var chipHard: Chip? = null
+    private var chipGood: Chip? = null
+    private var chipEasy: Chip? = null
     private lateinit var progressText: TextView
     private lateinit var syncChip: Chip
     private lateinit var errorCard: MaterialCardView
@@ -56,9 +53,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var syncButton: Button
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
-    private lateinit var showAnswerButton: Button
-    private lateinit var statusSilentIndicator: View
-    private lateinit var cardSilentIndicator: View
+    private var showAnswerButton: Button? = null
+    private var silentSwitch: com.google.android.material.materialswitch.MaterialSwitch? = null
+    private var silentBinding = false
+    /** Microphone permission request is so a running drill can leave silent mode. */
+    private var pendingVoice = false
 
     private var pendingStatus = ""
     /** Permission request in flight was for a silent start, so RECORD_AUDIO is not required. */
@@ -68,17 +67,6 @@ class MainActivity : AppCompatActivity() {
     /** Last [DrillUiState.drillRunning] applied by [uiListener]; used to refresh due on session end. */
     private var lastDrillRunning = false
     private var chatPane: ChatPane? = null
-    /** Null while a home neural probe is in flight and no result has landed yet. */
-    private var homeHealth: Boolean? = null
-    private var engineProbeGen = 0
-    private val engineHandler = Handler(Looper.getMainLooper())
-    private val engineProbeTick = object : Runnable {
-        override fun run() {
-            if (isDestroyed) return
-            startEngineProbe(reset = false)
-            engineHandler.postDelayed(this, ENGINE_PROBE_MS)
-        }
-    }
 
     private val reviewListener: (List<ReviewTurn>) -> Unit = {
         runOnUiThread {
@@ -92,16 +80,23 @@ class MainActivity : AppCompatActivity() {
             val ended = lastDrillRunning && !snapshot.drillRunning
             lastDrillRunning = snapshot.drillRunning
             render(snapshot)
-            if (ended) {
-                refreshCounts()
-                startEngineProbe(reset = true)
-            }
+            if (ended) refreshCounts()
         }
     }
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
+        if (pendingVoice) {
+            pendingVoice = false
+            if (grants[Manifest.permission.RECORD_AUDIO] == true) {
+                silentBinding = true
+                silentSwitch?.isChecked = false
+                silentBinding = false
+                persistSilent(false)
+            }
+            return@registerForActivityResult
+        }
         val micOk = startWithoutMic || grants[Manifest.permission.RECORD_AUDIO] == true
         if (micOk) {
             startDrillService()
@@ -118,7 +113,6 @@ class MainActivity : AppCompatActivity() {
         deckNameView = findViewById(R.id.deckName)
         dueCountView = findViewById(R.id.dueCount)
         stateText = findViewById(R.id.stateText)
-        engineChip = findViewById(R.id.engineChip)
         currentCard = findViewById(R.id.currentCard)
         frontLabel = findViewById(R.id.frontLabel)
         cardFront = findViewById(R.id.cardFront)
@@ -137,14 +131,17 @@ class MainActivity : AppCompatActivity() {
         startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
         showAnswerButton = findViewById(R.id.showAnswerButton)
-        showAnswerButton.setOnClickListener { DrillService.submitShowAnswer() }
-        bindSilentIndicators()
+        showAnswerButton?.setOnClickListener { DrillService.submitShowAnswer() }
+        silentSwitch = findViewById(R.id.drillSilentSwitch)
+        silentSwitch?.setOnCheckedChangeListener { _, checked ->
+            if (!silentBinding) onSilentSwitch(checked)
+        }
         findViewById<Button>(R.id.retryButton).setOnClickListener { retryDrill() }
         syncButton.setOnClickListener { syncPending() }
-        chipAgain.setOnClickListener { if (DrillUi.state.ratingVisible) DrillService.submitTestGrade("again"); render(DrillUi.state) }
-        chipHard.setOnClickListener { if (DrillUi.state.ratingVisible) DrillService.submitTestGrade("hard"); render(DrillUi.state) }
-        chipGood.setOnClickListener { if (DrillUi.state.ratingVisible) DrillService.submitTestGrade("good"); render(DrillUi.state) }
-        chipEasy.setOnClickListener { if (DrillUi.state.ratingVisible) DrillService.submitTestGrade("easy"); render(DrillUi.state) }
+        chipAgain?.setOnClickListener { if (ratingOpen()) DrillService.submitTestGrade("again") }
+        chipHard?.setOnClickListener { if (ratingOpen()) DrillService.submitTestGrade("hard") }
+        chipGood?.setOnClickListener { if (ratingOpen()) DrillService.submitTestGrade("good") }
+        chipEasy?.setOnClickListener { if (ratingOpen()) DrillService.submitTestGrade("easy") }
         startButton.setOnClickListener { ensurePermissionsAndStart() }
         stopButton.setOnClickListener {
             stopService(Intent(this, DrillService::class.java))
@@ -234,15 +231,10 @@ class MainActivity : AppCompatActivity() {
             DrillUi.update { it.copy(pendingSync = pending) }
         }
         refreshCounts()
-        engineHandler.removeCallbacks(engineProbeTick)
-        startEngineProbe(reset = true)
-        engineHandler.postDelayed(engineProbeTick, ENGINE_PROBE_MS)
         render(DrillUi.state)
     }
 
     override fun onPause() {
-        engineHandler.removeCallbacks(engineProbeTick)
-        engineProbeGen++
         chatPane?.setResumed(false)
         super.onPause()
     }
@@ -254,71 +246,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        engineHandler.removeCallbacks(engineProbeTick)
         chatPane?.detach()
         chatPane = null
         super.onDestroy()
     }
 
-    /**
-     * Unfolded chat stays up whenever AI is on, including an empty thread.
-     * The card keeps 45% so a few lines of the question stay readable, and the
-     * chat keeps 55% so the latest card, answer, and reply fit together.
-     * With AI off the chat hides and the card fills the pane. Folded layout
-     * has no chat section.
-     */
+    /** The unfolded right pane is the chat. It stays full height with or without AI. */
     private fun applyAiChrome() {
-        val section = findViewById<View>(R.id.chatSection) ?: return
-        val enabled = try {
-            Prefs.load(this).aiEnabled
-        } catch (_: Exception) {
-            false
-        }
-        val vis = if (enabled) View.VISIBLE else View.GONE
-        if (section.visibility != vis) section.visibility = vis
-        val lp = currentCard.layoutParams as? LinearLayout.LayoutParams ?: return
-        val weight = if (enabled) 45f else 1f
-        if (lp.weight != weight || lp.height != 0) {
-            lp.height = 0
-            lp.weight = weight
-            currentCard.layoutParams = lp
-        }
-        if (enabled) {
-            val chatLp = section.layoutParams as? LinearLayout.LayoutParams
-            if (chatLp != null && (chatLp.weight != 55f || chatLp.height != 0)) {
-                chatLp.height = 0
-                chatLp.weight = 55f
-                section.layoutParams = chatLp
-            }
-        }
-    }
-
-    /** Edge /health on a background thread. The drill's own label wins while it runs. */
-    private fun startEngineProbe(reset: Boolean) {
-        val cfg = try {
-            Prefs.load(this)
-        } catch (_: Exception) {
-            return
-        }
-        val configured = TtsEngines.preferred(cfg.ttsEngine)
-        if (configured != EngineChoice.NEURAL) {
-            homeHealth = false
-            if (!DrillService.running) render(DrillUi.state)
-            return
-        }
-        if (reset) homeHealth = null
-        if (homeHealth == null && !DrillService.running) render(DrillUi.state)
-        val gen = ++engineProbeGen
-        val url = cfg.neuralUrl
-        val token = cfg.neuralToken
-        Thread {
-            val ok = EdgeSpeaker(applicationContext).healthy(url, token, NeuralTts.HEALTH_TIMEOUT_MS)
-            runOnUiThread {
-                if (isDestroyed || gen != engineProbeGen) return@runOnUiThread
-                homeHealth = ok
-                if (!DrillService.running) render(DrillUi.state)
-            }
-        }.start()
+        findViewById<View>(R.id.reviewPane)?.visibility = View.VISIBLE
+        findViewById<View>(R.id.chatList)?.visibility = View.VISIBLE
     }
 
     private fun syncPending() {
@@ -378,49 +314,46 @@ class MainActivity : AppCompatActivity() {
 
     private fun render(state: DrillUiState) {
         val cfg = Prefs.load(this)
-        val configured = TtsEngines.preferred(cfg.ttsEngine)
-        val engine = if (DrillService.running) {
-            state.engineLabel.ifBlank { EngineLabel.of(configured, null) }
-        } else {
-            EngineLabel.of(configured, if (configured == EngineChoice.NEURAL) homeHealth else false)
-        }
-        if (engineChip.text.toString() != engine) engineChip.text = engine
         crossfadeStatus(state.status.ifBlank { getString(R.string.state_ready) })
-
-        if (!cfg.showCard) {
-            frontLabel.visibility = View.GONE
-            cardFront.visibility = View.GONE
-            backLabel.visibility = View.GONE
-            cardBack.visibility = View.GONE
-            heardText.visibility = View.GONE
+        val frontView = cardFront
+        val backView = cardBack
+        val card = currentCard
+        if (frontView == null || card == null) {
+            // Unfolded layout has no pinned card. The chat row is the question.
+        } else if (!cfg.showCard) {
+            frontLabel?.visibility = View.GONE
+            frontView.visibility = View.GONE
+            backLabel?.visibility = View.GONE
+            backView?.visibility = View.GONE
+            heardText?.visibility = View.GONE
         } else {
-            frontLabel.visibility = View.VISIBLE
-            cardFront.visibility = View.VISIBLE
+            frontLabel?.visibility = View.VISIBLE
+            frontView.visibility = View.VISIBLE
             if (state.frontHtml.isBlank()) {
-                if (renderedFront.isNotEmpty() || cardFront.text.toString() != getString(R.string.card_idle)) {
+                if (renderedFront.isNotEmpty() || frontView.text.toString() != getString(R.string.card_idle)) {
                     renderedFront = ""
-                    cardFront.text = getString(R.string.card_idle)
+                    frontView.text = getString(R.string.card_idle)
                 }
             } else if (renderedFront != state.frontHtml) {
                 renderedFront = state.frontHtml
-                cardFront.text = HtmlCompat.fromHtml(state.frontHtml, HtmlCompat.FROM_HTML_MODE_COMPACT)
+                frontView.text = HtmlCompat.fromHtml(state.frontHtml, HtmlCompat.FROM_HTML_MODE_COMPACT)
             }
             val showBack = state.showBack && state.backHtml.isNotBlank()
             val backVis = if (showBack) View.VISIBLE else View.GONE
-            if (backLabel.visibility != backVis || cardBack.visibility != backVis) {
-                TransitionManager.beginDelayedTransition(currentCard, Fade())
+            if (backLabel?.visibility != backVis || backView?.visibility != backVis) {
+                TransitionManager.beginDelayedTransition(card, Fade())
             }
-            backLabel.visibility = backVis
-            cardBack.visibility = backVis
-            if (showBack && renderedBack != state.backHtml) {
+            backLabel?.visibility = backVis
+            backView?.visibility = backVis
+            if (showBack && renderedBack != state.backHtml && backView != null) {
                 renderedBack = state.backHtml
-                cardBack.text = HtmlCompat.fromHtml(state.backHtml, HtmlCompat.FROM_HTML_MODE_COMPACT)
+                backView.text = HtmlCompat.fromHtml(state.backHtml, HtmlCompat.FROM_HTML_MODE_COMPACT)
             }
             if (state.heard.isBlank()) {
-                heardText.visibility = View.GONE
+                heardText?.visibility = View.GONE
             } else {
-                heardText.visibility = View.VISIBLE
-                heardText.text = state.heard
+                heardText?.visibility = View.VISIBLE
+                heardText?.text = state.heard
             }
         }
         val progressLine = SessionProgress.visibleLine(DrillService.running, state.progressLine)
@@ -446,51 +379,70 @@ class MainActivity : AppCompatActivity() {
         } else {
             errorCard.visibility = View.GONE
         }
-        // Single selection driven by service state: only the chosen grade is highlighted.
-        // Rating chips appear only once the answer is revealed.
-        val ratingVis = if (state.ratingVisible) View.VISIBLE else View.GONE
-        findViewById<View>(R.id.gradeGuideLabel).visibility = ratingVis
-        findViewById<TextView>(R.id.gradeGuideLabel).setText(
-            if (state.drillRunning && state.silentSession) R.string.grade_guide_tap else R.string.grade_guide
-        )
-        findViewById<View>(R.id.gradeChips).visibility = ratingVis
-        val sel = if (state.ratingVisible) state.selectedEase else null
-        chipAgain.isChecked = sel == 1
-        chipHard.isChecked = sel == 2
-        chipGood.isChecked = sel == 3
-        chipEasy.isChecked = sel == 4
-        startButton.isEnabled = !state.drillRunning
-        stopButton.isEnabled = state.drillRunning
         val drilling = state.drillRunning || DrillService.running
         val silentOn = if (drilling) state.silentSession else cfg.silentMode
-        statusSilentIndicator.visibility = if (silentOn) View.VISIBLE else View.GONE
-        cardSilentIndicator.visibility = if (drilling && silentOn) View.VISIBLE else View.GONE
-        showAnswerButton.visibility = if (state.awaitingShowAnswer) View.VISIBLE else View.GONE
+        val controls = AnswerControls.of(
+            silent = silentOn && drilling && state.frontHtml.isNotBlank(),
+            hasQuestion = drilling && state.frontHtml.isNotBlank(),
+            answerShown = state.showBack,
+            voiceRating = state.ratingVisible
+        )
+        val ratingVis = if (controls.rating) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.gradeGuideLabel)?.visibility = ratingVis
+        findViewById<TextView>(R.id.gradeGuideLabel)?.setText(
+            if (silentOn) R.string.grade_guide_tap else R.string.grade_guide
+        )
+        findViewById<View>(R.id.gradeChips)?.visibility = ratingVis
+        val sel = if (controls.rating) state.selectedEase else null
+        chipAgain?.isChecked = sel == 1
+        chipHard?.isChecked = sel == 2
+        chipGood?.isChecked = sel == 3
+        chipEasy?.isChecked = sel == 4
+        startButton.isEnabled = !state.drillRunning
+        stopButton.isEnabled = state.drillRunning
+        if (silentSwitch?.isChecked != silentOn) {
+            silentBinding = true
+            silentSwitch?.isChecked = silentOn
+            silentBinding = false
+        }
+        showAnswerButton?.visibility = if (controls.showAnswer) View.VISIBLE else View.GONE
     }
 
-    private fun bindSilentIndicators() {
-        val found = ArrayList<View>(2)
-        collectIds(findViewById(android.R.id.content), R.id.silentIndicator, found)
-        for (view in found) {
-            if (isUnder(view, R.id.currentCard)) cardSilentIndicator = view
-            else statusSilentIndicator = view
-        }
+    private fun ratingOpen(): Boolean {
+        val state = DrillUi.state
+        val drilling = state.drillRunning || DrillService.running
+        val silentOn = if (drilling) state.silentSession else Prefs.load(this).silentMode
+        return AnswerControls.of(
+            silent = silentOn && drilling && state.frontHtml.isNotBlank(),
+            hasQuestion = drilling && state.frontHtml.isNotBlank(),
+            answerShown = state.showBack,
+            voiceRating = state.ratingVisible
+        ).rating
     }
 
-    private fun collectIds(view: View, id: Int, out: MutableList<View>) {
-        if (view.id == id) out.add(view)
-        if (view is ViewGroup) {
-            for (i in 0 until view.childCount) collectIds(view.getChildAt(i), id, out)
+    private fun onSilentSwitch(checked: Boolean) {
+        val drilling = DrillUi.state.drillRunning || DrillService.running
+        val mic = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!checked && drilling && !mic) {
+            pendingVoice = true
+            silentBinding = true
+            silentSwitch?.isChecked = true
+            silentBinding = false
+            permissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
+            return
         }
+        persistSilent(checked)
     }
 
-    private fun isUnder(view: View, ancestorId: Int): Boolean {
-        var parent = view.parent
-        while (parent is View) {
-            if (parent.id == ancestorId) return true
-            parent = parent.parent
+    private fun persistSilent(checked: Boolean) {
+        val cfg = try {
+            Prefs.load(this)
+        } catch (_: Exception) {
+            return
         }
-        return false
+        if (cfg.silentMode != checked) Prefs.save(this, cfg.copy(silentMode = checked))
+        DrillService.setSilentMode(checked)
     }
 
     private fun crossfadeStatus(next: String) {
@@ -546,9 +498,5 @@ class MainActivity : AppCompatActivity() {
             Log.e("MainActivity", "startForegroundService failed", e)
             Toast.makeText(this, "Could not start drill: ${e.message}", Toast.LENGTH_LONG).show()
         }
-    }
-
-    companion object {
-        private const val ENGINE_PROBE_MS = 60_000L
     }
 }

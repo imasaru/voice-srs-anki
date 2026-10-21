@@ -29,7 +29,12 @@ sealed interface ExplState {
     data class Error(val message: String, val retryable: Boolean) : ExplState
 }
 
-data class FollowUp(val q: String, val state: ExplState)
+data class FollowUp(
+    val q: String,
+    val state: ExplState,
+    val at: Long = 0L,
+    val replyAt: Long = 0L
+)
 
 /**
  * Session review thread. Same listener shape as [DrillUi], so it survives
@@ -151,6 +156,50 @@ object ReviewLog {
     fun markFailed(turnId: Long, message: String, retryable: Boolean) = replace(turnId) { turn ->
         if (turn.explanation is ExplState.Ready) turn
         else turn.copy(explanation = ExplState.Error(message, retryable), unread = false)
+    }
+
+    fun replaceFollowUps(turnId: Long, followUps: List<FollowUp>) = replace(turnId) { turn ->
+        if (turn.followUps == followUps) turn else turn.copy(followUps = followUps)
+    }
+
+    /** @return index of the new question, or -1 when the turn is gone. */
+    fun addFollowUp(turnId: Long, question: String, at: Long): Int {
+        var index = -1
+        synchronized(lock) {
+            val found = turns.indexOfFirst { it.turnId == turnId }
+            if (found < 0) return -1
+            val turn = turns[found]
+            val next = turn.followUps + FollowUp(question, ExplState.Pending, at)
+            index = next.lastIndex
+            val copy = turns.toMutableList()
+            copy[found] = turn.copy(followUps = next)
+            turns = copy
+        }
+        dispatch()
+        return index
+    }
+
+    fun markFollowStreaming(turnId: Long, index: Int, partial: String) = updateFollow(turnId, index) { follow ->
+        follow.copy(state = ExplState.Streaming(partial))
+    }
+
+    fun markFollowReady(turnId: Long, index: Int, text: String, at: Long) = updateFollow(turnId, index) { follow ->
+        follow.copy(state = ExplState.Ready(text, cached = false), replyAt = at)
+    }
+
+    fun markFollowFailed(turnId: Long, index: Int, message: String) = updateFollow(turnId, index) { follow ->
+        follow.copy(state = ExplState.Error(message, retryable = true))
+    }
+
+    private fun updateFollow(turnId: Long, index: Int, block: (FollowUp) -> FollowUp) {
+        replace(turnId) { turn ->
+            if (index !in turn.followUps.indices) return@replace turn
+            val updated = block(turn.followUps[index])
+            if (updated == turn.followUps[index]) return@replace turn
+            val copy = turn.followUps.toMutableList()
+            copy[index] = updated
+            turn.copy(followUps = copy)
+        }
     }
 
     /** @return true when an unread badge was cleared. */

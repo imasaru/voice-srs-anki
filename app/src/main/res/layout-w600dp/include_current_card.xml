@@ -15,31 +15,11 @@
         android:animateLayoutChanges="true"
         android:orientation="vertical">
 
-        <com.google.android.material.chip.Chip
-            android:id="@+id/silentIndicator"
-            style="@style/Widget.Material3.Chip.Assist"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="4dp"
-            android:clickable="false"
-            android:focusable="false"
-            android:text="@string/silent_indicator"
-            android:visibility="gone"
-            app:chipMinHeight="32dp" />
-
-        <androidx.core.widget.NestedScrollView
+        <LinearLayout
             android:id="@+id/cardTextScroll"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:fillViewport="true"
-            android:minHeight="72dp"
-            android:scrollbars="vertical">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
 
                 <TextView
                     android:id="@+id/frontLabel"
@@ -85,8 +65,7 @@
                     android:textAppearance="?attr/textAppearanceBodyMedium"
                     android:textColor="?attr/colorOnSurfaceVariant"
                     android:visibility="gone" />
-            </LinearLayout>
-        </androidx.core.widget.NestedScrollView>
+        </LinearLayout>
 
         <Button
             android:id="@+id/showAnswerButton"

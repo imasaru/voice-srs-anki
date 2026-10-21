@@ -6,6 +6,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.View
 import android.widget.TextView
+import androidx.fragment.app.FragmentActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 
@@ -22,7 +23,8 @@ class ChatPane(
 ) {
     private val adapter = ChatAdapter(
         onExplExpanded = { id -> sample(id) },
-        onRetry = { id -> ExplainQueue.retry(list.context, id) }
+        onRetry = { id -> ExplainQueue.retry(list.context, id) },
+        onThread = { id -> openThread(id) }
     )
     private val tracker = ReadReceiptTracker(now = { SystemClock.elapsedRealtime() })
     private val handler = Handler(Looper.getMainLooper())
@@ -38,8 +40,12 @@ class ChatPane(
         }
     }
 
-    private val listener: (List<ReviewTurn>) -> Unit = { turns ->
-        list.post { if (attached) render(turns) }
+    private val listener: (List<ReviewTurn>) -> Unit = {
+        list.post { if (attached) render() }
+    }
+
+    private val uiListener: (DrillUiState) -> Unit = {
+        list.post { if (attached) render() }
     }
 
     private val scroller = object : RecyclerView.OnScrollListener() {
@@ -56,7 +62,8 @@ class ChatPane(
         list.itemAnimator = null
         list.addOnScrollListener(scroller)
         ReviewLog.addListener(listener)
-        render(ReviewLog.snapshot())
+        DrillUi.addListener(uiListener)
+        render()
     }
 
     fun setResumed(value: Boolean) {
@@ -78,10 +85,13 @@ class ChatPane(
         handler.removeCallbacks(tick)
         list.removeOnScrollListener(scroller)
         ReviewLog.removeListener(listener)
+        DrillUi.removeListener(uiListener)
     }
 
-    private fun render(turns: List<ReviewTurn>) {
-        emptyView?.visibility = if (turns.isEmpty()) View.VISIBLE else View.GONE
+    private fun render() {
+        val turns = ReviewLog.snapshot()
+        val rows = ChatFeed.rows(turns, DrillUi.state)
+        emptyView?.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
         val n = turns.count { it.unread }
         unreadView.text = if (n == 1) {
             unreadView.context.getString(R.string.chat_unread_one)
@@ -89,9 +99,9 @@ class ChatPane(
             unreadView.context.getString(R.string.chat_unread_n, n)
         }
         val lm = list.layoutManager
-        val adding = turns.size != adapter.currentList.size
+        val adding = rows.size != adapter.currentList.size
         val state = if (anchored && adding) lm?.onSaveInstanceState() else null
-        adapter.submitList(turns.toList()) {
+        adapter.submitList(rows) {
             if (state != null) {
                 try {
                     lm?.onRestoreInstanceState(state)
@@ -109,7 +119,7 @@ class ChatPane(
             val child = list.getChildAt(i) ?: continue
             val pos = list.getChildAdapterPosition(child)
             if (pos == RecyclerView.NO_POSITION) continue
-            val turn = adapter.currentList.getOrNull(pos) ?: continue
+            val turn = adapter.turnAt(pos) ?: continue
             // Only an unread explanation can start the dwell timer. Otherwise a turn seen
             // while still Queued/Generating is marked read early and its badge never clears.
             if (!turn.unread) continue
@@ -119,7 +129,10 @@ class ChatPane(
             if (section.visibility != View.VISIBLE) continue
             visible[turn.turnId] = visibleFraction(section)
         }
-        val unreadIds = adapter.currentList.filter { it.unread }.map { it.turnId }.toSet()
+        val unreadIds = adapter.currentList.mapNotNull { (it as? ChatRow.Past)?.turn }
+            .filter { it.unread }
+            .map { it.turnId }
+            .toSet()
         val expanded = adapter.expandedIds().filter { it in unreadIds }.toMutableSet()
         if (forceExpanded != null && forceExpanded in unreadIds) expanded += forceExpanded
         val newly = tracker.onSample(visible, resumed = true, expanded)
@@ -128,10 +141,20 @@ class ChatPane(
         }
     }
 
+    private fun openThread(turnId: Long) {
+        val activity = list.context as? FragmentActivity ?: return
+        if (activity.supportFragmentManager.findFragmentByTag(THREAD_TAG) != null) return
+        ThreadSheet.newInstance(turnId).show(activity.supportFragmentManager, THREAD_TAG)
+    }
+
     private fun visibleFraction(view: View): Float {
         if (view.visibility != View.VISIBLE || view.height <= 0) return 0f
         val rect = Rect()
         if (!view.getGlobalVisibleRect(rect)) return 0f
         return rect.height().toFloat() / view.height.toFloat()
+    }
+
+    companion object {
+        private const val THREAD_TAG = "thread"
     }
 }

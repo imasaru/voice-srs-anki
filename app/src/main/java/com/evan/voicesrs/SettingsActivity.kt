@@ -91,7 +91,6 @@ class SettingsActivity : AppCompatActivity() {
         val listenWaitView: MaterialAutoCompleteTextView = findViewById(R.id.listenWaitInput)
         val endSilenceView: MaterialAutoCompleteTextView = findViewById(R.id.endSilenceInput)
         val relistenSwitch: MaterialSwitch = findViewById(R.id.relistenSwitch)
-        val silentSwitch: MaterialSwitch = findViewById(R.id.silentModeSwitch)
 
         held = Prefs.load(this)
         urlView.setText(held.url)
@@ -132,7 +131,6 @@ class SettingsActivity : AppCompatActivity() {
             persist { it.copy(endSilenceMs = ListenWindow.silenceMsFromLabel(label)) }
         }
         relistenSwitch.isChecked = held.relistenOnce
-        silentSwitch.isChecked = held.silentMode
         offlineSwitch.isChecked = held.offlineBatch
         batchSizeView.setText(held.offlineBatchSize.toString())
         val goalLabels = listOf(
@@ -218,9 +216,6 @@ class SettingsActivity : AppCompatActivity() {
         }
         relistenSwitch.setOnCheckedChangeListener { _, checked ->
             persist { it.copy(relistenOnce = checked) }
-        }
-        silentSwitch.setOnCheckedChangeListener { _, checked ->
-            persist { it.copy(silentMode = checked) }
         }
         goalModeView.doAfterTextChanged { refreshDrillFields() }
         commitGoalMode = {

@@ -19,12 +19,16 @@ class BubbleModelTest {
     }
 
     @Test
-    fun `collapsed card is the first line, expanded is the full stem`() {
-        val html = "<p>First line of the stem</p><p>More detail the learner should not see yet</p>"
-        assertEquals("First line of the stem", BubbleModel.cardText(html, expanded = false))
+    fun `collapsed card keeps two lines, expanded is the full stem`() {
+        val html = "<p>First line of the stem</p><p>Second line stays</p><p>Third is hidden until expand</p>"
+        assertEquals(
+            "First line of the stem\nSecond line stays",
+            BubbleModel.cardText(html, expanded = false)
+        )
         val full = BubbleModel.cardText(html, expanded = true)
         assertTrue(full.contains("First line of the stem"))
-        assertTrue(full.contains("More detail the learner should not see yet"))
+        assertTrue(full.contains("Second line stays"))
+        assertTrue(full.contains("Third is hidden until expand"))
         assertFalse(full.contains("<p>"))
     }
 

@@ -53,7 +53,12 @@ interface VoiceIo {
     fun beep()
     /** True once the user pressed Stop (or the session is ending). A silent listen then must not grade. */
     fun stopped(): Boolean = false
+    /** Silent mode flipped on. The grader must not invent an ease; the drill waits for a tap. */
+    fun audioSuppressed(): Boolean = false
 }
+
+/** The learner turned silent on during voice grading. Wait for a chip instead. */
+class SilentHandoff : Exception()
 
 /** Skip this card. The drill must not send an ease. */
 class SkipRequested : Exception()
@@ -67,19 +72,27 @@ class VoiceSelfGrader : Grader {
         fun tapped(): Int? =
             ctx.claimedEase()?.let { GradeMapper.toAvailableEase(it, ctx.card.buttons) }
 
+        fun handedOff() {
+            if (io.audioSuppressed()) throw SilentHandoff()
+        }
+        handedOff()
         tapped()?.let { return it }
         val opening = RatingGuides.initialPrompt(ctx.cardIndex, ctx.speedMode)
         if (opening != null) io.speak(opening)
+        handedOff()
         tapped()?.let { return it }
         var reprompted = false
         while (true) {
+            handedOff()
             tapped()?.let { return it }
             val action = GradeMapper.parse(io.listen(ctx.listenTimeoutMs))
+            handedOff()
             // A tap during the listen wins over whatever the transcript said.
             tapped()?.let { return it }
             when (action) {
                 VoiceAction.Repeat -> {
                     io.speak(ctx.spokenAnswer)
+                    handedOff()
                     tapped()?.let { return it }
                     continue
                 }

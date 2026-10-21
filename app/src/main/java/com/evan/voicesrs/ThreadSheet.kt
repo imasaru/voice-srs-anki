@@ -1,0 +1,167 @@
+package com.evan.voicesrs
+
+import android.os.Bundle
+import android.view.Gravity
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.view.inputmethod.EditorInfo
+import android.widget.Button
+import android.widget.EditText
+import android.widget.TextView
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.bottomsheet.BottomSheetBehavior
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+
+/** Follow-up chat for one graded card. Replies stay on that card's history. */
+class ThreadSheet : BottomSheetDialogFragment() {
+    private var turnId: Long = 0L
+    private var list: RecyclerView? = null
+    private val adapter = MessageAdapter()
+
+    private val listener: (List<ReviewTurn>) -> Unit = {
+        view?.post { if (isAdded) bind() }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        turnId = arguments?.getLong(ARG_TURN) ?: 0L
+    }
+
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+        return inflater.inflate(R.layout.sheet_thread, container, false)
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        list = view.findViewById(R.id.threadList)
+        list?.layoutManager = LinearLayoutManager(view.context).apply { stackFromEnd = true }
+        list?.adapter = adapter
+        val input = view.findViewById<EditText>(R.id.threadInput)
+        val send = view.findViewById<Button>(R.id.threadSend)
+        val submit = {
+            val text = input.text?.toString().orEmpty()
+            if (text.isNotBlank()) {
+                ThreadAsk.ask(view.context, turnId, text)
+                input.setText("")
+            }
+        }
+        send.setOnClickListener { submit() }
+        input.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEND) {
+                submit()
+                true
+            } else {
+                false
+            }
+        }
+        ThreadAsk.send(view.context, turnId)
+        ReviewLog.addListener(listener)
+        bind()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val sheet = dialog as? BottomSheetDialog ?: return
+        sheet.behavior.state = BottomSheetBehavior.STATE_EXPANDED
+        sheet.behavior.skipCollapsed = true
+        view?.layoutParams?.height = ViewGroup.LayoutParams.MATCH_PARENT
+    }
+
+    override fun onDestroyView() {
+        ReviewLog.removeListener(listener)
+        list = null
+        super.onDestroyView()
+    }
+
+    private fun bind() {
+        val root = view ?: return
+        val turn = ReviewLog.snapshot().firstOrNull { it.turnId == turnId }
+        if (turn == null) {
+            dismissAllowingStateLoss()
+            return
+        }
+        root.findViewById<TextView>(R.id.threadQuestion).text = turn.frontText
+        root.findViewById<TextView>(R.id.threadAnswer).text = BubbleModel.userLabel(turn.transcript, turn.ease)
+        val explView = root.findViewById<TextView>(R.id.threadExpl)
+        val expl = BubbleModel.displayAi(turn.explanation, turn.frontText, turn.backText, unread = false)
+        if (expl.body.isBlank()) {
+            explView.visibility = View.GONE
+            explView.text = ""
+        } else {
+            explView.visibility = View.VISIBLE
+            MarkdownSpans.apply(explView, expl.body)
+        }
+        val rows = ArrayList<Row>()
+        for (follow in turn.followUps) {
+            rows += Row(follow.q, user = true, pending = false)
+            when (val state = follow.state) {
+                is ExplState.Ready -> rows += Row(state.text, user = false, pending = false)
+                is ExplState.Streaming -> rows += Row(
+                    state.partial.ifBlank { BubbleModel.GENERATING },
+                    user = false,
+                    pending = state.partial.isBlank()
+                )
+                ExplState.Pending, ExplState.Queued -> rows += Row(BubbleModel.GENERATING, user = false, pending = true)
+                is ExplState.Error -> rows += Row(state.message, user = false, pending = true)
+                ExplState.None -> Unit
+            }
+        }
+        adapter.submit(rows)
+        list?.scrollToPosition((rows.size - 1).coerceAtLeast(0))
+    }
+
+    private data class Row(val text: String, val user: Boolean, val pending: Boolean)
+
+    private class MessageAdapter : RecyclerView.Adapter<MessageAdapter.Holder>() {
+        private val rows = ArrayList<Row>()
+
+        fun submit(next: List<Row>) {
+            rows.clear()
+            rows.addAll(next)
+            notifyDataSetChanged()
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
+            val view = LayoutInflater.from(parent.context).inflate(R.layout.item_thread_message, parent, false)
+            return Holder(view)
+        }
+
+        override fun onBindViewHolder(holder: Holder, position: Int) {
+            holder.bind(rows[position])
+        }
+
+        override fun getItemCount(): Int = rows.size
+
+        class Holder(view: View) : RecyclerView.ViewHolder(view) {
+            private val body: TextView = view.findViewById(R.id.threadBody)
+
+            fun bind(row: Row) {
+                val lp = body.layoutParams as FrameLayout.LayoutParams
+                lp.gravity = if (row.user) Gravity.END else Gravity.START
+                body.layoutParams = lp
+                if (row.user) {
+                    body.background = itemView.context.getDrawable(R.drawable.bg_bubble_user)
+                    body.setTextColor(itemView.context.getColor(R.color.bubble_user_on))
+                    body.text = row.text
+                } else {
+                    body.background = itemView.context.getDrawable(R.drawable.bg_bubble_ai)
+                    body.setTextColor(itemView.context.getColor(R.color.bubble_ai_on))
+                    if (row.pending) body.text = row.text else MarkdownSpans.apply(body, row.text)
+                }
+            }
+        }
+    }
+
+    companion object {
+        private const val ARG_TURN = "turnId"
+
+        fun newInstance(turnId: Long): ThreadSheet {
+            return ThreadSheet().apply {
+                arguments = Bundle().apply { putLong(ARG_TURN, turnId) }
+            }
+        }
+    }
+}

@@ -51,10 +51,22 @@ object BubbleModel {
             .joinToString("\n")
     }
 
+    /** Past question bubbles keep two lines until the learner taps to expand. */
+    const val COLLAPSED_LINES = 2
+
     fun cardText(front: String, expanded: Boolean): String {
         val full = fullQuestion(front).ifBlank { AnkiText.stripHtml(front) }
         if (expanded) return full
-        return firstLine(front).ifBlank { full }
+        return previewLines(full, COLLAPSED_LINES).ifBlank { full }
+    }
+
+    fun previewLines(full: String, maxLines: Int): String {
+        if (maxLines <= 0) return ""
+        return full.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .take(maxLines)
+            .joinToString("\n")
     }
 
     /**

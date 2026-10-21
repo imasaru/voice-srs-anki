@@ -109,6 +109,7 @@ class ExplainSession private constructor(
             cachedText = cached,
             aiEnabled = cfg.aiEnabled
         ) ?: return
+        attachThread(turn)
         if (!cfg.aiEnabled) return
         if (cached != null) {
             ExplainLog.ready(turn.turnId, cached = true)
@@ -122,6 +123,17 @@ class ExplainSession private constructor(
             back,
             turn.turnId
         )
+    }
+
+    private fun attachThread(turn: ReviewTurn) {
+        val saved = try {
+            val threads = ThreadStore.load(context.filesDir)
+            val found = ThreadStore.find(threads, turn.cardId, turn.noteId, turn.contentHash) ?: return
+            ThreadStore.toFollowUps(found.messages)
+        } catch (_: Exception) {
+            emptyList()
+        }
+        if (saved.isNotEmpty()) ReviewLog.replaceFollowUps(turn.turnId, saved)
     }
 
     private fun cachedText(noteKey: Long, hash: String): String? {

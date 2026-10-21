@@ -21,4 +21,8 @@
     <color name="md_theme_outline">#8A938C</color>
     <color name="md_theme_error">#FFB4AB</color>
     <color name="md_theme_onError">#690005</color>
+    <color name="bubble_ai">#147A86</color>
+    <color name="bubble_ai_on">#E7FBFF</color>
+    <color name="bubble_user">#1B8A4A</color>
+    <color name="bubble_user_on">#FFFFFF</color>
 </resources>

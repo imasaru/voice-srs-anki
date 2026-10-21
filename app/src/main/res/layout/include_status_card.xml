@@ -39,17 +39,23 @@
             android:layout_marginTop="4dp"
             android:textAppearance="?attr/textAppearanceBodyLarge" />
 
-        <com.google.android.material.chip.Chip
-            android:id="@+id/silentIndicator"
-            style="@style/Widget.Material3.Chip.Assist"
-            android:layout_width="wrap_content"
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/drillSilentSwitch"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:clickable="false"
-            android:focusable="false"
-            android:text="@string/silent_indicator"
-            android:visibility="gone"
-            app:chipMinHeight="32dp" />
+            android:layout_marginTop="12dp"
+            android:minHeight="48dp"
+            android:text="@string/silent_switch"
+            android:textAppearance="?attr/textAppearanceBodyLarge" />
+
+        <TextView
+            android:id="@+id/drillSilentSubtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/silent_switch_sub"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="?attr/colorOnSurfaceVariant" />
 
         <TextView
             android:id="@+id/stateText"
@@ -79,15 +85,5 @@
             android:visibility="gone"
             app:chipMinHeight="32dp" />
 
-        <com.google.android.material.chip.Chip
-            android:id="@+id/engineChip"
-            style="@style/Widget.Material3.Chip.Assist"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:clickable="false"
-            android:focusable="false"
-            android:text="@string/engine_checking"
-            app:chipMinHeight="32dp" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

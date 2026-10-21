@@ -34,9 +34,9 @@ import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Foreground-service drill loop (hands-free, screen-off safe).
- * A session reads silent mode once, before startForeground. Silent sessions
- * use the media-playback type, speak the question and the answer, and wait
- * for taps. They do not create a recognizer or open the microphone.
+ * Silent mode is live. Flipping it mid-drill takes effect immediately:
+ * on stops the microphone, TTS, and earcons (including a readout in progress);
+ * off lets the next prompt use voice. Silent answers are taps, not timers.
  * Thin remote: Anki (via AnkiConnect) is the brain; this service only
  * drives the loop:
  *
@@ -122,8 +122,10 @@ class DrillService : Service(), VoiceIo {
                 return
             }
             val ease = GradeGate.easeOf(word)
+            val instant = active?.sessionSilent == true
             synchronized(gradeGate) {
-                if (!gradeGate.tryClaim(ease)) {
+                val claimed = if (instant) gradeGate.tryClaimInstant(ease) else gradeGate.tryClaim(ease)
+                if (!claimed) {
                     Log.i(TAG, "TEST_GRADE ignored: no open card or already graded")
                     return
                 }
@@ -131,9 +133,10 @@ class DrillService : Service(), VoiceIo {
                 pendingGrades.clear()
                 pendingGrades.add(word)
             }
-            // Claims only succeed once the answer is revealed, so the question is never cut.
+            // Voice and silent: a rating tap cuts TTS and the drill continues.
             active?.interruptSpeech()
             Log.i(TAG, "tap interrupt speech")
+            if (instant) active?.releaseShowAnswer()
             active?.releaseSilentGradeWait()
             // Deliver straight into an open recognizer listen when there is one.
             val svc = active
@@ -152,6 +155,16 @@ class DrillService : Service(), VoiceIo {
                 return
             }
             svc.releaseShowAnswer()
+        }
+
+        /** Live silent switch. Does not restart the drill. */
+        fun setSilentMode(on: Boolean) {
+            val svc = active
+            if (svc == null) {
+                DrillUi.update { it.copy(silentSession = on) }
+                return
+            }
+            svc.applySilent(on)
         }
     }
 
@@ -193,6 +206,8 @@ class DrillService : Service(), VoiceIo {
     @Volatile private var speakLatch: CountDownLatch? = null
     @Volatile private var listenLatch: CountDownLatch? = null
     private val showAnswerLatch = AtomicReference<CountDownLatch?>(null)
+    /** A Show answer tap that landed before the wait latch existed. */
+    private val showAnswerEarly = AtomicBoolean(false)
     private val silentGradeLatch = AtomicReference<CountDownLatch?>(null)
     private val listenResult = AtomicReference<String?>(null)
     @Volatile private var listenToken = 0
@@ -649,18 +664,20 @@ class DrillService : Service(), VoiceIo {
         }
         tapGrade = false
         tapTranscript = false
+        val silent = sessionSilent
         runCatching {
             DrillUi.update {
                 it.copy(
-                    status = "Reading the question",
+                    status = if (silent) "Tap to show the answer" else "Reading the question",
                     frontHtml = AnkiText.displayHtml(questionHtml),
                     backHtml = "",
                     showBack = false,
-                    ratingVisible = false,
+                    ratingVisible = silent,
                     heard = "",
                     ratingMicOpen = false,
                     selectedEase = null,
-                    awaitingShowAnswer = false
+                    awaitingShowAnswer = silent,
+                    silentSession = silent
                 )
             }
         }
@@ -694,14 +711,25 @@ class DrillService : Service(), VoiceIo {
      * via onStop. Neural playback sees [speechInterrupted] on its cancel poll.
      */
     fun interruptSpeech() {
-        speechInterrupted = true
         tapGrade = true
-        try { tts?.stop() } catch (_: Exception) {}
+        stopPlaybackNow()
     }
 
+    /** Stops TTS and earcons without claiming a grade. Used when silent turns on. */
+    fun stopPlaybackNow() {
+        speechInterrupted = true
+        try { tts?.stop() } catch (_: Exception) {}
+        try { EdgeSpeaker.stopActive() } catch (_: Exception) {}
+        try { toneGen?.stopTone() } catch (_: Exception) {}
+        speakLatch?.countDown()
+    }
+
+    override fun audioSuppressed(): Boolean = sessionSilent
+
     override fun speak(text: String) {
-        speechInterrupted = false
         if (text.isBlank()) return
+        if (!AudioGate.outputAllowed(sessionSilent)) return
+        speechInterrupted = false
         when (text) {
             RatingGuides.LONG, RatingGuides.SHORT -> Log.i(TAG, "rating prompt spoken")
             RatingGuides.REPROMPT -> Log.i(TAG, "rating reprompt")
@@ -724,7 +752,7 @@ class DrillService : Service(), VoiceIo {
                     cfg.neuralVoice,
                     cfg.ttsRate,
                     text
-                ) { stopRequested.get() || speechInterrupted }
+                ) { stopRequested.get() || speechInterrupted || sessionSilent }
             } catch (e: Exception) {
                 Log.w(TAG, "neural speak error")
                 false
@@ -784,7 +812,7 @@ class DrillService : Service(), VoiceIo {
     override fun stopped(): Boolean = stopRequested.get() || destroyed
 
     override fun listen(timeoutMs: Long): String? {
-        if (sessionSilent) return null
+        if (!AudioGate.micAllowed(sessionSilent)) return null
         tapTranscript = false
         val result = captureListen(timeoutMs)
         // A tap word is not a mic sample: no "I heard" and no dead-mic streak change.
@@ -800,7 +828,9 @@ class DrillService : Service(), VoiceIo {
      * one dead-mic sample, so a quiet think plus the retry does not abort early.
      */
     private fun listenForAnswer(timeoutMs: Long, relistenOnce: Boolean, speedMode: Boolean): String? {
+        if (!AudioGate.micAllowed(sessionSilent)) return null
         val first = captureListen(timeoutMs)
+        if (sessionSilent) return null
         val didRelisten = ListenWindow.shouldRelistenAnswer(first, relistenOnce, stopped(), speedMode)
         val second = if (!didRelisten) {
             null
@@ -1201,16 +1231,20 @@ class DrillService : Service(), VoiceIo {
         val question = AnkiText.spokenText(questionHtml)
         if (question.isBlank()) return CardStep.Blank
         val started = SystemClock.elapsedRealtime()
+        showAnswerEarly.set(false)
         showQuestionUi(questionHtml)
         var repeats = 0
         var transcript = ""
         if (!sessionSilent) {
-            while (!stopRequested.get()) {
+            while (!stopRequested.get() && !sessionSilent) {
                 speak(question)
                 if (stopRequested.get()) return CardStep.Paused
+                if (sessionSilent) break
                 showStatus("Listening for your answer")
                 beep()
+                if (sessionSilent) break
                 val heard = listenForAnswer(listenWaitMs, relistenOnce, speedMode)
+                if (sessionSilent) break
                 when (val action = GradeMapper.parse(heard)) {
                     VoiceAction.Repeat -> {
                         repeats++
@@ -1228,8 +1262,8 @@ class DrillService : Service(), VoiceIo {
                     }
                 }
             }
-        } else {
-            speak(question)
+        }
+        if (sessionSilent) {
             if (stopRequested.get()) return CardStep.Paused
             if (!awaitShowAnswer()) return CardStep.Paused
         }
@@ -1243,7 +1277,7 @@ class DrillService : Service(), VoiceIo {
         val answerText = AnkiText.spokenText(answerBody)
         Log.d(TAG, "tts answer: $answerText")
         showAnswerUi(answer.questionHtml, answerBody)
-        if (answerText.isNotBlank()) speak(answerText)
+        if (AudioGate.outputAllowed(sessionSilent) && answerText.isNotBlank()) speak(answerText)
         if (stopRequested.get()) return CardStep.Paused
         val gradeButtons = answerButtons.ifEmpty { buttons }
         val tapped = synchronized(gradeGate) {
@@ -1287,6 +1321,11 @@ class DrillService : Service(), VoiceIo {
                 answerHtml,
                 answer.questionHtml
             )
+        } catch (_: SilentHandoff) {
+            showStatus("Rate this card")
+            val ease = awaitSilentGrade()
+            if (ease == null || stopRequested.get()) CardStep.Paused
+            else gradedByTap(ease, gradeButtons, started, transcript, answerHtml, answer.questionHtml)
         } catch (_: SkipRequested) {
             CardStep.Skipped
         } catch (_: PauseRequested) {
@@ -1312,14 +1351,24 @@ class DrillService : Service(), VoiceIo {
 
     /** Block until Show answer, or Stop. The button and TEST_SHOW_ANSWER share this latch. */
     private fun awaitShowAnswer(): Boolean {
+        if (showAnswerEarly.getAndSet(false)) {
+            Log.i(TAG, "show answer already tapped")
+            return !stopRequested.get() && !destroyed
+        }
         val latch = CountDownLatch(1)
         showAnswerLatch.set(latch)
+        if (showAnswerEarly.getAndSet(false)) {
+            showAnswerLatch.compareAndSet(latch, null)
+            Log.i(TAG, "show answer already tapped")
+            return !stopRequested.get() && !destroyed
+        }
         return try {
             Log.i(TAG, "waiting for show answer")
             runCatching {
                 DrillUi.update { it.copy(awaitingShowAnswer = true, status = "Tap to show the answer") }
             }
             while (!stopRequested.get() && !destroyed) {
+                if (showAnswerEarly.get()) return !destroyed
                 try {
                     if (latch.await(250, TimeUnit.MILLISECONDS)) {
                         return !stopRequested.get() && !destroyed
@@ -1367,13 +1416,62 @@ class DrillService : Service(), VoiceIo {
     }
 
     private fun releaseShowAnswer() {
+        showAnswerEarly.set(true)
         val latch = showAnswerLatch.get()
-        if (latch == null) {
-            Log.i(TAG, "show answer ignored")
+        Log.i(TAG, if (latch == null) "show answer armed" else "show answer")
+        latch?.countDown()
+        stopPlaybackNow()
+    }
+
+    /**
+     * Mid-drill silent switch. On aborts TTS, earcons, and the open microphone
+     * immediately. Off does not replay the prompt that was cut; the next
+     * speak or listen uses voice. The session thread keeps running.
+     */
+    private fun applySilent(on: Boolean) {
+        if (!on && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            sessionSilent = true
+            Log.w(TAG, "silent stays on: microphone permission missing")
+            publishSilentUi(true)
             return
         }
-        Log.i(TAG, "show answer")
-        latch.countDown()
+        val was = sessionSilent
+        sessionSilent = on
+        Log.i(TAG, "silent live=$on")
+        if (on) {
+            stopPlaybackNow()
+            finishListen(null)
+        } else if (was) {
+            if (Looper.myLooper() == Looper.getMainLooper()) probeRecognizer() else initRecognizerOnMain()
+        }
+        publishSilentUi(on)
+        try {
+            startForegroundWithNotification()
+        } catch (e: Exception) {
+            Log.w(TAG, "foreground type update failed", e)
+        }
+    }
+
+    private fun publishSilentUi(on: Boolean) {
+        runCatching {
+            DrillUi.update { state ->
+                if (!on) {
+                    state.copy(
+                        silentSession = false,
+                        ratingVisible = state.showBack && state.ratingVisible
+                    )
+                } else {
+                    val up = state.drillRunning && state.frontHtml.isNotBlank()
+                    state.copy(
+                        silentSession = true,
+                        awaitingShowAnswer = if (up && !state.showBack) true else state.awaitingShowAnswer,
+                        ratingVisible = if (up) true else state.ratingVisible
+                    )
+                }
+            }
+        }
     }
 
     private fun releaseSilentGradeWait() {
@@ -1446,7 +1544,7 @@ class DrillService : Service(), VoiceIo {
     }
 
     private fun listenWithRecognizer(timeoutMs: Long): String? {
-        if (sessionSilent) return null
+        if (!AudioGate.micAllowed(sessionSilent)) return null
         if (!awaitBackoff()) return null
         if (stopRequested.get()) return null
         // Cue finishes (and is stopped) before the microphone opens.
@@ -1536,16 +1634,19 @@ class DrillService : Service(), VoiceIo {
     }
 
     override fun beep() {
+        if (!AudioGate.earconAllowed(sessionSilent)) return
         try { toneGen?.startTone(ToneGenerator.TONE_PROP_BEEP, 180) } catch (_: Exception) {}
     }
 
     /** Short HIGH tone. Played only while the recognizer is NOT listening. */
     private fun toneListenStart() {
+        if (!AudioGate.earconAllowed(sessionSilent)) return
         try { toneGen?.startTone(ToneGenerator.TONE_PROP_PROMPT, LISTEN_CUE_TONE_MS) } catch (_: Exception) {}
     }
 
     /** Short LOW tone: the listen just ended (result, error, or timeout). */
     private fun toneListenEnd() {
+        if (!AudioGate.earconAllowed(sessionSilent)) return
         try { toneGen?.startTone(ToneGenerator.TONE_PROP_NACK, 150) } catch (_: Exception) {}
     }
 
@@ -1616,7 +1717,10 @@ class DrillService : Service(), VoiceIo {
 
     /** Main thread. Drops any previous recognizer and starts a new session. */
     private fun beginListenOnMain(session: Int) {
-        if (sessionSilent) return
+        if (sessionSilent) {
+            finishListen(null)
+            return
+        }
         if (!sessionOpen(session)) return
         val queued = pollQueuedGrade()
         if (queued != null) {

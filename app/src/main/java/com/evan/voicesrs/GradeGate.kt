@@ -31,6 +31,17 @@ class GradeGate {
     }
 
     /**
+     * Silent mode: Show answer and rating are live as soon as the question is up,
+     * so a rating may be claimed before [reveal]. Still one claim per card.
+     */
+    @Synchronized fun tryClaimInstant(ease: Int?): Boolean {
+        if (!open || claimed) return false
+        claimed = true
+        claimedEase = ease
+        return true
+    }
+
+    /**
      * Resolve a voice grade against an earlier claim: returns the ease that must be used.
      * The first claim wins, so a voice grade after a tap keeps the tapped ease.
      */
