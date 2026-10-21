@@ -22,6 +22,10 @@ data class DrillUiState(
     val errorTitle: String = "",
     /** True while [DrillService] is in a drill session, including after the activity is recreated. */
     val drillRunning: Boolean = false,
+    /** Silent flag captured when this session started. Idle UI uses the pref instead. */
+    val silentSession: Boolean = false,
+    /** Silent question is on screen and the drill is waiting for Show answer. */
+    val awaitingShowAnswer: Boolean = false,
     /** Ease (1-4) of the grade chosen for the current card by tap or voice; null clears the chips. */
     val selectedEase: Int? = null
 )

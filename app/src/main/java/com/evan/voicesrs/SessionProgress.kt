@@ -38,6 +38,7 @@ class SessionProgress(val dueAtStart: Int) {
         }
     }
 
+    /** Remaining cards in this session (due-at-start or batch size), not remaining deck due. */
     fun left(): Int = (dueAtStart - done).coerceAtLeast(0)
 
     fun avgSec(): Int = if (timedCards == 0) 0 else (totalMs / timedCards / 1000L).toInt()
@@ -72,5 +73,13 @@ class SessionProgress(val dueAtStart: Int) {
             val minutes = (sec + 30) / 60
             return "$minutes min"
         }
+
+        /**
+         * [line] is remaining work in the current session, not remaining
+         * cards in the deck. Hide it when no drill is running so a stale
+         * "Left N" cannot disagree with "Due now".
+         */
+        fun visibleLine(running: Boolean, line: String): String =
+            if (running) line else ""
     }
 }

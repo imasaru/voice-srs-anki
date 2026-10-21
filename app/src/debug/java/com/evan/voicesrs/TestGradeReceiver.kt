@@ -14,15 +14,27 @@ import android.util.Log
  *   adb shell am broadcast -a com.evan.voicesrs.TEST_GRADE \
  *     -n com.evan.voicesrs/.TestGradeReceiver --es grade good
  *
+ * Show answer (silent mode), no extras:
+ *
+ *   adb shell am broadcast -a com.evan.voicesrs.TEST_SHOW_ANSWER \
+ *     -n com.evan.voicesrs/.TestGradeReceiver
+ *
  * Accepted extra keys: grade, grade-word, grade_word, gradeWord.
  * Accepted values: again, hard, good, easy.
  */
 class TestGradeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        if (intent?.action != DrillService.ACTION_TEST_GRADE) return
-        val raw = EXTRA_KEYS.firstNotNullOfOrNull { key -> intent.getStringExtra(key) }
-        Log.i(TAG, "TEST_GRADE received")
-        DrillService.submitTestGrade(raw)
+        when (intent?.action) {
+            DrillService.ACTION_TEST_GRADE -> {
+                val raw = EXTRA_KEYS.firstNotNullOfOrNull { key -> intent?.getStringExtra(key) }
+                Log.i(TAG, "TEST_GRADE received")
+                DrillService.submitTestGrade(raw)
+            }
+            DrillService.ACTION_TEST_SHOW_ANSWER -> {
+                Log.i(TAG, "TEST_SHOW_ANSWER received")
+                DrillService.submitShowAnswer()
+            }
+        }
     }
 
     companion object {

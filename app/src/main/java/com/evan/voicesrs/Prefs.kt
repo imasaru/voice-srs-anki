@@ -29,6 +29,8 @@ data class AnkiConfig(
     val relistenOnce: Boolean = true,
     /** Show the card front and back on the main screen. */
     val showCard: Boolean = true,
+    /** Tap-only review. Read once at session start. The microphone stays closed. */
+    val silentMode: Boolean = false,
     /** Fetch a batch and grade locally. Off by default. */
     val offlineBatch: Boolean = false,
     val offlineBatchSize: Int = 20,
@@ -38,7 +40,15 @@ data class AnkiConfig(
     val goalMinutes: Int = 10,
     /** True when the Anki key is blank after migration. Settings should say so. */
     val needsApiKey: Boolean = false,
-    val needsNeuralToken: Boolean = false
+    val needsNeuralToken: Boolean = false,
+    /** Master switch for AI explanations. Off until the user turns it on. */
+    val aiEnabled: Boolean = false,
+    val aiBaseUrl: String = "http://192.0.2.10:11434/v1",
+    val aiModel: String = "qwen3:8b",
+    /** Optional. Stored only in encrypted prefs. Never logged. */
+    val aiApiKey: String = "",
+    val aiLookahead: Int = 2,
+    val aiBatch: Boolean = false
 )
 
 /** SharedPreferences-backed settings. The API key and neural token live in encrypted prefs. */
@@ -60,11 +70,18 @@ object Prefs {
     private const val KEY_END_SILENCE_MS = "end_silence_ms"
     private const val KEY_RELISTEN_ONCE = "relisten_once"
     private const val KEY_SHOW_CARD = "show_card"
+    private const val KEY_SILENT = "silent_mode"
     private const val KEY_OFFLINE = "offline_batch"
     private const val KEY_BATCH_SIZE = "offline_batch_size"
     private const val KEY_GOAL_MODE = "goal_mode"
     private const val KEY_GOAL_CARDS = "goal_cards"
     private const val KEY_GOAL_MINUTES = "goal_minutes"
+    private const val KEY_AI_ENABLED = "ai_enabled"
+    private const val KEY_AI_URL = "ai_base_url"
+    private const val KEY_AI_MODEL = "ai_model"
+    private const val KEY_AI_KEY = "ai_api_key"
+    private const val KEY_AI_LOOKAHEAD = "ai_lookahead"
+    private const val KEY_AI_BATCH = "ai_batch"
 
     const val DEFAULT_URL = "http://192.0.2.10:8765"
     const val DEFAULT_DECK = "VoiceSRS-Test"
@@ -72,6 +89,9 @@ object Prefs {
     const val DEFAULT_BATCH_SIZE = 20
     const val DEFAULT_GOAL_CARDS = 20
     const val DEFAULT_GOAL_MINUTES = 10
+    const val DEFAULT_AI_URL = "http://192.0.2.10:11434/v1"
+    const val DEFAULT_AI_MODEL = "qwen3:8b"
+    const val DEFAULT_AI_LOOKAHEAD = 2
 
     /**
      * Build-time default from the gitignored local-api-key.txt.
@@ -121,7 +141,8 @@ object Prefs {
             apiKey = decision.apiKey,
             neuralToken = decision.neuralToken,
             needsApiKey = decision.promptForApiKey,
-            needsNeuralToken = decision.promptForNeuralToken
+            needsNeuralToken = decision.promptForNeuralToken,
+            aiApiKey = stored(secrets, KEY_AI_KEY).orEmpty()
         )
     }
 
@@ -140,23 +161,34 @@ object Prefs {
             .putInt(KEY_END_SILENCE_MS, ListenWindow.normalizeSilenceMs(cfg.endSilenceMs))
             .putBoolean(KEY_RELISTEN_ONCE, cfg.relistenOnce)
             .putBoolean(KEY_SHOW_CARD, cfg.showCard)
+            .putBoolean(KEY_SILENT, cfg.silentMode)
             .putBoolean(KEY_OFFLINE, cfg.offlineBatch)
             .putInt(KEY_BATCH_SIZE, cfg.offlineBatchSize.coerceIn(DrillSettings.MIN_BATCH, DrillSettings.MAX_BATCH))
             .putString(KEY_GOAL_MODE, GoalModes.normalize(cfg.goalMode))
             .putInt(KEY_GOAL_CARDS, cfg.goalCards.coerceIn(1, 500))
             .putInt(KEY_GOAL_MINUTES, cfg.goalMinutes.coerceIn(1, 180))
+            .putBoolean(KEY_AI_ENABLED, cfg.aiEnabled)
+            .putString(KEY_AI_URL, cfg.aiBaseUrl.ifBlank { DEFAULT_AI_URL })
+            .putString(KEY_AI_MODEL, cfg.aiModel.ifBlank { DEFAULT_AI_MODEL })
+            .putInt(KEY_AI_LOOKAHEAD, cfg.aiLookahead.coerceIn(0, 5))
+            .putBoolean(KEY_AI_BATCH, cfg.aiBatch)
             .remove(KEY_API_KEY)
             .remove(KEY_NEURAL_TOKEN)
             .apply()
         val secrets = openSecrets(ctx)
         if (secrets == null) {
             Log.e(TAG, "encrypted prefs unavailable; secrets not written")
-            return
+        } else {
+            secrets.edit()
+                .putString(KEY_API_KEY, cfg.apiKey.trim())
+                .putString(KEY_NEURAL_TOKEN, cfg.neuralToken.trim())
+                .putString(KEY_AI_KEY, cfg.aiApiKey.trim())
+                .apply()
         }
-        secrets.edit()
-            .putString(KEY_API_KEY, cfg.apiKey.trim())
-            .putString(KEY_NEURAL_TOKEN, cfg.neuralToken.trim())
-            .apply()
+        try {
+            ExplainBatchSchedule.sync(ctx, cfg)
+        } catch (_: Exception) {
+        }
     }
 
     private fun readPlain(p: SharedPreferences): AnkiConfig {
@@ -180,12 +212,18 @@ object Prefs {
             ),
             relistenOnce = p.getBoolean(KEY_RELISTEN_ONCE, true),
             showCard = p.getBoolean(KEY_SHOW_CARD, true),
+            silentMode = p.getBoolean(KEY_SILENT, false),
             offlineBatch = p.getBoolean(KEY_OFFLINE, false),
             offlineBatchSize = p.getInt(KEY_BATCH_SIZE, DEFAULT_BATCH_SIZE)
                 .coerceIn(DrillSettings.MIN_BATCH, DrillSettings.MAX_BATCH),
             goalMode = GoalModes.normalize(p.getString(KEY_GOAL_MODE, GoalModes.OFF)),
             goalCards = p.getInt(KEY_GOAL_CARDS, DEFAULT_GOAL_CARDS).coerceIn(1, 500),
-            goalMinutes = p.getInt(KEY_GOAL_MINUTES, DEFAULT_GOAL_MINUTES).coerceIn(1, 180)
+            goalMinutes = p.getInt(KEY_GOAL_MINUTES, DEFAULT_GOAL_MINUTES).coerceIn(1, 180),
+            aiEnabled = p.getBoolean(KEY_AI_ENABLED, false),
+            aiBaseUrl = p.getString(KEY_AI_URL, DEFAULT_AI_URL).orEmpty().ifBlank { DEFAULT_AI_URL },
+            aiModel = p.getString(KEY_AI_MODEL, DEFAULT_AI_MODEL).orEmpty().ifBlank { DEFAULT_AI_MODEL },
+            aiLookahead = p.getInt(KEY_AI_LOOKAHEAD, DEFAULT_AI_LOOKAHEAD).coerceIn(0, 5),
+            aiBatch = p.getBoolean(KEY_AI_BATCH, false)
         )
     }
 

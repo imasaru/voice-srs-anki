@@ -77,7 +77,9 @@
                             android:id="@+id/batchSizeInput"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:imeOptions="actionDone"
                             android:inputType="number"
+                            android:maxLines="1"
                             android:textAppearance="?attr/textAppearanceBodyLarge" />
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -107,7 +109,9 @@
                             android:id="@+id/goalAmountInput"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:imeOptions="actionDone"
                             android:inputType="number"
+                            android:maxLines="1"
                             android:textAppearance="?attr/textAppearanceBodyLarge" />
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -157,7 +161,9 @@
                             android:id="@+id/urlInput"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:imeOptions="actionDone"
                             android:inputType="textUri"
+                            android:maxLines="1"
                             android:textAppearance="?attr/textAppearanceBodyLarge" />
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -172,7 +178,9 @@
                             android:id="@+id/keyInput"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:imeOptions="actionDone"
                             android:inputType="textPassword"
+                            android:maxLines="1"
                             android:textAppearance="?attr/textAppearanceBodyLarge" />
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -201,7 +209,9 @@
                                 android:id="@+id/deckInput"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
+                                android:imeOptions="actionDone"
                                 android:inputType="text"
+                                android:maxLines="1"
                                 android:textAppearance="?attr/textAppearanceBodyLarge" />
                         </com.google.android.material.textfield.TextInputLayout>
 
@@ -337,7 +347,8 @@
                         android:stepSize="1"
                         android:value="4"
                         android:valueFrom="0"
-                        android:valueTo="15" />
+                        android:valueTo="10"
+                        app:labelBehavior="floating" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/ttsRateCustomLayout"
@@ -422,7 +433,9 @@
                             android:id="@+id/neuralUrlInput"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:imeOptions="actionDone"
                             android:inputType="textUri"
+                            android:maxLines="1"
                             android:textAppearance="?attr/textAppearanceBodyLarge" />
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -437,7 +450,9 @@
                             android:id="@+id/neuralTokenInput"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:imeOptions="actionDone"
                             android:inputType="textPassword"
+                            android:maxLines="1"
                             android:textAppearance="?attr/textAppearanceBodyLarge" />
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -467,6 +482,22 @@
                         android:layout_height="wrap_content"
                         android:text="@string/section_listening"
                         android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/silentModeSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:minHeight="48dp"
+                        android:text="@string/settings_silent_mode"
+                        android:textAppearance="?attr/textAppearanceBodyLarge" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/settings_silent_mode_help"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
 
                     <TextView
                         android:layout_width="match_parent"
@@ -516,13 +547,158 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <Button
-                android:id="@+id/saveButton"
-                style="@style/Widget.Material3.Button"
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/aiCard"
+                style="@style/Widget.Material3.CardView.Outlined"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="52dp"
-                android:text="@string/settings_save" />
+                android:layout_marginBottom="12dp"
+                app:contentPadding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/section_ai"
+                        android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/aiEnabledSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:minHeight="48dp"
+                        android:text="@string/settings_ai_enable"
+                        android:textAppearance="?attr/textAppearanceBodyLarge" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/aiBaseUrlLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:hint="@string/settings_ai_url">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/aiBaseUrlInput"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:imeOptions="actionDone"
+                            android:inputType="textUri"
+                            android:maxLines="1"
+                            android:textAppearance="?attr/textAppearanceBodyLarge" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:hint="@string/settings_ai_model">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/aiModelInput"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:imeOptions="actionDone"
+                            android:inputType="text"
+                            android:maxLines="1"
+                            android:textAppearance="?attr/textAppearanceBodyLarge" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:hint="@string/settings_ai_key">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/aiKeyInput"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:imeOptions="actionDone"
+                            android:inputType="textPassword"
+                            android:maxLines="1"
+                            android:textAppearance="?attr/textAppearanceBodyLarge" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <TextView
+                        android:id="@+id/aiKeyStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/aiLookaheadLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:hint="@string/settings_ai_lookahead"
+                        app:helperText="@string/settings_ai_lookahead_help">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/aiLookaheadInput"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:imeOptions="actionDone"
+                            android:inputType="number"
+                            android:maxLines="1"
+                            android:textAppearance="?attr/textAppearanceBodyLarge" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/aiBatchSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:minHeight="48dp"
+                        android:text="@string/settings_ai_batch"
+                        android:textAppearance="?attr/textAppearanceBodyLarge" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_ai_batch_help"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/aiTestButton"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="8dp"
+                            android:layout_weight="1"
+                            android:minHeight="48dp"
+                            android:text="@string/settings_ai_test" />
+
+                        <Button
+                            android:id="@+id/aiClearCacheButton"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:minHeight="48dp"
+                            android:text="@string/settings_ai_clear" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/aiTestResult"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textAppearance="?attr/textAppearanceBodySmall"
+                        android:textIsSelectable="true" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
             <Button
                 android:id="@+id/testConnectionButton"

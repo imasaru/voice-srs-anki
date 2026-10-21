@@ -11,9 +11,13 @@ import android.os.Build
 import android.os.Bundle
 import android.transition.Fade
 import android.transition.TransitionManager
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
+import androidx.recyclerview.widget.RecyclerView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -27,6 +31,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 /** Deck, due count, current card, and Start / Stop / Settings. */
 class MainActivity : AppCompatActivity() {
 
+    private lateinit var deckPathView: TextView
     private lateinit var deckNameView: TextView
     private lateinit var dueCountView: TextView
     private lateinit var stateText: TextView
@@ -48,21 +53,40 @@ class MainActivity : AppCompatActivity() {
     private lateinit var syncButton: Button
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
+    private lateinit var showAnswerButton: Button
+    private lateinit var statusSilentIndicator: View
+    private lateinit var cardSilentIndicator: View
 
     private var pendingStatus = ""
+    /** Permission request in flight was for a silent start, so RECORD_AUDIO is not required. */
+    private var startWithoutMic = false
     private var renderedFront = ""
     private var renderedBack = ""
+    /** Last [DrillUiState.drillRunning] applied by [uiListener]; used to refresh due on session end. */
+    private var lastDrillRunning = false
+    private var chatPane: ChatPane? = null
+
+    private val reviewListener: (List<ReviewTurn>) -> Unit = {
+        runOnUiThread {
+            if (!isDestroyed) invalidateOptionsMenu()
+        }
+    }
 
     private val uiListener: (DrillUiState) -> Unit = { snapshot ->
         runOnUiThread {
-            if (!isDestroyed) render(snapshot)
+            if (isDestroyed) return@runOnUiThread
+            val ended = lastDrillRunning && !snapshot.drillRunning
+            lastDrillRunning = snapshot.drillRunning
+            render(snapshot)
+            if (ended) refreshCounts()
         }
     }
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
-        if (grants[Manifest.permission.RECORD_AUDIO] == true) {
+        val micOk = startWithoutMic || grants[Manifest.permission.RECORD_AUDIO] == true
+        if (micOk) {
             startDrillService()
         } else {
             Toast.makeText(this, "Microphone permission is required for the drill.", Toast.LENGTH_LONG).show()
@@ -73,6 +97,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         setSupportActionBar(findViewById<MaterialToolbar>(R.id.toolbar))
+        deckPathView = findViewById(R.id.deckPath)
         deckNameView = findViewById(R.id.deckName)
         dueCountView = findViewById(R.id.dueCount)
         stateText = findViewById(R.id.stateText)
@@ -94,6 +119,9 @@ class MainActivity : AppCompatActivity() {
         syncButton = findViewById(R.id.syncButton)
         startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
+        showAnswerButton = findViewById(R.id.showAnswerButton)
+        showAnswerButton.setOnClickListener { DrillService.submitShowAnswer() }
+        bindSilentIndicators()
         findViewById<Button>(R.id.retryButton).setOnClickListener { ensurePermissionsAndStart() }
         syncButton.setOnClickListener { syncPending() }
         chipAgain.setOnClickListener { if (DrillUi.state.ratingVisible) DrillService.submitTestGrade("again"); render(DrillUi.state) }
@@ -108,20 +136,53 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
         showCrashIfAny()
+        bindDeckTitle(Prefs.load(this).deck)
+        val chatList = findViewById<RecyclerView>(R.id.chatList)
+        val chatUnread = findViewById<TextView>(R.id.chatUnread)
+        if (chatList != null && chatUnread != null) {
+            chatPane = ChatPane(chatList, chatUnread).also { it.attach() }
+        }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.menu_main, menu)
+        return true
+    }
+
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        val item = menu.findItem(R.id.action_history) ?: return super.onPrepareOptionsMenu(menu)
+        item.isVisible = findViewById<View>(R.id.chatList) == null
+        val unread = ReviewLog.unreadCount()
+        item.title = if (unread > 0) {
+            getString(R.string.action_history_count, unread)
+        } else {
+            getString(R.string.action_history)
+        }
+        return super.onPrepareOptionsMenu(menu)
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (item.itemId != R.id.action_history) return super.onOptionsItemSelected(item)
+        if (supportFragmentManager.findFragmentByTag("history") == null) {
+            HistorySheet().show(supportFragmentManager, "history")
+        }
+        return true
     }
 
     override fun onStart() {
         super.onStart()
+        lastDrillRunning = DrillService.running
         DrillUi.addListener(uiListener)
-        if (DrillService.running != DrillUi.state.drillRunning) {
-            DrillUi.update { it.copy(drillRunning = DrillService.running) }
+        ReviewLog.addListener(reviewListener)
+        invalidateOptionsMenu()
+        if (!DrillService.running) {
+            if (DrillUi.state.drillRunning || DrillUi.state.progressLine.isNotEmpty()) {
+                DrillUi.update { it.copy(drillRunning = false, progressLine = "") }
+            }
+        } else if (!DrillUi.state.drillRunning) {
+            DrillUi.update { it.copy(drillRunning = true) }
         }
         render(DrillUi.state)
-    }
-
-    override fun onStop() {
-        DrillUi.removeListener(uiListener)
-        super.onStop()
     }
 
     /** If the previous run died, surface the persisted crash report. */
@@ -148,12 +209,30 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        chatPane?.setResumed(true)
         val pending = GradeSync.pendingCount(filesDir)
         if (pending != DrillUi.state.pendingSync) {
             DrillUi.update { it.copy(pendingSync = pending) }
         }
         refreshCounts()
         render(DrillUi.state)
+    }
+
+    override fun onPause() {
+        chatPane?.setResumed(false)
+        super.onPause()
+    }
+
+    override fun onStop() {
+        DrillUi.removeListener(uiListener)
+        ReviewLog.removeListener(reviewListener)
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        chatPane?.detach()
+        chatPane = null
+        super.onDestroy()
     }
 
     private fun syncPending() {
@@ -184,9 +263,21 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
+    private fun bindDeckTitle(full: String) {
+        val (path, leaf) = DeckName.split(full)
+        deckNameView.text = leaf.ifEmpty { full }
+        if (path.isEmpty()) {
+            deckPathView.visibility = View.GONE
+            deckPathView.text = ""
+        } else {
+            deckPathView.text = path
+            deckPathView.visibility = View.VISIBLE
+        }
+    }
+
     private fun refreshCounts() {
         val cfg = Prefs.load(this)
-        deckNameView.text = cfg.deck
+        bindDeckTitle(cfg.deck)
         dueCountView.text = "Checking Anki…"
         Thread {
             val text = try {
@@ -247,11 +338,12 @@ class MainActivity : AppCompatActivity() {
                 heardText.text = state.heard
             }
         }
-        if (state.progressLine.isBlank()) {
+        val progressLine = SessionProgress.visibleLine(DrillService.running, state.progressLine)
+        if (progressLine.isBlank()) {
             progressText.visibility = View.GONE
         } else {
             progressText.visibility = View.VISIBLE
-            progressText.text = state.progressLine
+            progressText.text = progressLine
         }
         if (state.pendingSync > 0) {
             syncChip.visibility = View.VISIBLE
@@ -273,6 +365,9 @@ class MainActivity : AppCompatActivity() {
         // Rating chips appear only once the answer is revealed.
         val ratingVis = if (state.ratingVisible) View.VISIBLE else View.GONE
         findViewById<View>(R.id.gradeGuideLabel).visibility = ratingVis
+        findViewById<TextView>(R.id.gradeGuideLabel).setText(
+            if (state.drillRunning && state.silentSession) R.string.grade_guide_tap else R.string.grade_guide
+        )
         findViewById<View>(R.id.gradeChips).visibility = ratingVis
         val sel = if (state.ratingVisible) state.selectedEase else null
         chipAgain.isChecked = sel == 1
@@ -281,6 +376,36 @@ class MainActivity : AppCompatActivity() {
         chipEasy.isChecked = sel == 4
         startButton.isEnabled = !state.drillRunning
         stopButton.isEnabled = state.drillRunning
+        val drilling = state.drillRunning || DrillService.running
+        val silentOn = if (drilling) state.silentSession else cfg.silentMode
+        statusSilentIndicator.visibility = if (silentOn) View.VISIBLE else View.GONE
+        cardSilentIndicator.visibility = if (drilling && silentOn) View.VISIBLE else View.GONE
+        showAnswerButton.visibility = if (state.awaitingShowAnswer) View.VISIBLE else View.GONE
+    }
+
+    private fun bindSilentIndicators() {
+        val found = ArrayList<View>(2)
+        collectIds(findViewById(android.R.id.content), R.id.silentIndicator, found)
+        for (view in found) {
+            if (isUnder(view, R.id.currentCard)) cardSilentIndicator = view
+            else statusSilentIndicator = view
+        }
+    }
+
+    private fun collectIds(view: View, id: Int, out: MutableList<View>) {
+        if (view.id == id) out.add(view)
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) collectIds(view.getChildAt(i), id, out)
+        }
+    }
+
+    private fun isUnder(view: View, ancestorId: Int): Boolean {
+        var parent = view.parent
+        while (parent is View) {
+            if (parent.id == ancestorId) return true
+            parent = parent.parent
+        }
+        return false
     }
 
     private fun crossfadeStatus(next: String) {
@@ -296,7 +421,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun ensurePermissionsAndStart() {
         if (DrillUi.state.drillRunning || DrillService.running) return
-        val needed = mutableListOf(Manifest.permission.RECORD_AUDIO)
+        val mode = SilentPolicy.of(Prefs.load(this).silentMode)
+        startWithoutMic = !mode.requestRecordAudio
+        val needed = mutableListOf<String>()
+        if (mode.requestRecordAudio) needed += Manifest.permission.RECORD_AUDIO
         if (Build.VERSION.SDK_INT >= 33) needed += Manifest.permission.POST_NOTIFICATIONS
         val missing = needed.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED

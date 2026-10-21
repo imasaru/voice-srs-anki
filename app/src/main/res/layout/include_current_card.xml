@@ -15,6 +15,18 @@
         android:animateLayoutChanges="true"
         android:orientation="vertical">
 
+        <com.google.android.material.chip.Chip
+            android:id="@+id/silentIndicator"
+            style="@style/Widget.Material3.Chip.Assist"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:clickable="false"
+            android:focusable="false"
+            android:text="@string/silent_indicator"
+            android:visibility="gone"
+            app:chipMinHeight="32dp" />
+
         <TextView
             android:id="@+id/frontLabel"
             android:layout_width="match_parent"
@@ -31,6 +43,16 @@
             android:lineSpacingMultiplier="1.15"
             android:text="@string/card_idle"
             android:textAppearance="?attr/textAppearanceBodyLarge" />
+
+        <Button
+            android:id="@+id/showAnswerButton"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:minHeight="52dp"
+            android:text="@string/show_answer"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/backLabel"

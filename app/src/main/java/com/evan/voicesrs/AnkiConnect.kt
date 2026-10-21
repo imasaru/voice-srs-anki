@@ -157,7 +157,8 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) {
                 cardId = id,
                 front = o.optString("question", ""),
                 back = o.optString("answer", ""),
-                buttons = listOf(1, 2, 3, 4)
+                buttons = listOf(1, 2, 3, 4),
+                noteId = noteIdOf(o)
             )
         }
         return out
@@ -182,10 +183,31 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) {
         post("unsuspend", mapOf("cards" to ids))
     }
 
+    /** Every card in the deck, for the overnight explanation pass. */
+    fun deckCardIds(deckName: String): List<Long> {
+        val r = post("findCards", mapOf("query" to "deck:\"$deckName\"")) as? JSONArray
+            ?: return emptyList()
+        val ids = ArrayList<Long>(r.length())
+        for (i in 0 until r.length()) {
+            val id = r.optLong(i, 0L)
+            if (id != 0L) ids += id
+        }
+        return ids
+    }
+
     /** Number of cards due now in the named deck. */
     fun dueCount(deckName: String): Int {
         val r = post("findCards", mapOf("query" to "deck:\"$deckName\" (is:due OR is:new)"))
         return (r as? JSONArray)?.length() ?: 0
+    }
+
+    private fun noteIdOf(o: JSONObject): Long? {
+        val raw = when {
+            o.has("note") && !o.isNull("note") -> o.optLong("note", 0L)
+            o.has("noteId") && !o.isNull("noteId") -> o.optLong("noteId", 0L)
+            else -> 0L
+        }
+        return if (raw == 0L) null else raw
     }
 
     private fun parseButtons(arr: JSONArray?): List<Int> {

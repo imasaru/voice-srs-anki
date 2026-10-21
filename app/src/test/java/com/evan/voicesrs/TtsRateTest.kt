@@ -17,23 +17,35 @@ class TtsRateTest {
     }
 
     @Test
-    fun `slider runs from 0_5 to 2_0 and pins above that`() {
+    fun `slider runs from 0_5 to 1_5 and pins above that`() {
+        assertEquals(1.5f, TtsRate.SLIDER_MAX, 0.001f)
+        assertEquals(10, TtsRate.STEPS)
         assertEquals(0.5f, TtsRate.SLIDER_MAX - TtsRate.STEPS * TtsRate.STEP, 0.001f)
         assertEquals(0.5f, TtsRate.fromProgress(0), 0.001f)
-        assertEquals(2.0f, TtsRate.fromProgress(TtsRate.STEPS), 0.001f)
+        assertEquals(1.5f, TtsRate.fromProgress(TtsRate.STEPS), 0.001f)
         assertEquals(1.5f, TtsRate.fromProgress(10), 0.001f)
         assertEquals(0, TtsRate.toProgress(0.5f))
         assertEquals(10, TtsRate.toProgress(1.5f))
+        assertEquals(10, TtsRate.toProgress(1.8f))
+        assertTrue(TtsRate.isCustom(1.8f))
+        assertFalse(TtsRate.isCustom(1.5f))
         assertEquals(TtsRate.STEPS, TtsRate.toProgress(2.0f))
         assertEquals(TtsRate.STEPS, TtsRate.toProgress(2.6f))
         assertEquals(TtsRate.STEPS, TtsRate.toProgress(4.0f))
         assertEquals(0, TtsRate.toProgress(-1f))
         assertEquals(TtsRate.STEPS, TtsRate.toProgress(9f))
         assertEquals(0.5f, TtsRate.fromProgress(-4), 0.001f)
-        assertEquals(2.0f, TtsRate.fromProgress(40), 0.001f)
-        assertFalse(TtsRate.isCustom(2.0f))
+        assertEquals(1.5f, TtsRate.fromProgress(40), 0.001f)
+        assertTrue(TtsRate.isCustom(2.0f))
         assertTrue(TtsRate.isCustom(2.1f))
         assertTrue(TtsRate.isCustom(2.6f))
+    }
+
+    @Test
+    fun `bubble label is the speed not the step index`() {
+        assertEquals("0.5x", TtsRate.label(0))
+        assertEquals("1.2x", TtsRate.label(7))
+        assertEquals("1.5x", TtsRate.label(10))
     }
 
     @Test
@@ -67,6 +79,7 @@ class TtsRateTest {
         assertEquals(4.0f, TtsRate.parse("4.0")!!, 0.001f)
         assertEquals(1.3f, TtsRate.parse("1.25")!!, 0.001f)
         assertEquals(2.0f, TtsRate.parse("+2")!!, 0.001f)
+        assertEquals(3.0f, TtsRate.parse("3.0")!!, 0.001f)
         assertEquals("2.6", TtsRate.format(2.64f))
         assertEquals("0.9", TtsRate.format(TtsRate.DEFAULT))
         assertNull(TtsRate.parse(""))

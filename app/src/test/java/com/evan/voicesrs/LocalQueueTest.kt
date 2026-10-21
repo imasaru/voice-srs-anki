@@ -46,6 +46,16 @@ class LocalQueueTest {
     }
 
     @Test
+    fun `old batches decode a null note id and a note id round trips`() {
+        val old = """{"cards":[{"cardId":9,"front":"Q","back":"A","buttons":[1,3]}]}"""
+        assertEquals(null, LocalQueueJson.decodeBatch(old).single().noteId)
+        val zero = """{"cards":[{"cardId":9,"front":"Q","back":"A","noteId":0}]}"""
+        assertEquals(null, LocalQueueJson.decodeBatch(zero).single().noteId)
+        val cards = listOf(OfflineCard(9L, "Q", "A", listOf(1, 3), 42L))
+        assertEquals(cards, LocalQueueJson.decodeBatch(LocalQueueJson.encodeBatch(cards)))
+    }
+
+    @Test
     fun `backoff doubles and caps`() {
         assertEquals(2_000L, SyncBackoff.delayMs(0))
         assertEquals(4_000L, SyncBackoff.delayMs(1))

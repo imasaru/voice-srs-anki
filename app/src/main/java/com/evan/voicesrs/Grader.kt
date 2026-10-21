@@ -36,7 +36,12 @@ data class GradeContext(
     /** When true, skip the spoken rating guide and the one retry guide. */
     val speedMode: Boolean = false,
     /** How long each grade listen waits. The drill passes the saved listen wait. */
-    val listenTimeoutMs: Long = Grader.LISTEN_TIMEOUT_MS
+    val listenTimeoutMs: Long = Grader.LISTEN_TIMEOUT_MS,
+    /**
+     * Ease already claimed for this card (a rating tap), or null.
+     * When non-null the grader returns that ease and does not listen.
+     */
+    val claimedEase: () -> Int? = { null }
 )
 
 /** Blocking voice I/O owned by the drill service. */
@@ -59,13 +64,23 @@ class PauseRequested : Exception()
 /** v1 grader: self-grading via spoken grades, plus repeat / skip / pause. */
 class VoiceSelfGrader : Grader {
     override fun grade(ctx: GradeContext, io: VoiceIo): Int {
+        fun tapped(): Int? =
+            ctx.claimedEase()?.let { GradeMapper.toAvailableEase(it, ctx.card.buttons) }
+
+        tapped()?.let { return it }
         val opening = RatingGuides.initialPrompt(ctx.cardIndex, ctx.speedMode)
         if (opening != null) io.speak(opening)
+        tapped()?.let { return it }
         var reprompted = false
         while (true) {
-            when (val action = GradeMapper.parse(io.listen(ctx.listenTimeoutMs))) {
+            tapped()?.let { return it }
+            val action = GradeMapper.parse(io.listen(ctx.listenTimeoutMs))
+            // A tap during the listen wins over whatever the transcript said.
+            tapped()?.let { return it }
+            when (action) {
                 VoiceAction.Repeat -> {
                     io.speak(ctx.spokenAnswer)
+                    tapped()?.let { return it }
                     continue
                 }
                 is VoiceAction.Grade -> return GradeMapper.toAvailableEase(action.ease, ctx.card.buttons)
@@ -78,7 +93,9 @@ class VoiceSelfGrader : Grader {
                         reprompted = true
                         val again = RatingGuides.reprompt(ctx.speedMode)
                         if (again != null) io.speak(again)
+                        tapped()?.let { return it }
                     } else {
+                        tapped()?.let { return it }
                         // Still nothing: conservative default so the card comes back sooner.
                         return GradeMapper.toAvailableEase(2, ctx.card.buttons)
                     }

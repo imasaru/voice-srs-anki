@@ -141,4 +141,68 @@ class VoiceSelfGraderTest {
         val g = VoiceSelfGrader()
         assertEquals(3, g.grade(GradeContext(learning, "ans"), FakeIo(listOf("easy"))))
     }
+
+    @Test
+    fun `claim present before grade returns tapped ease with no speech or listen`() {
+        val io = FakeIo(listOf("easy"))
+        val ctx = GradeContext(card, "the answer", claimedEase = { 2 })
+        assertEquals(2, VoiceSelfGrader().grade(ctx, io))
+        assertTrue(io.spoken.isEmpty())
+        assertEquals(0, io.listenCalls)
+    }
+
+    @Test
+    fun `claim during opening prompt returns tapped ease and does not listen`() {
+        var claimed: Int? = null
+        val io = object : VoiceIo {
+            val spoken = mutableListOf<String>()
+            var listenCalls = 0
+            override fun speak(text: String) {
+                spoken.add(text)
+                claimed = 4
+            }
+            override fun listen(timeoutMs: Long): String? {
+                listenCalls++
+                return "again"
+            }
+            override fun beep() {}
+        }
+        val ctx = GradeContext(card, "the answer", claimedEase = { claimed })
+        assertEquals(4, VoiceSelfGrader().grade(ctx, io))
+        assertEquals(0, io.listenCalls)
+        assertEquals(listOf(RatingGuides.LONG), io.spoken)
+    }
+
+    @Test
+    fun `claim during reprompt returns tapped ease and does not listen again`() {
+        var claimed: Int? = null
+        var speaks = 0
+        val io = object : VoiceIo {
+            val spoken = mutableListOf<String>()
+            var listenCalls = 0
+            override fun speak(text: String) {
+                speaks++
+                spoken.add(text)
+                if (speaks >= 2) claimed = 1
+            }
+            override fun listen(timeoutMs: Long): String? {
+                listenCalls++
+                return if (listenCalls == 1) "sandwich" else "easy"
+            }
+            override fun beep() {}
+        }
+        val ctx = GradeContext(card, "the answer", claimedEase = { claimed })
+        assertEquals(1, VoiceSelfGrader().grade(ctx, io))
+        assertEquals(1, io.listenCalls)
+        assertTrue(io.spoken.contains(RatingGuides.REPROMPT))
+    }
+
+    @Test
+    fun `claimed ease is mapped onto the buttons the card offers`() {
+        val learning = card.copy(buttons = listOf(1, 2, 3))
+        val io = FakeIo(listOf("again"))
+        val ctx = GradeContext(learning, "ans", claimedEase = { 4 })
+        assertEquals(3, VoiceSelfGrader().grade(ctx, io))
+        assertEquals(0, io.listenCalls)
+    }
 }

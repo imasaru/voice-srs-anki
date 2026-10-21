@@ -11,6 +11,7 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="com.evan.voicesrs.TEST_GRADE" />
+                <action android:name="com.evan.voicesrs.TEST_SHOW_ANSWER" />
             </intent-filter>
         </receiver>
         <receiver

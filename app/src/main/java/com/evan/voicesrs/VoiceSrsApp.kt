@@ -23,6 +23,10 @@ class VoiceSrsApp : Application() {
     override fun onCreate() {
         super.onCreate()
         DynamicColors.applyToActivitiesIfAvailable(this)
+        try {
+            ExplainBatchSchedule.sync(this, Prefs.load(this))
+        } catch (_: Exception) {
+        }
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {

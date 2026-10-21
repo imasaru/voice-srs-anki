@@ -55,4 +55,21 @@ class SessionProgressTest {
         assertEquals(GoalModes.CARDS, GoalModes.normalize("Cards"))
         assertEquals(GoalModes.MINUTES, GoalModes.normalize("minutes"))
     }
+
+    @Test
+    fun `left is remaining in the session not remaining deck due`() {
+        val progress = SessionProgress(dueAtStart = 12)
+        progress.recordGrade(3, 0)
+        assertEquals(11, progress.left())
+        assertEquals("Done 1 · Left 11 · Streak 1", progress.line())
+    }
+
+    @Test
+    fun `progress line is blank when the drill is not running`() {
+        val line = "Done 1 · Left 11 · Streak 1"
+        assertEquals("", SessionProgress.visibleLine(false, line))
+        assertEquals("", SessionProgress.visibleLine(false, ""))
+        assertEquals(line, SessionProgress.visibleLine(true, line))
+        assertEquals("", SessionProgress.visibleLine(true, ""))
+    }
 }

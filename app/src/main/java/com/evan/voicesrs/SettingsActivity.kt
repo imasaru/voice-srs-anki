@@ -3,6 +3,9 @@ package com.evan.voicesrs
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.view.View
@@ -17,6 +20,7 @@ import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.slider.Slider
+import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -27,7 +31,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToInt
 
-/** AnkiConnect, speech, and neural TTS settings. Test voice plays only on tap. */
+/** AnkiConnect, speech, and neural TTS settings. Edits save themselves. Test voice plays only on tap. */
 class SettingsActivity : AppCompatActivity() {
 
     private var tts: TextToSpeech? = null
@@ -36,6 +40,16 @@ class SettingsActivity : AppCompatActivity() {
     private var testing = false
     private var deviceVoices: List<VoiceChoice> = listOf(VoiceChoice("System default", ""))
     private var savedDeviceVoice = ""
+    private lateinit var held: AnkiConfig
+    private var ready = false
+    private var flushTexts: () -> Unit = {}
+    private val choiceSavers = HashMap<MaterialAutoCompleteTextView, (String) -> Unit>()
+    private var bindingChoices = false
+    private val feedback = AutoSave.Debounce()
+    private val uiHandler = Handler(Looper.getMainLooper())
+    private var checkGen = 0
+    private lateinit var testResultView: TextView
+    private val showSavedRunnable = Runnable { showSavedNotice() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,21 +91,26 @@ class SettingsActivity : AppCompatActivity() {
         val listenWaitView: MaterialAutoCompleteTextView = findViewById(R.id.listenWaitInput)
         val endSilenceView: MaterialAutoCompleteTextView = findViewById(R.id.endSilenceInput)
         val relistenSwitch: MaterialSwitch = findViewById(R.id.relistenSwitch)
+        val silentSwitch: MaterialSwitch = findViewById(R.id.silentModeSwitch)
 
-        val cfg = Prefs.load(this)
-        urlView.setText(cfg.url)
+        held = Prefs.load(this)
+        urlView.setText(held.url)
         keyView.setText("")
         keyStatus.text = getString(
-            if (cfg.apiKey.isNotBlank()) R.string.settings_key_saved else R.string.settings_key_missing
+            if (held.apiKey.isNotBlank()) R.string.settings_key_saved else R.string.settings_key_missing
         )
-        deckView.setText(cfg.deck)
-        neuralUrlView.setText(cfg.neuralUrl)
+        val deckSeed = held.deck.ifBlank { Prefs.DEFAULT_DECK }
+        bindChoices(deckView, listOf(deckSeed), deckSeed) { label ->
+            val deck = label.trim().ifBlank { Prefs.DEFAULT_DECK }
+            persist { it.copy(deck = deck) }
+        }
+        neuralUrlView.setText(held.neuralUrl)
         neuralTokenView.setText("")
         tokenStatus.text = getString(
-            if (cfg.neuralToken.isNotBlank()) R.string.settings_token_saved else R.string.settings_token_missing
+            if (held.neuralToken.isNotBlank()) R.string.settings_token_saved else R.string.settings_token_missing
         )
-        speedSwitch.isChecked = cfg.speedMode
-        showCardSwitch.isChecked = cfg.showCard
+        speedSwitch.isChecked = held.speedMode
+        showCardSwitch.isChecked = held.showCard
         val waitLabels = ListenWindow.WAIT_SEC_CHOICES.map {
             getString(R.string.settings_listen_wait_choice, it)
         }
@@ -101,28 +120,34 @@ class SettingsActivity : AppCompatActivity() {
         bindChoices(
             listenWaitView,
             waitLabels,
-            getString(R.string.settings_listen_wait_choice, ListenWindow.normalizeWaitSec(cfg.listenWaitSec))
-        )
+            getString(R.string.settings_listen_wait_choice, ListenWindow.normalizeWaitSec(held.listenWaitSec))
+        ) { label ->
+            persist { it.copy(listenWaitSec = ListenWindow.waitSecFromLabel(label)) }
+        }
         bindChoices(
             endSilenceView,
             silenceLabels,
-            getString(R.string.settings_end_silence_choice, ListenWindow.normalizeSilenceMs(cfg.endSilenceMs))
-        )
-        relistenSwitch.isChecked = cfg.relistenOnce
-        offlineSwitch.isChecked = cfg.offlineBatch
-        batchSizeView.setText(cfg.offlineBatchSize.toString())
+            getString(R.string.settings_end_silence_choice, ListenWindow.normalizeSilenceMs(held.endSilenceMs))
+        ) { label ->
+            persist { it.copy(endSilenceMs = ListenWindow.silenceMsFromLabel(label)) }
+        }
+        relistenSwitch.isChecked = held.relistenOnce
+        silentSwitch.isChecked = held.silentMode
+        offlineSwitch.isChecked = held.offlineBatch
+        batchSizeView.setText(held.offlineBatchSize.toString())
         val goalLabels = listOf(
             getString(R.string.settings_goal_off),
             getString(R.string.settings_goal_cards),
             getString(R.string.settings_goal_minutes)
         )
-        val goalLabel = when (cfg.goalMode) {
+        val goalLabel = when (held.goalMode) {
             GoalModes.CARDS -> getString(R.string.settings_goal_cards)
             GoalModes.MINUTES -> getString(R.string.settings_goal_minutes)
             else -> getString(R.string.settings_goal_off)
         }
-        bindChoices(goalModeView, goalLabels, goalLabel)
-        val shownAmount = if (cfg.goalMode == GoalModes.MINUTES) cfg.goalMinutes else cfg.goalCards
+        var commitGoalMode: () -> Unit = {}
+        bindChoices(goalModeView, goalLabels, goalLabel) { commitGoalMode() }
+        val shownAmount = if (held.goalMode == GoalModes.MINUTES) held.goalMinutes else held.goalCards
         goalAmountView.setText(shownAmount.toString())
         if (testVoiceInput.text.isNullOrBlank()) {
             testVoiceInput.setText(getString(R.string.test_voice_sample))
@@ -177,20 +202,49 @@ class SettingsActivity : AppCompatActivity() {
                 offlineOn,
                 goalAmountView.text?.toString().orEmpty(),
                 batchSizeView.text?.toString().orEmpty(),
-                cfg.offlineBatchSize
+                held.offlineBatchSize
             )
             goalBatchHint.visibility = if (showHint) View.VISIBLE else View.GONE
         }
-        offlineSwitch.setOnCheckedChangeListener { _, _ -> refreshDrillFields() }
-        goalModeView.setOnItemClickListener { _, _, _, _ -> refreshDrillFields() }
+        offlineSwitch.setOnCheckedChangeListener { _, checked ->
+            refreshDrillFields()
+            persist { it.copy(offlineBatch = checked) }
+        }
+        speedSwitch.setOnCheckedChangeListener { _, checked ->
+            persist { it.copy(speedMode = checked) }
+        }
+        showCardSwitch.setOnCheckedChangeListener { _, checked ->
+            persist { it.copy(showCard = checked) }
+        }
+        relistenSwitch.setOnCheckedChangeListener { _, checked ->
+            persist { it.copy(relistenOnce = checked) }
+        }
+        silentSwitch.setOnCheckedChangeListener { _, checked ->
+            persist { it.copy(silentMode = checked) }
+        }
         goalModeView.doAfterTextChanged { refreshDrillFields() }
+        commitGoalMode = {
+            refreshDrillFields()
+            val mode = goalModeFromField()
+            val amount = goalAmountView.text?.toString()?.trim()?.toIntOrNull()
+            persist { cfg ->
+                when (mode) {
+                    GoalModes.MINUTES -> cfg.copy(goalMode = mode, goalMinutes = amount ?: cfg.goalMinutes)
+                    GoalModes.CARDS -> cfg.copy(goalMode = mode, goalCards = amount ?: cfg.goalCards)
+                    else -> cfg.copy(goalMode = mode)
+                }
+            }
+        }
         batchSizeView.doAfterTextChanged { refreshDrillFields() }
         goalAmountView.doAfterTextChanged { refreshDrillFields() }
         goalBatchHint.text = DrillSettings.GOAL_BATCH_HINT
         refreshDrillFields()
 
-        var spokenRate = TtsRate.clamp(cfg.ttsRate)
+        var spokenRate = TtsRate.clamp(held.ttsRate)
         var rateCommitGuard = false
+        var rateFromUser = false
+        // Bubble shows the speed ("1.2x"), not the step index. labelBehavior stays floating.
+        rateSlider.setLabelFormatter { v -> TtsRate.label(v.roundToInt()) }
         fun showRate(rate: Float) {
             rateLabel.text = if (TtsRate.isCustom(rate)) {
                 getString(R.string.settings_tts_rate_custom, rate)
@@ -201,14 +255,17 @@ class SettingsActivity : AppCompatActivity() {
             if (rateSlider.value != progress) rateSlider.value = progress
         }
         fun commitCustomRate(hideOnSuccess: Boolean): Boolean {
-            val parsed = TtsRate.parse(rateCustomInput.text?.toString().orEmpty())
-            if (parsed == null) {
+            val decision = AutoSave.decide(
+                spokenRate,
+                TtsRate.parse(rateCustomInput.text?.toString().orEmpty())
+            )
+            if (decision.invalid) {
                 rateCustomLayout.error = getString(R.string.settings_tts_rate_error)
                 return false
             }
             rateCustomLayout.error = null
-            spokenRate = parsed
-            val shown = TtsRate.format(parsed)
+            spokenRate = decision.value
+            val shown = TtsRate.format(spokenRate)
             if (rateCustomInput.text?.toString() != shown) rateCustomInput.setText(shown)
             showRate(spokenRate)
             if (hideOnSuccess) {
@@ -217,11 +274,14 @@ class SettingsActivity : AppCompatActivity() {
                 rateCustomInput.clearFocus()
                 rateCommitGuard = false
             }
+            if (decision.save) persist { it.copy(ttsRate = decision.value) }
             return true
         }
         showRate(spokenRate)
+        // Opening Settings pins a saved rate above 1.5×. Only a drag writes it back.
         rateSlider.addOnChangeListener { _, value, fromUser ->
             if (!fromUser) return@addOnChangeListener
+            rateFromUser = true
             spokenRate = TtsRate.fromProgress(value.roundToInt())
             rateLabel.text = getString(R.string.settings_tts_rate_value, spokenRate)
             if (rateCustomLayout.visibility == View.VISIBLE) {
@@ -229,6 +289,18 @@ class SettingsActivity : AppCompatActivity() {
                 rateCustomInput.setText(TtsRate.format(spokenRate))
             }
         }
+        rateSlider.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
+            override fun onStartTrackingTouch(slider: Slider) {
+                rateFromUser = false
+            }
+
+            override fun onStopTrackingTouch(slider: Slider) {
+                if (!rateFromUser) return
+                rateFromUser = false
+                spokenRate = TtsRate.fromProgress(slider.value.roundToInt())
+                persist { it.copy(ttsRate = spokenRate) }
+            }
+        })
         rateCustomLink.setOnClickListener {
             if (rateCustomLayout.visibility == View.VISIBLE) {
                 commitCustomRate(hideOnSuccess = true)
@@ -255,15 +327,20 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         val engineLabels = listOf(TtsEngines.CHOICE_NEURAL, TtsEngines.CHOICE_DEVICE)
-        val engineLabel = if (TtsEngines.preferred(cfg.ttsEngine) == EngineChoice.ON_DEVICE) {
+        val engineLabel = if (TtsEngines.preferred(held.ttsEngine) == EngineChoice.ON_DEVICE) {
             TtsEngines.CHOICE_DEVICE
         } else {
             TtsEngines.CHOICE_NEURAL
         }
-        bindChoices(engineView, engineLabels, engineLabel)
-        bindChoices(neuralVoiceView, NeuralTts.FALLBACK_VOICES, cfg.neuralVoice)
+        bindChoices(engineView, engineLabels, engineLabel) {
+            persist { cfg -> cfg.copy(ttsEngine = selectedEngine(engineView)) }
+        }
+        bindChoices(neuralVoiceView, NeuralTts.FALLBACK_VOICES, held.neuralVoice) { label ->
+            val name = label.trim().ifBlank { NeuralTts.DEFAULT_VOICE }
+            persist { it.copy(neuralVoice = name) }
+        }
 
-        savedDeviceVoice = cfg.ttsVoice
+        savedDeviceVoice = held.ttsVoice
         bindDeviceVoices(voiceView, deviceVoices, savedDeviceVoice)
 
         tts = TextToSpeech(this) { status ->
@@ -300,80 +377,243 @@ class SettingsActivity : AppCompatActivity() {
             loadDecks(urlView, keyView, deckView, deckStatus)
         }
         loadDecks(urlView, keyView, deckView, deckStatus)
-        loadNeural(neuralUrlView, neuralTokenView, neuralVoiceView, neuralStatus, cfg.neuralVoice)
+        loadNeural(neuralUrlView, neuralTokenView, neuralVoiceView, neuralStatus, held.neuralVoice)
 
-        findViewById<Button>(R.id.saveButton).setOnClickListener {
-            if (rateCustomLayout.visibility == View.VISIBLE && !commitCustomRate(hideOnSuccess = true)) {
-                return@setOnClickListener
+        fun commitUrl() {
+            val url = urlView.text?.toString()?.trim().orEmpty().ifBlank { Prefs.DEFAULT_URL }
+            if (urlView.text?.toString() != url) urlView.setText(url)
+            if (!AutoSave.decide(held.url, url).save) return
+            persist { it.copy(url = url) }
+        }
+        fun commitKey() {
+            val typed = keyView.text?.toString()?.trim().orEmpty()
+            if (typed.isEmpty()) return
+            if (!AutoSave.decide(held.apiKey, typed).save) return
+            if (persist { it.copy(apiKey = typed) } && !destroyed) {
+                keyStatus.text = getString(R.string.settings_key_saved)
             }
-            val voiceName = selectedDeviceVoice(voiceView)
-            savedDeviceVoice = voiceName
-            val goalMode = goalModeFromField()
-            val amount = goalAmountView.text.toString().trim().toIntOrNull()
-            val batch = DrillSettings.clampBatch(
-                batchSizeView.text?.toString().orEmpty(),
-                cfg.offlineBatchSize
-            )
-            if (batch.rewriteField) {
+        }
+        fun commitDeck() {
+            val typed = deckView.text?.toString()?.trim().orEmpty()
+            val deck = typed.ifBlank { Prefs.DEFAULT_DECK }
+            if (typed.isBlank() && deckView.text?.toString() != deck) deckView.setText(deck, false)
+            if (!AutoSave.decide(held.deck, deck).save) return
+            persist { it.copy(deck = deck) }
+        }
+        var batchClampedText: String? = null
+        fun commitBatch() {
+            val raw = batchSizeView.text?.toString().orEmpty()
+            val batch = DrillSettings.clampBatch(raw, held.offlineBatchSize)
+            if (batch.rewriteField && batchSizeView.text?.toString() != batch.text) {
                 batchSizeView.setText(batch.text)
             }
             if (batch.cappedAtMax) {
+                batchClampedText = batch.text
                 batchLayout.helperText = DrillSettings.CLAMPED_NOTE
-            }
-            Prefs.save(
-                this,
-                AnkiConfig(
-                    url = urlView.text.toString().trim().ifBlank { Prefs.DEFAULT_URL },
-                    apiKey = keyView.text.toString().trim().ifBlank { cfg.apiKey },
-                    deck = deckView.text.toString().trim().ifBlank { Prefs.DEFAULT_DECK },
-                    ttsRate = spokenRate,
-                    ttsVoice = voiceName,
-                    ttsEngine = selectedEngine(engineView),
-                    neuralUrl = neuralUrlView.text.toString().trim().ifBlank { Prefs.DEFAULT_NEURAL_URL },
-                    neuralToken = neuralTokenView.text.toString().trim().ifBlank { cfg.neuralToken },
-                    neuralVoice = neuralVoiceView.text.toString().trim().ifBlank { NeuralTts.DEFAULT_VOICE },
-                    speedMode = speedSwitch.isChecked,
-                    showCard = showCardSwitch.isChecked,
-                    listenWaitSec = ListenWindow.waitSecFromLabel(listenWaitView.text.toString()),
-                    endSilenceMs = ListenWindow.silenceMsFromLabel(endSilenceView.text.toString()),
-                    relistenOnce = relistenSwitch.isChecked,
-                    offlineBatch = offlineSwitch.isChecked,
-                    offlineBatchSize = batch.value,
-                    goalMode = goalMode,
-                    goalCards = if (goalMode == GoalModes.MINUTES) cfg.goalCards else (amount ?: cfg.goalCards),
-                    goalMinutes = if (goalMode == GoalModes.MINUTES) (amount ?: cfg.goalMinutes) else cfg.goalMinutes
-                )
-            )
-            Toast.makeText(this, "Settings saved.", Toast.LENGTH_SHORT).show()
-            if (batch.cappedAtMax) {
                 Toast.makeText(this, DrillSettings.CLAMPED_NOTE, Toast.LENGTH_SHORT).show()
+            } else if (batchLayout.helperText?.toString() == DrillSettings.CLAMPED_NOTE &&
+                raw.trim() != batchClampedText
+            ) {
+                // A second commit of the clamped value (focus loss after Done, onPause) keeps the note.
+                batchClampedText = null
+                batchLayout.helperText = getString(R.string.settings_batch_range)
             }
-            finish()
+            val candidate = if (raw.trim().toIntOrNull() == null) held.offlineBatchSize else batch.value
+            if (!AutoSave.decide(held.offlineBatchSize, candidate).save) return
+            persist { it.copy(offlineBatchSize = candidate) }
+        }
+        fun commitGoalAmount() {
+            val mode = goalModeFromField()
+            if (!DrillSettings.showGoalAmount(mode)) return
+            val raw = goalAmountView.text?.toString().orEmpty()
+            if (raw.isBlank()) return
+            val last = if (mode == GoalModes.MINUTES) held.goalMinutes else held.goalCards
+            val decision = AutoSave.decide(last, raw.trim().toIntOrNull())
+            if (decision.invalid || !decision.save) return
+            val wrote = persist { cfg ->
+                if (mode == GoalModes.MINUTES) cfg.copy(goalMinutes = decision.value)
+                else cfg.copy(goalCards = decision.value)
+            }
+            if (!wrote) return
+            val stored = if (mode == GoalModes.MINUTES) held.goalMinutes else held.goalCards
+            if (goalAmountView.text?.toString()?.trim() != stored.toString()) {
+                goalAmountView.setText(stored.toString())
+            }
+        }
+        fun commitNeuralUrl() {
+            val url = neuralUrlView.text?.toString()?.trim().orEmpty().ifBlank { Prefs.DEFAULT_NEURAL_URL }
+            if (neuralUrlView.text?.toString() != url) neuralUrlView.setText(url)
+            if (!AutoSave.decide(held.neuralUrl, url).save) return
+            persist { it.copy(neuralUrl = url) }
+        }
+        fun commitNeuralToken() {
+            val typed = neuralTokenView.text?.toString()?.trim().orEmpty()
+            if (typed.isEmpty()) return
+            if (!AutoSave.decide(held.neuralToken, typed).save) return
+            if (persist { it.copy(neuralToken = typed) } && !destroyed) {
+                tokenStatus.text = getString(R.string.settings_token_saved)
+            }
+        }
+        fun track(view: TextView, commit: () -> Unit) {
+            view.setOnEditorActionListener { v, actionId, _ ->
+                if (actionId != EditorInfo.IME_ACTION_DONE) return@setOnEditorActionListener false
+                commit()
+                val imm = getSystemService(InputMethodManager::class.java)
+                imm?.hideSoftInputFromWindow(v.windowToken, 0)
+                true
+            }
+            view.setOnFocusChangeListener { _, hasFocus ->
+                if (!hasFocus) commit()
+            }
+        }
+        track(urlView) { commitUrl() }
+        track(keyView) { commitKey() }
+        track(deckView) { commitDeck() }
+        track(batchSizeView) { commitBatch() }
+        track(goalAmountView) { commitGoalAmount() }
+        track(neuralUrlView) { commitNeuralUrl() }
+        track(neuralTokenView) { commitNeuralToken() }
+        val aiEnabledSwitch: MaterialSwitch = findViewById(R.id.aiEnabledSwitch)
+        val aiBaseUrlLayout: TextInputLayout = findViewById(R.id.aiBaseUrlLayout)
+        val aiBaseUrlInput: TextInputEditText = findViewById(R.id.aiBaseUrlInput)
+        val aiModelInput: TextInputEditText = findViewById(R.id.aiModelInput)
+        val aiKeyInput: TextInputEditText = findViewById(R.id.aiKeyInput)
+        val aiKeyStatus: TextView = findViewById(R.id.aiKeyStatus)
+        val aiLookaheadLayout: TextInputLayout = findViewById(R.id.aiLookaheadLayout)
+        val aiLookaheadInput: TextInputEditText = findViewById(R.id.aiLookaheadInput)
+        val aiBatchSwitch: MaterialSwitch = findViewById(R.id.aiBatchSwitch)
+        val aiTestResult: TextView = findViewById(R.id.aiTestResult)
+        aiEnabledSwitch.isChecked = held.aiEnabled
+        aiBaseUrlInput.setText(held.aiBaseUrl.ifBlank { Prefs.DEFAULT_AI_URL })
+        aiModelInput.setText(held.aiModel.ifBlank { Prefs.DEFAULT_AI_MODEL })
+        aiKeyInput.setText("")
+        aiKeyStatus.text = getString(
+            if (held.aiApiKey.isNotBlank()) R.string.settings_ai_key_saved else R.string.settings_ai_key_missing
+        )
+        aiLookaheadInput.setText(held.aiLookahead.coerceIn(0, 5).toString())
+        aiBatchSwitch.isChecked = held.aiBatch
+        aiEnabledSwitch.setOnCheckedChangeListener { _, checked ->
+            persist { it.copy(aiEnabled = checked) }
+        }
+        aiBatchSwitch.setOnCheckedChangeListener { _, checked ->
+            persist { it.copy(aiBatch = checked) }
+        }
+        fun commitAiUrl() {
+            val raw = aiBaseUrlInput.text?.toString()?.trim().orEmpty()
+            val url = raw.ifBlank { Prefs.DEFAULT_AI_URL }
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                aiBaseUrlLayout.error = getString(R.string.settings_ai_url_error)
+                return
+            }
+            aiBaseUrlLayout.error = null
+            if (aiBaseUrlInput.text?.toString() != url) aiBaseUrlInput.setText(url)
+            persist { it.copy(aiBaseUrl = url) }
+        }
+        fun commitAiModel() {
+            val raw = aiModelInput.text?.toString()?.trim().orEmpty()
+            val model = raw.ifBlank { Prefs.DEFAULT_AI_MODEL }
+            if (aiModelInput.text?.toString() != model) aiModelInput.setText(model)
+            persist { it.copy(aiModel = model) }
+        }
+        fun commitAiKey() {
+            val typed = aiKeyInput.text?.toString()?.trim().orEmpty()
+            if (typed.isEmpty()) return
+            if (persist { it.copy(aiApiKey = typed) } && !destroyed) {
+                aiKeyStatus.text = getString(R.string.settings_ai_key_saved)
+            }
+        }
+        fun commitAiLookahead() {
+            val raw = aiLookaheadInput.text?.toString()?.trim().orEmpty()
+            val n = raw.toIntOrNull()
+            if (n == null || n !in 0..5) {
+                aiLookaheadLayout.error = getString(R.string.settings_ai_lookahead_error)
+                return
+            }
+            aiLookaheadLayout.error = null
+            persist { it.copy(aiLookahead = n) }
+        }
+        track(aiBaseUrlInput) { commitAiUrl() }
+        track(aiModelInput) { commitAiModel() }
+        track(aiKeyInput) { commitAiKey() }
+        track(aiLookaheadInput) { commitAiLookahead() }
+        flushTexts = {
+            commitUrl()
+            commitKey()
+            commitDeck()
+            commitBatch()
+            commitGoalAmount()
+            commitNeuralUrl()
+            commitNeuralToken()
+            commitAiUrl()
+            commitAiModel()
+            commitAiKey()
+            commitAiLookahead()
+            if (rateCustomLayout.visibility == View.VISIBLE) commitCustomRate(hideOnSuccess = false)
+        }
+        findViewById<Button>(R.id.aiTestButton).setOnClickListener {
+            commitAiUrl()
+            commitAiModel()
+            commitAiKey()
+            commitAiLookahead()
+            if (aiBaseUrlLayout.error != null || aiLookaheadLayout.error != null) return@setOnClickListener
+            val url = aiBaseUrlInput.text?.toString()?.trim().orEmpty().ifBlank { Prefs.DEFAULT_AI_URL }
+            val model = aiModelInput.text?.toString()?.trim().orEmpty().ifBlank { Prefs.DEFAULT_AI_MODEL }
+            val key = aiKeyInput.text?.toString()?.trim().orEmpty().ifBlank { held.aiApiKey }
+            val button = it as Button
+            button.isEnabled = false
+            aiTestResult.text = getString(R.string.settings_ai_testing)
+            Thread {
+                val started = SystemClock.elapsedRealtime()
+                val message = try {
+                    val client = AiClient()
+                    client.probe(url, key) { destroyed }
+                    client.complete(
+                        baseUrl = url,
+                        apiKey = key,
+                        model = model,
+                        system = "Reply with the single word ok.",
+                        user = "Say ok.",
+                        maxTokens = 16,
+                        cancelled = { destroyed }
+                    )
+                    "OK ${SystemClock.elapsedRealtime() - started} ms"
+                } catch (e: Exception) {
+                    AiClient.publicMessage(e)
+                }
+                runOnUiThread {
+                    if (destroyed) return@runOnUiThread
+                    button.isEnabled = true
+                    aiTestResult.text = message
+                }
+            }.start()
+        }
+        findViewById<Button>(R.id.aiClearCacheButton).setOnClickListener { button ->
+            button.isEnabled = false
+            Thread {
+                val ok = try {
+                    AiCache.clear(applicationContext)
+                    true
+                } catch (_: Exception) {
+                    false
+                }
+                runOnUiThread {
+                    if (destroyed) return@runOnUiThread
+                    button.isEnabled = true
+                    Toast.makeText(
+                        this,
+                        getString(if (ok) R.string.settings_ai_cleared else R.string.settings_ai_clear_failed),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }.start()
         }
 
-        val testResultView: TextView = findViewById(R.id.testResultView)
+        testResultView = findViewById(R.id.testResultView)
         findViewById<Button>(R.id.testConnectionButton).setOnClickListener {
-            testResultView.text = "Testing…"
             val url = urlView.text.toString().trim().ifBlank { Prefs.DEFAULT_URL }
-            val key = keyView.text.toString().trim().ifBlank { cfg.apiKey }
+            val key = keyView.text.toString().trim().ifBlank { held.apiKey }
             val deck = deckView.text.toString().trim().ifBlank { Prefs.DEFAULT_DECK }
-            if (key.isBlank()) {
-                testResultView.text = getString(R.string.settings_key_missing)
-                return@setOnClickListener
-            }
-            Thread {
-                val sb = StringBuilder()
-                try {
-                    val anki = AnkiConnect(url, key)
-                    sb.appendLine("version: ${anki.version()}")
-                    sb.appendLine("decks: ${anki.deckNames()}")
-                    sb.appendLine("due in '" + deck + "': " + anki.dueCount(deck))
-                    sb.append("connection OK")
-                } catch (e: Exception) {
-                    sb.append("FAILED: " + e.javaClass.simpleName + ": " + e.message)
-                }
-                runOnUiThread { if (!destroyed) testResultView.text = sb.toString() }
-            }.start()
+            runConnectionCheck(url, key, deck)
         }
 
         testVoiceButton.setOnClickListener {
@@ -387,7 +627,7 @@ class SettingsActivity : AppCompatActivity() {
             val deviceVoice = selectedDeviceVoice(voiceView)
             val neuralVoice = neuralVoiceView.text.toString().trim().ifBlank { NeuralTts.DEFAULT_VOICE }
             val neuralUrl = neuralUrlView.text.toString().trim().ifBlank { Prefs.DEFAULT_NEURAL_URL }
-            val neuralToken = neuralTokenView.text.toString().trim().ifBlank { cfg.neuralToken }
+            val neuralToken = neuralTokenView.text.toString().trim().ifBlank { held.neuralToken }
             testing = true
             testVoiceButton.isEnabled = false
             testVoiceStatus.text = getString(R.string.test_voice_playing)
@@ -421,6 +661,91 @@ class SettingsActivity : AppCompatActivity() {
                 }
             }.start()
         }
+        ready = true
+    }
+
+    override fun onPause() {
+        if (ready) flushTexts()
+        super.onPause()
+    }
+
+    /** Load, modify, save. Unchanged configs are left alone. */
+    private fun persist(transform: (AnkiConfig) -> AnkiConfig): Boolean {
+        if (!ready || destroyed) return false
+        val before = try {
+            Prefs.load(this)
+        } catch (_: Exception) {
+            return false
+        }
+        val proposed = try {
+            transform(before)
+        } catch (_: Exception) {
+            return false
+        }
+        if (!AutoSave.decide(before, proposed).save) return false
+        try {
+            Prefs.save(this, proposed)
+        } catch (_: Exception) {
+            return false
+        }
+        held = try {
+            Prefs.load(this)
+        } catch (_: Exception) {
+            proposed
+        }
+        if (before.url != held.url || before.apiKey != held.apiKey) {
+            runConnectionCheck(held.url, held.apiKey, held.deck)
+        }
+        armSaved()
+        return true
+    }
+
+    private fun armSaved() {
+        val now = SystemClock.elapsedRealtime()
+        feedback.onSaved(now)
+        val due = feedback.deadline() ?: return
+        uiHandler.removeCallbacks(showSavedRunnable)
+        uiHandler.postDelayed(showSavedRunnable, (due - now).coerceAtLeast(0L))
+    }
+
+    private fun showSavedNotice() {
+        if (destroyed || isFinishing) return
+        val now = SystemClock.elapsedRealtime()
+        val due = feedback.deadline() ?: return
+        if (now < due) {
+            uiHandler.postDelayed(showSavedRunnable, due - now)
+            return
+        }
+        if (!feedback.take(now)) return
+        val root = findViewById<View>(R.id.settingsScroll) ?: return
+        Snackbar.make(root, R.string.settings_saved, Snackbar.LENGTH_SHORT).show()
+    }
+
+    private fun runConnectionCheck(url: String, key: String, deck: String) {
+        if (destroyed || !::testResultView.isInitialized) return
+        val gen = ++checkGen
+        testResultView.text = "Testing…"
+        if (key.isBlank()) {
+            testResultView.text = getString(R.string.settings_key_missing)
+            return
+        }
+        Thread {
+            val sb = StringBuilder()
+            try {
+                val anki = AnkiConnect(url, key)
+                sb.appendLine("version: ${anki.version()}")
+                sb.appendLine("decks: ${anki.deckNames()}")
+                sb.appendLine("due in '" + deck + "': " + anki.dueCount(deck))
+                sb.append("connection OK")
+            } catch (e: Exception) {
+                sb.append("FAILED: " + e.javaClass.simpleName + ": " + e.message)
+            }
+            val text = sb.toString()
+            runOnUiThread {
+                if (destroyed || gen != checkGen) return@runOnUiThread
+                testResultView.text = text
+            }
+        }.start()
     }
 
     private fun loadDecks(
@@ -430,7 +755,7 @@ class SettingsActivity : AppCompatActivity() {
         deckStatus: TextView
     ) {
         val url = urlView.text.toString().trim().ifBlank { Prefs.DEFAULT_URL }
-        val key = keyView.text.toString().trim().ifBlank { Prefs.load(this).apiKey }
+        val key = keyView.text.toString().trim().ifBlank { held.apiKey }
         val kept = deckView.text.toString()
         deckStatus.text = getString(R.string.settings_decks_loading)
         Thread {
@@ -466,7 +791,7 @@ class SettingsActivity : AppCompatActivity() {
     ) {
         bindChoices(voiceView, NeuralTts.FALLBACK_VOICES, savedVoice)
         val url = urlView.text.toString().trim().ifBlank { Prefs.DEFAULT_NEURAL_URL }
-        val token = tokenView.text.toString().trim().ifBlank { Prefs.load(this).neuralToken }
+        val token = tokenView.text.toString().trim().ifBlank { held.neuralToken }
         Thread {
             val speaker = EdgeSpeaker(applicationContext)
             val remote = speaker.fetchVoices(url, token)
@@ -507,18 +832,41 @@ class SettingsActivity : AppCompatActivity() {
         val labels = items.map { it.label }
         val selected = items.firstOrNull { it.name == selectedName }?.label
             ?: items.firstOrNull()?.label.orEmpty()
-        bindChoices(view, labels, selected)
+        bindChoices(view, labels, selected) { label ->
+            if (!voicesReady) return@bindChoices
+            val name = deviceVoices.firstOrNull { it.label == label }?.name ?: return@bindChoices
+            savedDeviceVoice = name
+            persist { it.copy(ttsVoice = name) }
+        }
     }
 
-    private fun bindChoices(view: MaterialAutoCompleteTextView, labels: List<String>, selected: String) {
+    private fun bindChoices(
+        view: MaterialAutoCompleteTextView,
+        labels: List<String>,
+        selected: String,
+        onPick: ((String) -> Unit)? = null
+    ) {
+        if (onPick != null) choiceSavers[view] = onPick
         val items = if (labels.isEmpty()) listOf(selected) else labels
-        view.setAdapter(StableAdapter(this, items))
-        val text = when {
-            selected.isNotBlank() && selected in items -> selected
-            selected.isNotBlank() -> selected
-            else -> items.first()
+        val saver = choiceSavers[view]
+        bindingChoices = true
+        try {
+            view.setAdapter(StableAdapter(this, items))
+            val text = when {
+                selected.isNotBlank() && selected in items -> selected
+                selected.isNotBlank() -> selected
+                else -> items.first()
+            }
+            view.setText(text, false)
+        } finally {
+            bindingChoices = false
         }
-        view.setText(text, false)
+        if (saver == null) return
+        view.setOnItemClickListener { _, _, position, _ ->
+            if (bindingChoices || position < 0) return@setOnItemClickListener
+            val label = view.adapter?.getItem(position)?.toString() ?: return@setOnItemClickListener
+            saver(label)
+        }
     }
 
     private fun speakDeviceBlocking(phrase: String, rate: Float, voiceName: String): Boolean {
@@ -569,6 +917,7 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         destroyed = true
+        uiHandler.removeCallbacks(showSavedRunnable)
         if (testing) EdgeSpeaker.stopActive()
         try { tts?.stop() } catch (_: Exception) {}
         try { tts?.shutdown() } catch (_: Exception) {}
