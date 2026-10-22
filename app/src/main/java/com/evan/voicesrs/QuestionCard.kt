@@ -6,7 +6,13 @@ package com.evan.voicesrs
  * ordinary text. The correct row is marked only after the answer is revealed.
  */
 object QuestionCard {
-    data class Option(val letter: String, val text: String, val correct: Boolean = false)
+    data class Option(
+        val letter: String,
+        val text: String,
+        val correct: Boolean = false,
+        /** The learner picked this row and it is not the correct one. */
+        val chosen: Boolean = false
+    )
 
     data class Parsed(val stem: String, val options: List<Option>, val mcq: Boolean)
 
@@ -98,9 +104,28 @@ object QuestionCard {
         return if (hits.size == 1) hits[0].letter else null
     }
 
+    /**
+     * Mark the correct row after reveal, and the chosen wrong row.
+     * A correct choice gets only the check. Rows stay in [parsed] order.
+     */
+    fun present(parsed: Parsed, answerPlain: String, revealed: Boolean, chosen: String?): Parsed {
+        val marked = withCorrect(parsed, answerPlain, revealed)
+        if (!revealed || chosen.isNullOrBlank()) return marked
+        val pick = chosen.trim().uppercase()
+        return marked.copy(
+            options = marked.options.map { opt ->
+                opt.copy(chosen = !opt.correct && opt.letter.equals(pick, ignoreCase = true))
+            }
+        )
+    }
+
     fun optionRow(option: Option): String {
         val line = "${option.letter}. ${option.text}".trim()
-        return if (option.correct) "$line ✓" else line
+        return when {
+            option.correct -> "$line ✓"
+            option.chosen -> "$line ✗"
+            else -> line
+        }
     }
 
     /** Quoted spoken answer, or the italic placeholder when nothing was said. */

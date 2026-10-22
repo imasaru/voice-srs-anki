@@ -12,16 +12,17 @@ import androidx.recyclerview.widget.RecyclerView
 
 /**
  * Shared chat list for the unfolded pane and the folded history sheet.
- * stackFromEnd puts a short thread at the bottom and shows the newest rows
- * on the first layout. Later appends restore the layout state, so the
- * viewport does not follow. There is no scrollToPosition and no jump pill.
+ * stackFromEnd puts a short thread at the bottom. A new question follows
+ * only when the user is already at the bottom. Otherwise it is held, and
+ * the "Next question" pill is the way back. A late explanation does not scroll.
  */
 class ChatPane(
     private val list: RecyclerView,
     private val unreadView: TextView,
     private val emptyView: TextView? = null,
     /** False when Show answer and the ratings are in a bar outside the list. */
-    private val embedControls: Boolean = true
+    private val embedControls: Boolean = true,
+    private val nextPill: TextView? = null
 ) {
     private val adapter = ChatAdapter(
         onExplExpanded = { id -> sample(id) },
@@ -29,10 +30,14 @@ class ChatPane(
         onThread = { id -> openThread(id) }
     )
     private val tracker = ReadReceiptTracker(now = { SystemClock.elapsedRealtime() })
+    private val follow = ChatFollow()
     private val handler = Handler(Looper.getMainLooper())
     private var resumed = false
     private var attached = false
     private var anchored = false
+    private var followView = ChatFollow.View()
+    private var lastKeys = emptyList<String>()
+    private var lastOrdinal = 0
 
     private val tick = object : Runnable {
         override fun run() {
@@ -50,9 +55,16 @@ class ChatPane(
         list.post { if (attached) render() }
     }
 
+    private val liveListener: () -> Unit = {
+        list.post { if (attached) render() }
+    }
+
     private val scroller = object : RecyclerView.OnScrollListener() {
         override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
             sample(null)
+            if (dy == 0) return
+            val bottom = isAtBottom()
+            applyFollow(follow.onScroll(followView.copy(atBottom = bottom), bottom), scrollNow = true)
         }
     }
 
@@ -65,6 +77,10 @@ class ChatPane(
         list.addOnScrollListener(scroller)
         ReviewLog.addListener(listener)
         DrillUi.addListener(uiListener)
+        LiveThread.addListener(liveListener)
+        nextPill?.setOnClickListener {
+            applyFollow(follow.onPill(followView), scrollNow = true)
+        }
         render()
     }
 
@@ -88,6 +104,8 @@ class ChatPane(
         list.removeOnScrollListener(scroller)
         ReviewLog.removeListener(listener)
         DrillUi.removeListener(uiListener)
+        LiveThread.removeListener(liveListener)
+        DrillService.reportChatScreen(attached = false, ordinal = followView.liveOrdinal, ready = false)
     }
 
     private fun render() {
@@ -97,7 +115,8 @@ class ChatPane(
         } catch (_: Exception) {
             true
         }
-        val rows = ChatFeed.rows(turns, DrillUi.state, embedControls).map { row ->
+        val liveFollows = LiveThread.snapshot()?.followUps.orEmpty()
+        val rows = ChatFeed.rows(turns, DrillUi.state, embedControls, liveFollows).map { row ->
             if (row is ChatRow.Live && !showCard) row.copy(revealText = false) else row
         }
         emptyView?.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
@@ -107,18 +126,89 @@ class ChatPane(
         } else {
             unreadView.context.getString(R.string.chat_unread_n, n)
         }
-        val lm = list.layoutManager
-        val adding = rows.size != adapter.currentList.size
-        val state = if (anchored && adding) lm?.onSaveInstanceState() else null
+        val live = rows.lastOrNull() as? ChatRow.Live
+        val ordinal = live?.questionOrdinal ?: 0
+        val keys = rows.map { it.key }
+        val explanationOnly = anchored && keys == lastKeys && ordinal == lastOrdinal
+        val measured = followView.copy(
+            atBottom = isAtBottom(),
+            liveVisible = liveRowVisible(),
+            chatPaused = DrillUi.state.chatPaused,
+            silent = DrillUi.state.silentSession
+        )
+        val decision = when {
+            ordinal > 0 && ordinal != lastOrdinal -> follow.onQuestion(measured, ordinal)
+            explanationOnly -> follow.onExplanation(measured.copy(liveOrdinal = ordinal))
+            ordinal > 0 -> follow.onVisible(measured.copy(liveOrdinal = ordinal), measured.liveVisible)
+            else -> follow.onQuestion(measured, 0)
+        }
+        lastKeys = keys
+        lastOrdinal = ordinal
+        val preserve = decision.scroll == ChatFollow.Scroll.NONE &&
+            (explanationOnly || !decision.view.atBottom || decision.view.holdingOrdinal != 0)
+        val lm = list.layoutManager as? LinearLayoutManager
+        val first = if (preserve) lm?.findFirstVisibleItemPosition() ?: -1 else -1
+        val top = if (first >= 0) lm?.findViewByPosition(first)?.top ?: 0 else 0
+        applyFollow(decision, scrollNow = false)
         adapter.submitList(rows) {
-            if (state != null) {
-                try {
-                    lm?.onRestoreInstanceState(state)
-                } catch (_: Exception) {
-                }
+            if (preserve && first >= 0) {
+                lm?.scrollToPositionWithOffset(first, top)
+            } else if (decision.scroll == ChatFollow.Scroll.TO_LIVE) {
+                val last = adapter.itemCount - 1
+                if (last >= 0) list.smoothScrollToPosition(last)
             }
             if (list.childCount > 0) anchored = true
+            list.post { publishVisibility() }
         }
+    }
+
+    private fun publishVisibility() {
+        if (!attached) return
+        val visible = liveRowVisible()
+        val bottom = isAtBottom()
+        val view = followView.copy(atBottom = bottom, liveVisible = visible)
+        val decision = if (view.holdingOrdinal != 0 && bottom) {
+            follow.onScroll(view, true)
+        } else {
+            follow.onVisible(view, visible)
+        }
+        applyFollow(decision, scrollNow = decision.scroll == ChatFollow.Scroll.TO_LIVE)
+    }
+
+    private fun applyFollow(decision: ChatFollow.Decision, scrollNow: Boolean) {
+        followView = decision.view
+        nextPill?.visibility = if (decision.showPill) View.VISIBLE else View.GONE
+        if (scrollNow && decision.scroll == ChatFollow.Scroll.TO_LIVE) {
+            val last = adapter.itemCount - 1
+            if (last >= 0) list.smoothScrollToPosition(last)
+        }
+        DrillService.reportChatScreen(
+            attached = attached,
+            ordinal = decision.view.liveOrdinal,
+            ready = decision.mayBegin
+        )
+    }
+
+    private fun isAtBottom(): Boolean {
+        if (!anchored || list.childCount == 0) return true
+        val range = list.computeVerticalScrollRange()
+        val extent = list.computeVerticalScrollExtent()
+        val offset = list.computeVerticalScrollOffset()
+        if (range <= extent + 1) return true
+        val slop = (ChatFollow.BOTTOM_SLOP_DP * list.resources.displayMetrics.density).toInt()
+        return range - (offset + extent) <= slop
+    }
+
+    private fun liveRowVisible(): Boolean {
+        for (i in 0 until list.childCount) {
+            val child = list.getChildAt(i) ?: continue
+            val pos = list.getChildAdapterPosition(child)
+            if (adapter.currentList.getOrNull(pos) !is ChatRow.Live) continue
+            val rect = android.graphics.Rect()
+            if (!child.getLocalVisibleRect(rect)) return false
+            return rect.height() > 0
+        }
+        return false
     }
 
     private fun sample(forceExpanded: Long?) {

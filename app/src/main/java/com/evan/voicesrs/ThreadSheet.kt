@@ -13,6 +13,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -72,14 +73,39 @@ class ThreadSheet : BottomSheetDialogFragment() {
             }
         })
         view.findViewById<Button>(R.id.threadDictate).setOnClickListener {
-            DrillService.pauseForChat(ChatPause.Trigger.DICTATION)
             val sheetView = view
-            if (dictation == null) dictation = ChatDictation(sheetView.context)
-            dictation?.start { spoken ->
-                sheetView.post {
-                    if (!isAdded) return@post
-                    ThreadAsk.ask(sheetView.context, turnId, spoken, byVoice = true)
+            DrillService.prepareDictation {
+                if (!isAdded) {
+                    DrillService.dictationFinished()
+                    return@prepareDictation
                 }
+                if (dictation == null) dictation = ChatDictation(sheetView.context)
+                dictation?.start(
+                    onPartial = { partial ->
+                        sheetView.post {
+                            if (!isAdded) return@post
+                            sheetView.findViewById<EditText>(R.id.threadInput)?.setText(partial)
+                        }
+                    },
+                    onFinal = { spoken ->
+                        sheetView.post {
+                            DrillService.dictationFinished()
+                            if (!isAdded) return@post
+                            ThreadAsk.ask(sheetView.context, turnId, spoken, byVoice = true)
+                        }
+                    },
+                    onMiss = {
+                        sheetView.post {
+                            DrillService.dictationFinished()
+                            if (!isAdded) return@post
+                            Toast.makeText(
+                                sheetView.context,
+                                R.string.chat_dictate_miss,
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                )
             }
         }
         DrillService.pauseForChat(ChatPause.Trigger.OPEN_THREAD)
@@ -99,6 +125,7 @@ class ThreadSheet : BottomSheetDialogFragment() {
     override fun onDestroyView() {
         dictation?.stop()
         dictation = null
+        DrillService.dictationFinished()
         ReviewLog.removeListener(listener)
         list = null
         super.onDestroyView()
@@ -114,6 +141,11 @@ class ThreadSheet : BottomSheetDialogFragment() {
             return
         }
         val question = root.findViewById<TextView>(R.id.threadQuestion)
+        val shuffle = try {
+            Prefs.load(root.context).shuffleOptions
+        } catch (_: Exception) {
+            true
+        }
         val mcq = CardFaceBinder.bindQuestion(
             root.findViewById(R.id.threadQuestionLabel),
             question,
@@ -121,7 +153,10 @@ class ThreadSheet : BottomSheetDialogFragment() {
             turn.frontText,
             index + 1,
             revealed = true,
-            answerPlain = turn.backText
+            answerPlain = turn.backText,
+            cardId = turn.cardId,
+            sessionStartMs = DrillUi.state.sessionStartedMs,
+            shuffle = shuffle
         )
         if (!mcq) {
             CardFaceBinder.setMarkup(
@@ -133,7 +168,8 @@ class ThreadSheet : BottomSheetDialogFragment() {
             root.findViewById(R.id.threadSpokenPill),
             root.findViewById(R.id.threadRatingPill),
             turn.transcript,
-            turn.ease
+            turn.ease,
+            root.findViewById(R.id.threadAnswerLabel)
         )
         val expl = BubbleModel.displayAi(turn.explanation, turn.frontText, turn.backText, unread = false)
         CardFaceBinder.fillSections(

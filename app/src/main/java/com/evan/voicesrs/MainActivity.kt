@@ -21,6 +21,7 @@ import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
@@ -172,7 +173,8 @@ class MainActivity : AppCompatActivity() {
                 chatList,
                 chatUnread,
                 findViewById(R.id.chatEmpty),
-                embedControls = embedControls
+                embedControls = embedControls,
+                nextPill = findViewById(R.id.chatNextPill)
             ).also { it.attach() }
         }
         applyAiChrome()
@@ -268,6 +270,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         chatDictation?.stop()
         chatDictation = null
+        DrillService.dictationFinished()
         chatPane?.detach()
         chatPane = null
         super.onDestroy()
@@ -280,8 +283,10 @@ class MainActivity : AppCompatActivity() {
      */
     private fun wireChatComposer() {
         val input = findViewById<EditText>(R.id.chatInput) ?: return
-        val dictate = findViewById<Button>(R.id.chatDictate)
-        val send = findViewById<Button>(R.id.chatSend)
+        val shell = findViewById<View>(R.id.chatInputShell)
+        val dictate = findViewById<ImageButton>(R.id.chatDictate)
+        val send = findViewById<ImageButton>(R.id.chatSend)
+        val hint = findViewById<TextView>(R.id.chatDictateHint)
         val resume = findViewById<Button>(R.id.chatResumeButton)
         input.clearFocus()
         window.setSoftInputMode(
@@ -289,19 +294,27 @@ class MainActivity : AppCompatActivity() {
                 WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
         )
         startButton.requestFocus()
+        val paintShell = {
+            shell?.isActivated = input.hasFocus() || !input.text.isNullOrEmpty()
+        }
         input.setOnFocusChangeListener { _, hasFocus ->
+            paintShell()
             if (hasFocus) DrillService.pauseForChat(ChatPause.Trigger.FOCUS_INPUT)
         }
         input.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                if (!s.isNullOrEmpty()) DrillService.pauseForChat(ChatPause.Trigger.TYPING)
+                paintShell()
+                if (!s.isNullOrEmpty()) {
+                    hint?.visibility = View.GONE
+                    DrillService.pauseForChat(ChatPause.Trigger.TYPING)
+                }
             }
         })
         val submit = {
-            sendChatQuestion(input.text?.toString().orEmpty(), byVoice = false)
-            input.setText("")
+            val sent = sendChatQuestion(input.text?.toString().orEmpty(), byVoice = false)
+            if (sent) input.setText("")
         }
         send?.setOnClickListener { submit() }
         input.setOnEditorActionListener { _, actionId, _ ->
@@ -313,24 +326,66 @@ class MainActivity : AppCompatActivity() {
             }
         }
         dictate?.setOnClickListener {
-            DrillService.pauseForChat(ChatPause.Trigger.DICTATION)
-            if (chatDictation == null) chatDictation = ChatDictation(this)
-            chatDictation?.start { spoken ->
-                runOnUiThread {
-                    if (isDestroyed) return@runOnUiThread
-                    sendChatQuestion(spoken, byVoice = true)
+            hint?.visibility = View.GONE
+            DrillService.prepareDictation {
+                if (isDestroyed) {
+                    DrillService.dictationFinished()
+                    return@prepareDictation
                 }
+                if (chatDictation == null) chatDictation = ChatDictation(this)
+                chatDictation?.start(
+                    onPartial = { partial ->
+                        runOnUiThread {
+                            if (isDestroyed) return@runOnUiThread
+                            input.setText(partial)
+                            input.setSelection(input.text?.length ?: 0)
+                        }
+                    },
+                    onFinal = { spoken ->
+                        runOnUiThread {
+                            if (isDestroyed) return@runOnUiThread
+                            DrillService.dictationFinished()
+                            input.setText(spoken)
+                            input.setSelection(input.text?.length ?: 0)
+                            val sent = sendChatQuestion(spoken, byVoice = true)
+                            if (sent) input.setText("")
+                        }
+                    },
+                    onMiss = {
+                        runOnUiThread {
+                            if (isDestroyed) return@runOnUiThread
+                            DrillService.dictationFinished()
+                            hint?.visibility = View.VISIBLE
+                        }
+                    }
+                )
             }
         }
         resume?.setOnClickListener { DrillService.resumeFromChat() }
     }
 
-    /** Latest graded card. A question with no turn yet does not send. */
-    private fun sendChatQuestion(raw: String, byVoice: Boolean) {
+    /**
+     * The main box targets the card on screen, the same one named above the field.
+     * Older cards are reached only from their own thread. Asking does not grade.
+     * @return true when the question was accepted.
+     */
+    private fun sendChatQuestion(raw: String, byVoice: Boolean): Boolean {
         val q = raw.trim()
-        if (q.isEmpty()) return
-        val turn = ReviewLog.snapshot().lastOrNull() ?: return
-        ThreadAsk.ask(this, turn.turnId, q, byVoice)
+        if (q.isEmpty()) return false
+        val state = DrillUi.state
+        val drilling = state.drillRunning || DrillService.running
+        val screen = if (drilling && state.questionOrdinal > 0 && state.frontHtml.isNotBlank()) {
+            ChatTarget.Screen(state.cardId, state.questionOrdinal, state.showBack)
+        } else {
+            null
+        }
+        return when (ChatTarget.composer(screen)) {
+            is ChatTarget.Target.Live -> {
+                LiveThread.ask(this, q, byVoice)
+                true
+            }
+            else -> false
+        }
     }
 
     /** The unfolded right pane is the chat. It stays full height with or without AI. */
@@ -482,6 +537,21 @@ class MainActivity : AppCompatActivity() {
         paintSwitch(switchModel.on)
         val silentOn = switchModel.on
         val hasQuestion = drilling && state.frontHtml.isNotBlank()
+        val askAbout = findViewById<TextView>(R.id.chatAskAbout)
+        val askLine = if (hasQuestion) {
+            val leaf = DeckName.split(cfg.deck).second.ifBlank { cfg.deck }
+            ChatAskLabel.line(state.questionOrdinal, leaf)
+        } else {
+            null
+        }
+        if (askAbout != null) {
+            if (askLine == null) {
+                askAbout.visibility = View.GONE
+            } else {
+                askAbout.visibility = View.VISIBLE
+                askAbout.text = askLine
+            }
+        }
         val controls = AnswerControls.of(
             hasQuestion = hasQuestion,
             answerShown = state.showBack,
@@ -494,10 +564,11 @@ class MainActivity : AppCompatActivity() {
         )
         findViewById<View>(R.id.gradeChips)?.visibility = ratingVis
         val sel = if (controls.rating) state.selectedEase else null
-        chipAgain?.isChecked = sel == 1
-        chipHard?.isChecked = sel == 2
-        chipGood?.isChecked = sel == 3
-        chipEasy?.isChecked = sel == 4
+        val suggested = if (controls.rating) state.suggestedEase else null
+        RatingSuggest.apply(chipAgain, 1, sel, suggested)
+        RatingSuggest.apply(chipHard, 2, sel, suggested)
+        RatingSuggest.apply(chipGood, 3, sel, suggested)
+        RatingSuggest.apply(chipEasy, 4, sel, suggested)
         startButton.isEnabled = !state.drillRunning
         if (headerMeta != null) {
             startButton.visibility = if (drilling) View.GONE else View.VISIBLE

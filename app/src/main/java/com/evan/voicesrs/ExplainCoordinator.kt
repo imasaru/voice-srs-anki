@@ -110,6 +110,7 @@ class ExplainSession private constructor(
             aiEnabled = cfg.aiEnabled
         ) ?: return
         attachThread(turn)
+        mergeLiveAsks(turn)
         if (!cfg.aiEnabled) return
         if (cached != null) {
             ExplainLog.ready(turn.turnId, cached = true)
@@ -134,6 +135,30 @@ class ExplainSession private constructor(
             emptyList()
         }
         if (saved.isNotEmpty()) ReviewLog.replaceFollowUps(turn.turnId, saved)
+    }
+
+    /**
+     * Asks typed on the live card, before it was a graded turn, land on this turn.
+     * Asking did not grade the card. An empty take means the id did not match.
+     */
+    private fun mergeLiveAsks(turn: ReviewTurn) {
+        val pending = LiveThread.take(turn.cardId)
+        if (pending.isEmpty()) return
+        val base = ReviewLog.snapshot().firstOrNull { it.turnId == turn.turnId }?.followUps.orEmpty()
+        val merged = base + pending
+        ReviewLog.replaceFollowUps(turn.turnId, merged)
+        try {
+            ThreadStore.upsert(
+                context.filesDir,
+                StoredThread(
+                    cardId = turn.cardId,
+                    noteId = turn.noteId,
+                    contentHash = turn.contentHash,
+                    messages = ThreadStore.messagesOf(merged)
+                )
+            )
+        } catch (_: Exception) {
+        }
     }
 
     private fun cachedText(noteKey: Long, hash: String): String? {
@@ -183,6 +208,7 @@ class ExplainSession private constructor(
     companion object {
         fun start(context: android.content.Context, cfg: AnkiConfig): ExplainSession {
             ReviewLog.clear()
+            LiveThread.clear()
             if (cfg.aiEnabled) ExplainQueue.ensureStarted(context)
             return ExplainSession(context.applicationContext, cfg)
         }

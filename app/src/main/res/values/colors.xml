@@ -38,4 +38,14 @@
     <color name="note_footer">#6B6570</color>
     <color name="spoken_pill">#3A3740</color>
     <color name="spoken_pill_text">#E6E1E5</color>
+    <color name="option_wrong">#FDECEC</color>
+    <color name="option_wrong_text">#8C1D18</color>
+    <color name="option_wrong_stroke">#C4463A</color>
+    <color name="chat_input_bg">#2B2024</color>
+    <color name="chat_input_stroke">#4A3A40</color>
+    <color name="chat_accent">#F5B8C8</color>
+    <color name="chat_input_text">#F3ECEE</color>
+    <color name="chat_input_hint">#A8989E</color>
+    <color name="chat_meta">#8D8488</color>
+    <color name="chat_send_icon">#2B2024</color>
 </resources>

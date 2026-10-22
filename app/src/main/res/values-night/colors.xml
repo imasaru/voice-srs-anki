@@ -38,4 +38,7 @@
     <color name="note_footer">#8A8590</color>
     <color name="spoken_pill">#3A3740</color>
     <color name="spoken_pill_text">#E6E1E5</color>
+    <color name="option_wrong">#3A2224</color>
+    <color name="option_wrong_text">#F2B8B5</color>
+    <color name="option_wrong_stroke">#E07A72</color>
 </resources>

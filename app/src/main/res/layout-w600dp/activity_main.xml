@@ -93,6 +93,25 @@
                     android:paddingEnd="4dp"
                     android:textAppearance="?attr/textAppearanceTitleSmall"
                     android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/chatNextPill"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom|center_horizontal"
+                    android:layout_marginBottom="8dp"
+                    android:background="@drawable/bg_next_pill"
+                    android:clickable="true"
+                    android:contentDescription="@string/chat_next_question"
+                    android:focusable="true"
+                    android:paddingStart="12dp"
+                    android:paddingTop="6dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="6dp"
+                    android:text="@string/chat_next_question"
+                    android:textColor="@color/spoken_pill_text"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
             </FrameLayout>
 
             <include layout="@layout/include_chat_composer" />

@@ -161,7 +161,41 @@ class DrillService : Service(), VoiceIo {
                 Log.i(TAG, "show answer ignored: paused for chat")
                 return
             }
+            // The next question is held above the fold. Do not reveal it until it is on screen.
+            if (svc.screenAttached && svc.shownOrdinal > 0 && svc.screenReadyOrdinal != svc.shownOrdinal) {
+                Log.i(TAG, "show answer ignored: next question held")
+                return
+            }
             svc.releaseShowAnswer()
+        }
+
+        /**
+         * Dictate. Release the drill recognizer without the no-match tone, then
+         * run [onReady] so a separate dictation recognizer can take the mic.
+         * Pause after this must not cancel that recognizer.
+         */
+        fun prepareDictation(onReady: () -> Unit) {
+            val svc = active
+            if (svc == null) {
+                onReady()
+                return
+            }
+            svc.handoffMicToDictation(onReady)
+        }
+
+        /** Dictation ended or failed. The drill stays paused until Resume or a rating. */
+        fun dictationFinished() {
+            active?.dictating = false
+        }
+
+        /** Chat column measurement. [ready] means this question may leave the hold. */
+        fun reportChatScreen(attached: Boolean, ordinal: Int, ready: Boolean) {
+            active?.onChatScreen(attached, ordinal, ready)
+        }
+
+        /** Tapped MCQ row. The letter is the original one. This does not grade. */
+        fun submitLetter(letter: String) {
+            active?.acceptLetter(letter)
         }
 
         /** Live silent switch. Does not restart the drill. */
@@ -238,6 +272,23 @@ class DrillService : Service(), VoiceIo {
     @Volatile private var tapGrade = false
     /** The listen result in hand came from a tap, not the microphone. */
     @Volatile private var tapTranscript = false
+    /** Dictation owns the microphone. Pause and the drill listener must not cancel it. */
+    @Volatile private var dictating = false
+    /** False when no chat column is attached, so a headless drill does not wait forever. */
+    @Volatile private var screenAttached = false
+    /** True after the chat column has reported once this service instance. */
+    @Volatile private var screenKnown = false
+    /** Ordinal whose question bubble is on screen and not held. */
+    @Volatile private var screenReadyOrdinal = 0
+    /** Ordinal passed to [showQuestionUi] for the card in the loop. */
+    @Volatile private var shownOrdinal = 0
+    /** Original letter from a tap or a spoken "B" / "bee". Null until the learner picks. */
+    @Volatile private var chosenLetter: String? = null
+    /** Wall clock at session start. Option order is seeded with this and the card id. */
+    @Volatile private var sessionStartedMs = 0L
+    /** Question HTML of the card in [drillOne]. Letter parsing reads it. */
+    @Volatile private var activeQuestionHtml = ""
+    private val screenLatch = AtomicReference<CountDownLatch?>(null)
 
     /** Grading path is pluggable: v1 self-grading, v2 (future) LLM judge. */
     var grader: Grader = VoiceSelfGrader()
@@ -629,6 +680,11 @@ class DrillService : Service(), VoiceIo {
         micWarned = false
         listenHealth.reset()
         listenFault = false
+        dictating = false
+        chosenLetter = null
+        shownOrdinal = 0
+        screenReadyOrdinal = 0
+        sessionStartedMs = System.currentTimeMillis()
         if (sessionSilent) Log.i(TAG, "silent mode: mic disabled")
         if (stopRequested.get()) return
         if (!sessionSilent) initRecognizerOnMain()
@@ -649,7 +705,11 @@ class DrillService : Service(), VoiceIo {
                     errorMessage = "",
                     status = "Checking Anki…",
                     progressLine = "",
-                    pendingSync = store.readGrades().size
+                    pendingSync = store.readGrades().size,
+                    sessionStartedMs = sessionStartedMs,
+                    cardId = 0L,
+                    chosenLetter = null,
+                    suggestedEase = null
                 )
             }
             if (cfg.apiKey.isBlank()) {
@@ -721,7 +781,10 @@ class DrillService : Service(), VoiceIo {
                         awaitingShowAnswer = false,
                         thinkSecondsLeft = null,
                         chatPaused = false,
-                        questionOrdinal = 0
+                        questionOrdinal = 0,
+                        cardId = 0L,
+                        chosenLetter = null,
+                        suggestedEase = null
                     )
                     when {
                         pendingRestart.get() -> cleared
@@ -747,21 +810,26 @@ class DrillService : Service(), VoiceIo {
         runCatching { DrillUi.update { it.copy(engineLabel = label) } }
     }
 
-    private fun showQuestionUi(questionHtml: String, cardIndex: Int) = synchronized(gradeGate) {
+    private fun showQuestionUi(questionHtml: String, cardIndex: Int, cardId: Long, noteId: Long?) = synchronized(gradeGate) {
         synchronized(injectLock) {
             pendingGrades.clear()
             gradeGate.newCard()
         }
         tapGrade = false
         tapTranscript = false
+        chosenLetter = null
+        val ordinal = cardIndex + 1
+        shownOrdinal = ordinal
+        screenReadyOrdinal = 0
         val gate = synchronized(gateLock) { listenGate }
         val silent = gate.silent
         val pausedNow = chatPaused.get()
+        val front = AnkiText.displayHtml(questionHtml)
         runCatching {
             DrillUi.update {
                 it.copy(
                     status = if (silent) "Tap to show the answer" else "Reading the question",
-                    frontHtml = AnkiText.displayHtml(questionHtml),
+                    frontHtml = front,
                     backHtml = "",
                     showBack = false,
                     ratingVisible = false,
@@ -771,12 +839,21 @@ class DrillService : Service(), VoiceIo {
                     awaitingShowAnswer = true,
                     silentSession = silent,
                     silentGeneration = gate.epoch,
-                    questionOrdinal = cardIndex + 1,
+                    questionOrdinal = ordinal,
+                    cardId = cardId,
+                    sessionStartedMs = sessionStartedMs,
+                    chosenLetter = null,
+                    suggestedEase = null,
                     thinkSecondsLeft = null,
                     chatPaused = pausedNow
                 )
             }
         }
+        LiveThread.open(
+            ChatTarget.Screen(cardId, ordinal, revealed = false),
+            noteId,
+            BubbleModel.fullQuestion(questionHtml).ifBlank { AnkiText.stripHtml(questionHtml) }
+        )
     }
 
     private fun showAnswerUi(questionHtml: String, answerHtml: String) = synchronized(gradeGate) {
@@ -794,10 +871,13 @@ class DrillService : Service(), VoiceIo {
                     showBack = true,
                     ratingVisible = true,
                     ratingMicOpen = false,
-                    awaitingShowAnswer = false
+                    awaitingShowAnswer = false,
+                    chosenLetter = chosenLetter,
+                    suggestedEase = null
                 )
             }
         }
+        publishSuggestion()
     }
 
     // ---------- VoiceIo (blocking; called from the session thread) ----------
@@ -959,7 +1039,10 @@ class DrillService : Service(), VoiceIo {
             if (stopped()) return null
             if (showAnswerEarly.get() || sessionSilent) return null
             val missed = heard.isNullOrBlank()
-            if (!missed) return afterListen(heard)
+            if (!missed) {
+                if (noteChoice(heard)) return chosenLetter
+                return afterListen(heard)
+            }
             if (!ListenWindow.openAnother(completed, max, lastMissed = true, stopped = false)) {
                 giveUpToSilent()
                 return null
@@ -1149,7 +1232,9 @@ class DrillService : Service(), VoiceIo {
                 card.buttons,
                 ListenWindow.waitMs(cfg.listenWaitSec),
                 cfg.listenAttempts,
-                ThinkTime.normalize(cfg.thinkTimeSec)
+                ThinkTime.normalize(cfg.thinkTimeSec),
+                card.cardId,
+                null
             ) {
                 anki.guiShowAnswer()
                 val shown = anki.guiCurrentCard()
@@ -1294,7 +1379,9 @@ class DrillService : Service(), VoiceIo {
                 card.buttons,
                 ListenWindow.waitMs(cfg.listenWaitSec),
                 cfg.listenAttempts,
-                ThinkTime.normalize(cfg.thinkTimeSec)
+                ThinkTime.normalize(cfg.thinkTimeSec),
+                card.cardId,
+                card.noteId
             ) {
                 Revealed.Answer(card.front, card.back, card.buttons)
             }
@@ -1357,20 +1444,28 @@ class DrillService : Service(), VoiceIo {
         listenWaitMs: Long,
         listenAttempts: Int,
         thinkTimeSec: Int,
+        cardId: Long,
+        noteId: Long?,
         reveal: () -> Revealed
     ): CardStep {
-        val question = AnkiText.spokenText(questionHtml)
+        activeQuestionHtml = questionHtml
+        val question = spokenQuestion(questionHtml, cardId)
         if (question.isBlank()) return CardStep.Blank
         val started = SystemClock.elapsedRealtime()
         showAnswerEarly.set(false)
         silentReveal.set(false)
+        chosenLetter = null
         if (!awaitChatResume()) return CardStep.Paused
-        showQuestionUi(questionHtml, cardIndex)
+        showQuestionUi(questionHtml, cardIndex, cardId, noteId)
+        if (!awaitOnScreen(cardIndex + 1)) return CardStep.Paused
         var repeats = 0
         var transcript = ""
         while (!stopRequested.get()) {
             if (!awaitChatResume()) return CardStep.Paused
-            if (showAnswerEarly.getAndSet(false)) break
+            if (showAnswerEarly.getAndSet(false)) {
+                if (transcript.isBlank()) chosenLetter?.let { transcript = it }
+                break
+            }
             when (AudioGate.resume(sessionSilent, cardUp = true, answerShown = false)) {
                 CardResume.HOLD -> when (awaitShowAnswer()) {
                     ShowWait.STOPPED -> return CardStep.Paused
@@ -1391,6 +1486,7 @@ class DrillService : Service(), VoiceIo {
                         when (val end = thinkForAnswer(thinkTimeSec, listenWaitMs)) {
                             ThinkResult.Reveal -> {
                                 thinkTranscript?.let { transcript = it }
+                                if (transcript.isBlank()) chosenLetter?.let { transcript = it }
                                 thinkTranscript = null
                                 break
                             }
@@ -1408,7 +1504,17 @@ class DrillService : Service(), VoiceIo {
                     if (showAnswerEarly.get() || sessionSilent || chatPaused.get()) continue
                     val heard = listenForAnswer(listenWaitMs, listenAttempts, speedMode)
                     if (stopRequested.get()) return CardStep.Paused
-                    if (chatPaused.get() || showAnswerEarly.get() || sessionSilent) continue
+                    if (chatPaused.get() || showAnswerEarly.get() || sessionSilent) {
+                        if (showAnswerEarly.get() && !chosenLetter.isNullOrBlank()) {
+                            transcript = chosenLetter.orEmpty()
+                            break
+                        }
+                        continue
+                    }
+                    if (!chosenLetter.isNullOrBlank() && heard == chosenLetter) {
+                        transcript = chosenLetter.orEmpty()
+                        break
+                    }
                     when (val action = GradeMapper.parse(heard)) {
                         VoiceAction.Repeat -> {
                             repeats++
@@ -1429,6 +1535,7 @@ class DrillService : Service(), VoiceIo {
             }
         }
         showAnswerEarly.set(false)
+        if (transcript.isBlank()) chosenLetter?.let { transcript = it }
         if (!awaitChatResume()) return CardStep.Paused
         if (stopRequested.get()) return CardStep.Paused
         val revealed = reveal()
@@ -1440,6 +1547,7 @@ class DrillService : Service(), VoiceIo {
         val answerText = AnkiText.spokenText(answerBody)
         Log.d(TAG, "tts answer: $answerText")
         showAnswerUi(answer.questionHtml, answerBody)
+        LiveThread.reveal(AnkiText.stripHtml(answerBody), transcript)
         val gradeButtons = answerButtons.ifEmpty { buttons }
         val questionForGrade = answer.questionHtml.ifBlank { questionHtml }
         var speakAnswer = true
@@ -1581,7 +1689,7 @@ class DrillService : Service(), VoiceIo {
                     }
                     ThinkTime.Hear.SHOW_ANSWER -> return ThinkResult.Reveal
                     ThinkTime.Hear.ANSWER -> {
-                        thinkTranscript = heard?.trim().orEmpty()
+                        thinkTranscript = if (noteChoice(heard)) chosenLetter else heard?.trim().orEmpty()
                         return ThinkResult.Reveal
                     }
                     ThinkTime.Hear.REPEAT -> return ThinkResult.Repeat
@@ -1605,7 +1713,114 @@ class DrillService : Service(), VoiceIo {
     /** Spoken answer captured during think time. Null for show-answer, silence, and expiry. */
     @Volatile private var thinkTranscript: String? = null
 
+    /** Speech for the question. Unchanged cards keep [AnkiText.spokenText]. */
+    private fun spokenQuestion(questionHtml: String, cardId: Long): String {
+        val original = AnkiText.spokenText(questionHtml)
+        val plain = BubbleModel.fullQuestion(questionHtml).ifBlank { AnkiText.stripHtml(questionHtml) }
+        val parsed = QuestionCard.parse(plain)
+        if (!parsed.mcq) return original
+        val enabled = try {
+            Prefs.load(this).shuffleOptions
+        } catch (_: Exception) {
+            true
+        }
+        val ordered = OptionShuffle.order(parsed.options, cardId, sessionStartedMs, enabled)
+        val changed = ordered.map { it.letter } != parsed.options.map { it.letter }
+        if (!changed) return original
+        return OptionShuffle.spoken(parsed.stem, ordered)
+    }
+
+    /**
+     * Block until this question is on screen, or until there is no chat column.
+     * The first report may still be in flight, so an unknown screen waits briefly
+     * instead of treating "not yet reported" as detached.
+     */
+    private fun awaitOnScreen(ordinal: Int): Boolean {
+        val unknownUntil = SystemClock.elapsedRealtime() + 500
+        while (!stopRequested.get() && !destroyed) {
+            if (showAnswerEarly.get() || screenReadyOrdinal == ordinal) return true
+            if (screenKnown && !screenAttached) return true
+            if (!screenKnown && SystemClock.elapsedRealtime() >= unknownUntil) return true
+            if (chatPaused.get()) {
+                if (!awaitChatResume()) return false
+                continue
+            }
+            val latch = CountDownLatch(1)
+            screenLatch.set(latch)
+            try {
+                if (showAnswerEarly.get() || screenReadyOrdinal == ordinal) return true
+                if (screenKnown && !screenAttached) return true
+                if (!screenKnown && SystemClock.elapsedRealtime() >= unknownUntil) return true
+                latch.await(250, TimeUnit.MILLISECONDS)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            } finally {
+                screenLatch.compareAndSet(latch, null)
+            }
+        }
+        return false
+    }
+
+    private fun onChatScreen(attached: Boolean, ordinal: Int, ready: Boolean) {
+        screenKnown = true
+        screenAttached = attached
+        if (ready && ordinal > 0 && ordinal == shownOrdinal) screenReadyOrdinal = ordinal
+        screenLatch.get()?.countDown()
+    }
+
+    /** Remember the original letter and reveal. Does not claim a grade. */
+    private fun acceptLetter(letter: String) {
+        if (gradeGate.isRevealed()) return
+        val choice = TapAnswer.onTap(letter, correct = null, revealed = false) ?: return
+        chosenLetter = choice.letter
+        if (shownOrdinal > 0) screenReadyOrdinal = shownOrdinal
+        screenLatch.get()?.countDown()
+        runCatching { DrillUi.update { it.copy(chosenLetter = choice.letter) } }
+        releaseShowAnswer()
+    }
+
+    /** A spoken letter during the answer window. Null when it is not a choice. */
+    private fun noteChoice(raw: String?): Boolean {
+        val choice = letterChoice(raw) ?: return false
+        chosenLetter = choice.letter
+        return true
+    }
+
+    private fun letterChoice(raw: String?): TapAnswer.Choice? {
+        val plain = BubbleModel.fullQuestion(activeQuestionHtml).ifBlank { AnkiText.stripHtml(activeQuestionHtml) }
+        val parsed = QuestionCard.parse(plain)
+        if (!parsed.mcq) return null
+        val letters = parsed.options.map { it.letter }.toSet()
+        return TapAnswer.onSpoken(raw, letters, correct = null, revealed = gradeGate.isRevealed())
+    }
+
+    /** Outline Good or Again. The chip is not selected and the card is not graded. */
+    private fun publishSuggestion() {
+        val letter = chosenLetter ?: return
+        val plain = BubbleModel.fullQuestion(DrillUi.state.frontHtml).ifBlank { DrillUi.state.frontHtml }
+        val parsed = QuestionCard.parse(plain)
+        val answer = AnkiText.stripHtml(DrillUi.state.backHtml)
+        val correct = QuestionCard.correctLetter(answer, parsed.options)
+        val ease = TapAnswer.suggestedEase(letter, correct)
+        runCatching { DrillUi.update { it.copy(chosenLetter = letter, suggestedEase = ease) } }
+    }
+
+    /**
+     * Main thread. Cancel and destroy the drill recognizer first, with no end tone,
+     * then mark dictation as the owner, then start the dictation recognizer.
+     */
+    private fun handoffMicToDictation(onReady: () -> Unit) {
+        val run = Runnable {
+            if (!dictating) enterChatPause(endTone = false)
+            dictating = true
+            mainHandler.post(onReady)
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) run.run() else mainHandler.post(run)
+    }
+
     private fun releaseChatPause() {
+        dictating = false
         chatPaused.set(false)
         chatPauseLatch.get()?.countDown()
         pendingVoiceReply.set(null)
@@ -1617,7 +1832,23 @@ class DrillService : Service(), VoiceIo {
         shownThinkSec = null
     }
 
-    private fun enterChatPause() {
+    private fun enterChatPause(endTone: Boolean = true) {
+        if (dictating) {
+            // The dictation recognizer owns the mic. Freeze the card and leave it alone.
+            if (chatPaused.compareAndSet(false, true)) {
+                if (thinkDeadlineMs > 0L) {
+                    frozenThinkMs = ChatPause.freeze(SystemClock.elapsedRealtime(), thinkDeadlineMs)
+                    thinkDeadlineMs = 0L
+                }
+                stopPlaybackNow()
+                showAnswerLatch.get()?.countDown()
+                silentGradeLatch.get()?.countDown()
+                chatPauseLatch.get()?.countDown()
+                if (::mainHandler.isInitialized) mainHandler.removeCallbacks(thinkTicker)
+            }
+            publishCue(true, null)
+            return
+        }
         if (!chatPaused.compareAndSet(false, true)) {
             publishCue(true, null)
             return
@@ -1627,7 +1858,7 @@ class DrillService : Service(), VoiceIo {
             thinkDeadlineMs = 0L
         }
         stopPlaybackNow()
-        finishListen(null)
+        finishListen(null, tone = endTone)
         showAnswerLatch.get()?.countDown()
         silentGradeLatch.get()?.countDown()
         chatPauseLatch.get()?.countDown()
@@ -1848,6 +2079,7 @@ class DrillService : Service(), VoiceIo {
         latch?.countDown()
         stopPlaybackNow()
         finishListen(null)
+        stopThinkClock()
     }
 
     /**
@@ -2037,7 +2269,7 @@ class DrillService : Service(), VoiceIo {
     }
 
     private fun listenWithRecognizer(timeoutMs: Long): String? {
-        if (chatPaused.get()) return null
+        if (dictating || chatPaused.get()) return null
         if (!AudioGate.micAllowed(sessionSilent)) return null
         if (!awaitBackoff()) return null
         if (stopRequested.get() || chatPaused.get()) return null
@@ -2168,13 +2400,13 @@ class DrillService : Service(), VoiceIo {
      * the recognizer. Idempotent: a second call (re-entrant error, timeout
      * after result) does nothing and does not touch the recognizer again.
      */
-    private fun finishListen(text: String?) {
+    private fun finishListen(text: String?, tone: Boolean = true) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             // Block until main applies the result. Otherwise the session thread
             // can observe a stale transcript and leave the recognizer alive.
             val done = CountDownLatch(1)
             mainHandler.post {
-                finishListen(text)
+                finishListen(text, tone)
                 done.countDown()
             }
             try {
@@ -2198,7 +2430,7 @@ class DrillService : Service(), VoiceIo {
         errorGate.set(false)
         destroyRecognizerOnMain()
         latch?.countDown()
-        toneListenEnd()
+        if (tone && !dictating) toneListenEnd()
         runCatching { DrillUi.update { it.copy(ratingMicOpen = false) } }
     }
 
@@ -2236,6 +2468,10 @@ class DrillService : Service(), VoiceIo {
 
     /** Main thread. Drops any previous recognizer and starts a new session. */
     private fun beginListenOnMain(session: Int, epoch: Int) {
+        if (dictating) {
+            if (sessionOpen(session)) finishListen(null, tone = false)
+            return
+        }
         if (!listenEpochOpen(epoch) || chatPaused.get()) {
             // A stale start must not finish a newer listen that already replaced it.
             if (sessionOpen(session)) finishListen(null)
@@ -2363,6 +2599,7 @@ class DrillService : Service(), VoiceIo {
 
     /** Main thread. Fresh instance; the previous one is destroyed first. */
     private fun createRecognizerOnMain(session: Int, epoch: Int): Boolean {
+        if (dictating) return false
         if (!listenEpochOpen(epoch) || !SilentPolicy.of(sessionSilent).createRecognizer) return false
         destroyRecognizerOnMain()
         if (destroyed || !listenActive || session != listenToken) return false

@@ -16,6 +16,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.core.text.HtmlCompat
 /**
  * Binds a question card, the answer/rating pills, and an explanation's sections.
@@ -29,11 +30,20 @@ object CardFaceBinder {
         source: String,
         number: Int,
         revealed: Boolean,
-        answerPlain: String
+        answerPlain: String,
+        cardId: Long = 0L,
+        sessionStartMs: Long = 0L,
+        shuffle: Boolean = true,
+        chosenLetter: String? = null,
+        onOption: ((String) -> Unit)? = null
     ): Boolean {
         val plain = BubbleModel.fullQuestion(source).ifBlank { AnkiText.stripHtml(source) }
         val answer = AnkiText.stripHtml(answerPlain).ifBlank { answerPlain.trim() }
-        val parsed = QuestionCard.withCorrect(QuestionCard.parse(plain), answer, revealed)
+        val parsedRaw = QuestionCard.parse(plain)
+        val ordered = parsedRaw.copy(
+            options = OptionShuffle.order(parsedRaw.options, cardId, sessionStartMs, shuffle && parsedRaw.mcq)
+        )
+        val parsed = QuestionCard.present(ordered, answer, revealed, chosenLetter)
         if (!parsed.mcq || options == null) {
             label?.visibility = View.GONE
             options?.visibility = View.GONE
@@ -48,23 +58,44 @@ object CardFaceBinder {
         options.visibility = View.VISIBLE
         options.removeAllViews()
         val density = options.resources.displayMetrics.density
+        val canTap = onOption != null && TapAnswer.tappable(parsed.mcq, revealed)
         for (option in parsed.options) {
             val row = TextView(options.context)
             setMarkup(row, QuestionCard.optionRow(option))
             row.typeface = Typeface.MONOSPACE
             row.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            row.setTextColor(
-                options.context.getColor(
-                    if (option.correct) R.color.option_correct_text else R.color.option_text
-                )
-            )
-            row.setBackgroundResource(
-                if (option.correct) R.drawable.bg_option_correct else R.drawable.bg_option
-            )
+            val textColor = when {
+                option.correct -> R.color.option_correct_text
+                option.chosen -> R.color.option_wrong_text
+                else -> R.color.option_text
+            }
+            val background = when {
+                option.correct -> R.drawable.bg_option_correct
+                option.chosen -> R.drawable.bg_option_wrong
+                else -> R.drawable.bg_option
+            }
+            row.setTextColor(options.context.getColor(textColor))
+            row.setBackgroundResource(background)
             val padH = (8 * density).toInt()
             val padV = (6 * density).toInt()
             row.setPadding(padH, padV, padH, padV)
-            if (option.correct) row.contentDescription = "Correct answer ${option.letter}"
+            row.contentDescription = when {
+                option.correct -> "Correct answer ${option.letter}"
+                canTap -> "Answer ${option.letter}"
+                option.chosen -> "Your answer ${option.letter}"
+                else -> null
+            }
+            if (canTap) {
+                row.isClickable = true
+                row.isFocusable = true
+                val typed = TypedValue()
+                row.context.theme.resolveAttribute(android.R.attr.selectableItemBackground, typed, true)
+                row.foreground = ContextCompat.getDrawable(row.context, typed.resourceId)
+                row.setOnClickListener { onOption?.invoke(option.letter) }
+            } else {
+                row.isClickable = false
+                row.setOnClickListener(null)
+            }
             val lp = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -76,7 +107,14 @@ object CardFaceBinder {
         return true
     }
 
-    fun bindPills(spoken: TextView, rating: TextView, transcript: String, ease: Int?) {
+    fun bindPills(
+        spoken: TextView,
+        rating: TextView,
+        transcript: String,
+        ease: Int?,
+        heading: TextView? = null
+    ) {
+        heading?.text = TapAnswer.heading(transcript)
         val (quote, answered) = QuestionCard.quotedAnswer(transcript)
         spoken.text = quote
         spoken.setTypeface(null, if (answered) Typeface.NORMAL else Typeface.ITALIC)

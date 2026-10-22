@@ -2,6 +2,7 @@ package com.evan.voicesrs
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PromptBuilderTest {
@@ -27,5 +28,35 @@ class PromptBuilderTest {
             PromptBuilder.userMessage("<b>Hello</b>", "World")
         )
         assertFalse(PromptBuilder.userMessage("Q", "the spoken answer").contains("said"))
+    }
+
+    @Test
+    fun `hint mode withholds the answer and the revealed prompt stays version 2`() {
+        assertEquals(2, PromptBuilder.PROMPT_VERSION)
+        val hint = PromptBuilder.hintSystem()
+        assertFalse(hint == PromptBuilder.SYSTEM)
+        assertTrue(hint.contains("withholding the answer"))
+        assertFalse(hint.contains("Why <letter>"))
+        val secret = "CORRECT_OPTION_ZEPHYR"
+        val messages = PromptBuilder.hintMessages(
+            "What is a view?\nA. one\nB. two",
+            emptyList(),
+            "is it A?"
+        )
+        val blob = messages.joinToString("\n") { it.content }
+        assertFalse(blob.contains(secret))
+        assertFalse(blob.contains("Card back:"))
+        assertTrue(blob.contains("The answer is hidden."))
+        assertTrue(blob.contains("is it A?"))
+        val revealed = PromptBuilder.followUpMessages(
+            "Front",
+            secret,
+            "B",
+            "",
+            emptyList(),
+            "why B?"
+        )
+        assertTrue(revealed.first().content.contains("Card back: $secret"))
+        assertEquals(PromptBuilder.SYSTEM + PromptBuilder.FOLLOW_UP_EXTRA, PromptBuilder.followUpSystem())
     }
 }

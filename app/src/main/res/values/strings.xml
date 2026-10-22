@@ -129,8 +129,14 @@
     <string name="thread_send">Send</string>
     <string name="thread_you">You</string>
     <string name="thread_dictate">Dictate</string>
-    <string name="chat_ask_hint">Ask the AI</string>
+    <string name="chat_ask_hint">Ask the AI about this card…</string>
     <string name="chat_dictate">Dictate</string>
+    <string name="chat_dictate_cd">Dictate</string>
+    <string name="chat_send_cd">Send</string>
+    <string name="chat_dictate_miss">Didn\'t catch that</string>
+    <string name="chat_next_question">Next question ↓</string>
+    <string name="settings_shuffle">Shuffle answer options</string>
+    <string name="settings_shuffle_help">Mix up the order of multiple-choice options.</string>
     <string name="chat_paused">Paused, asking AI</string>
     <string name="chat_resume">Resume</string>
     <string name="answer_rating_label">YOUR ANSWER · RATING</string>

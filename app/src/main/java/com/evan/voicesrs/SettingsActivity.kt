@@ -88,6 +88,7 @@ class SettingsActivity : AppCompatActivity() {
         val testVoiceStatus: TextView = findViewById(R.id.testVoiceStatus)
         val speedSwitch: MaterialSwitch = findViewById(R.id.speedModeSwitch)
         val showCardSwitch: MaterialSwitch = findViewById(R.id.showCardSwitch)
+        val shuffleSwitch: MaterialSwitch = findViewById(R.id.shuffleOptionsSwitch)
         val listenWaitView: MaterialAutoCompleteTextView = findViewById(R.id.listenWaitInput)
         val endSilenceView: MaterialAutoCompleteTextView = findViewById(R.id.endSilenceInput)
         val listenAttemptsView: MaterialAutoCompleteTextView = findViewById(R.id.listenAttemptsInput)
@@ -111,6 +112,7 @@ class SettingsActivity : AppCompatActivity() {
         )
         speedSwitch.isChecked = held.speedMode
         showCardSwitch.isChecked = held.showCard
+        shuffleSwitch.isChecked = held.shuffleOptions
         val waitLabels = ListenWindow.WAIT_SEC_CHOICES.map {
             getString(R.string.settings_listen_wait_choice, it)
         }
@@ -229,6 +231,9 @@ class SettingsActivity : AppCompatActivity() {
         }
         showCardSwitch.setOnCheckedChangeListener { _, checked ->
             persist { it.copy(showCard = checked) }
+        }
+        shuffleSwitch.setOnCheckedChangeListener { _, checked ->
+            persist { it.copy(shuffleOptions = checked) }
         }
         goalModeView.doAfterTextChanged { refreshDrillFields() }
         commitGoalMode = {

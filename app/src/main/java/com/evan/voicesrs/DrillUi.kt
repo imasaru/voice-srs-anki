@@ -40,7 +40,15 @@ data class DrillUiState(
     /** Chat input, a thread, or a chat question has frozen this card. */
     val chatPaused: Boolean = false,
     /** 1-based session order of the live question. Zero when no card is up. */
-    val questionOrdinal: Int = 0
+    val questionOrdinal: Int = 0,
+    /** Anki card id of the live question. Zero when no card is up. */
+    val cardId: Long = 0L,
+    /** Wall clock when this drill session started. Shuffle seeds use it. */
+    val sessionStartedMs: Long = 0L,
+    /** Original letter the learner picked, before the grade. */
+    val chosenLetter: String? = null,
+    /** 1 Again or 3 Good. An outline only. It is not a grade. */
+    val suggestedEase: Int? = null
 )
 
 object DrillUi {

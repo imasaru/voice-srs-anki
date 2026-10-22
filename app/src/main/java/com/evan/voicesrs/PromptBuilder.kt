@@ -66,4 +66,33 @@ object PromptBuilder {
         messages += ChatMsg("user", question.trim())
         return messages
     }
+
+    /**
+     * The card is still unanswered. Concepts and reasoning only.
+     * The back of the card is not included. [SYSTEM] and [PROMPT_VERSION] stay as they are.
+     */
+    fun hintSystem(): String =
+        "You are a concise tutor for the Databricks Certified Data Engineer Associate exam. " +
+            "The learner has not answered this card yet. Explain the relevant concepts and help him reason toward the answer. " +
+            "Do not reveal or confirm the correct option or the correct answer. " +
+            "Say that you are withholding the answer until he answers. " +
+            "Stay under 120 words. No preamble."
+
+    fun hintMessages(front: String, prior: List<FollowUp>, question: String): List<ChatMsg> {
+        val messages = ArrayList<ChatMsg>()
+        messages += ChatMsg(
+            "user",
+            "Card front: ${AnkiText.stripHtml(front)}\nThe learner has not answered yet. The answer is hidden."
+        )
+        val done = prior.mapNotNull { follow ->
+            val ready = follow.state as? ExplState.Ready ?: return@mapNotNull null
+            if (follow.q.isBlank() || ready.text.isBlank()) null else follow.q to ready.text
+        }.takeLast(4)
+        for ((q, a) in done) {
+            messages += ChatMsg("user", q)
+            messages += ChatMsg("assistant", a)
+        }
+        messages += ChatMsg("user", question.trim())
+        return messages
+    }
 }

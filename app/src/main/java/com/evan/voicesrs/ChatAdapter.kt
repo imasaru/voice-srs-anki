@@ -1,6 +1,7 @@
 package com.evan.voicesrs
 
 import android.text.TextUtils
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -60,6 +61,14 @@ class ChatAdapter(
         }
     }
 
+    private fun shuffleOn(view: View): Boolean {
+        return try {
+            Prefs.load(view.context).shuffleOptions
+        } catch (_: Exception) {
+            true
+        }
+    }
+
     private fun toggle(set: HashSet<Long>, id: Long): Boolean {
         return if (set.add(id)) true else {
             set.remove(id)
@@ -77,6 +86,7 @@ class ChatAdapter(
         private val questionLabel: TextView = view.findViewById(R.id.questionLabel)
         private val cardStem: TextView = view.findViewById(R.id.cardStem)
         private val optionRows: LinearLayout = view.findViewById(R.id.optionRows)
+        private val userLabel: TextView = view.findViewById(R.id.userAnswerLabel)
         private val userAnswer: TextView = view.findViewById(R.id.userAnswerText)
         private val userPill: TextView = view.findViewById(R.id.userRatingPill)
         private val ai: View = view.findViewById(R.id.aiBubble)
@@ -100,6 +110,14 @@ class ChatAdapter(
             ai.setOnClickListener { toggleExpl(turn.turnId) }
             retry.setOnClickListener { onRetry(turn.turnId) }
             thread.setOnClickListener { onThread(turn.turnId) }
+            val session = DrillUi.state.sessionStartedMs
+            val shuffle = shuffleOn(itemView)
+            val chosen = TapAnswer.parseSpoken(
+                turn.transcript,
+                QuestionCard.parse(
+                    BubbleModel.fullQuestion(turn.frontText).ifBlank { turn.frontText }
+                ).options.map { it.letter }.toSet()
+            )
             val mcq = CardFaceBinder.bindQuestion(
                 questionLabel,
                 cardStem,
@@ -107,7 +125,11 @@ class ChatAdapter(
                 turn.frontText,
                 ordinal,
                 revealed = true,
-                answerPlain = turn.backText
+                answerPlain = turn.backText,
+                cardId = turn.cardId,
+                sessionStartMs = session,
+                shuffle = shuffle,
+                chosenLetter = chosen
             )
             if (mcq) {
                 cardStem.maxLines = Integer.MAX_VALUE
@@ -117,7 +139,7 @@ class ChatAdapter(
                 cardStem.maxLines = if (expanded) Integer.MAX_VALUE else BubbleModel.COLLAPSED_LINES
                 cardStem.ellipsize = if (expanded) null else TextUtils.TruncateAt.END
             }
-            CardFaceBinder.bindPills(userAnswer, userPill, turn.transcript, turn.ease)
+            CardFaceBinder.bindPills(userAnswer, userPill, turn.transcript, turn.ease, userLabel)
             val shown = BubbleModel.displayAi(turn.explanation, turn.frontText, turn.backText, turn.unread)
             body.visibility = View.GONE
             if (!shown.visible) {
@@ -158,13 +180,14 @@ class ChatAdapter(
 
     class DividerHolder(view: View) : RecyclerView.ViewHolder(view)
 
-    class LiveHolder(view: View) : RecyclerView.ViewHolder(view) {
+    inner class LiveHolder(view: View) : RecyclerView.ViewHolder(view) {
         private val label: TextView = view.findViewById(R.id.liveQuestionLabel)
         private val question: TextView = view.findViewById(R.id.liveQuestion)
         private val options: LinearLayout = view.findViewById(R.id.liveOptions)
         private val answer: TextView = view.findViewById(R.id.liveAnswer)
         private val answerFooter: TextView = view.findViewById(R.id.liveAnswerFooter)
         private val heard: TextView = view.findViewById(R.id.liveHeard)
+        private val follows: LinearLayout = view.findViewById(R.id.liveFollows)
         private val showAnswer: Button = view.findViewById(R.id.chatShowAnswer)
         private val chips: View = view.findViewById(R.id.chatGradeChips)
         private val again: Chip = view.findViewById(R.id.chatChipAgain)
@@ -190,7 +213,12 @@ class ChatAdapter(
                     row.front,
                     row.questionOrdinal,
                     revealed = row.showBack,
-                    answerPlain = row.back
+                    answerPlain = row.back,
+                    cardId = row.cardId,
+                    sessionStartMs = DrillUi.state.sessionStartedMs,
+                    shuffle = shuffleOn(itemView),
+                    chosenLetter = row.chosenLetter,
+                    onOption = if (row.showBack) null else { letter -> DrillService.submitLetter(letter) }
                 )
                 if (!mcq) CardFaceBinder.setMarkup(question, row.front)
                 if (row.showBack) {
@@ -221,14 +249,54 @@ class ChatAdapter(
             showAnswer.visibility = if (row.showAnswer) View.VISIBLE else View.GONE
             showAnswer.setOnClickListener { DrillService.submitShowAnswer() }
             chips.visibility = if (row.rating) View.VISIBLE else View.GONE
-            again.isChecked = row.selectedEase == 1
-            hard.isChecked = row.selectedEase == 2
-            good.isChecked = row.selectedEase == 3
-            easy.isChecked = row.selectedEase == 4
+            RatingSuggest.apply(again, 1, row.selectedEase, row.suggestedEase)
+            RatingSuggest.apply(hard, 2, row.selectedEase, row.suggestedEase)
+            RatingSuggest.apply(good, 3, row.selectedEase, row.suggestedEase)
+            RatingSuggest.apply(easy, 4, row.selectedEase, row.suggestedEase)
             again.setOnClickListener { DrillService.submitTestGrade("again") }
             hard.setOnClickListener { DrillService.submitTestGrade("hard") }
             good.setOnClickListener { DrillService.submitTestGrade("good") }
             easy.setOnClickListener { DrillService.submitTestGrade("easy") }
+            bindFollows(row.followUps)
+        }
+
+        private fun bindFollows(items: List<FollowUp>) {
+            follows.removeAllViews()
+            if (items.isEmpty()) {
+                follows.visibility = View.GONE
+                return
+            }
+            follows.visibility = View.VISIBLE
+            val density = follows.resources.displayMetrics.density
+            for (follow in items) {
+                follows.addView(followText(follow.q, user = true, density))
+                val reply = when (val state = follow.state) {
+                    is ExplState.Ready -> state.text
+                    is ExplState.Streaming -> state.partial.ifBlank { BubbleModel.GENERATING }
+                    is ExplState.Error -> state.message
+                    ExplState.Pending, ExplState.Queued -> BubbleModel.GENERATING
+                    ExplState.None -> ""
+                }
+                if (reply.isNotBlank()) follows.addView(followText(reply, user = false, density))
+            }
+        }
+
+        private fun followText(text: String, user: Boolean, density: Float): TextView {
+            val view = TextView(follows.context)
+            if (user) view.text = text else CardFaceBinder.applySections(view, text)
+            view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            view.setTextColor(follows.context.getColor(if (user) R.color.bubble_user_on else R.color.bubble_ai_on))
+            view.setBackgroundResource(if (user) R.drawable.bg_bubble_user else R.drawable.bg_bubble_ai)
+            val pad = (10 * density).toInt()
+            view.setPadding(pad, pad, pad, pad)
+            val lp = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            lp.topMargin = (6 * density).toInt()
+            lp.gravity = if (user) android.view.Gravity.END else android.view.Gravity.START
+            view.layoutParams = lp
+            return view
         }
 
     }

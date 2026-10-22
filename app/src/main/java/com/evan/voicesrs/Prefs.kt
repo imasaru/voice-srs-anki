@@ -31,6 +31,8 @@ data class AnkiConfig(
     val thinkTimeSec: Int = ThinkTime.DEFAULT_SEC,
     /** Show the card front and back on the main screen. */
     val showCard: Boolean = true,
+    /** Mix MCQ rows. Letters stay on their original text. On by default. */
+    val shuffleOptions: Boolean = true,
     /** Tap-only review. Read once at session start. The microphone stays closed. */
     val silentMode: Boolean = false,
     /** Fetch a batch and grade locally. Off by default. */
@@ -74,6 +76,7 @@ object Prefs {
     private const val KEY_LISTEN_ATTEMPTS = "listen_attempts"
     private const val KEY_THINK_TIME_SEC = "think_time_sec"
     private const val KEY_SHOW_CARD = "show_card"
+    private const val KEY_SHUFFLE = "shuffle_options"
     private const val KEY_SILENT = "silent_mode"
     private const val KEY_OFFLINE = "offline_batch"
     private const val KEY_BATCH_SIZE = "offline_batch_size"
@@ -167,6 +170,7 @@ object Prefs {
             .putInt(KEY_THINK_TIME_SEC, ThinkTime.normalize(cfg.thinkTimeSec))
             .remove(KEY_RELISTEN_ONCE)
             .putBoolean(KEY_SHOW_CARD, cfg.showCard)
+            .putBoolean(KEY_SHUFFLE, cfg.shuffleOptions)
             .putBoolean(KEY_SILENT, cfg.silentMode)
             .putBoolean(KEY_OFFLINE, cfg.offlineBatch)
             .putInt(KEY_BATCH_SIZE, cfg.offlineBatchSize.coerceIn(DrillSettings.MIN_BATCH, DrillSettings.MAX_BATCH))
@@ -228,6 +232,7 @@ object Prefs {
                 p.getInt(KEY_THINK_TIME_SEC, ThinkTime.DEFAULT_SEC)
             ),
             showCard = p.getBoolean(KEY_SHOW_CARD, true),
+            shuffleOptions = p.getBoolean(KEY_SHUFFLE, true),
             silentMode = p.getBoolean(KEY_SILENT, false),
             offlineBatch = p.getBoolean(KEY_OFFLINE, false),
             offlineBatchSize = p.getInt(KEY_BATCH_SIZE, DEFAULT_BATCH_SIZE)

@@ -26,7 +26,11 @@ sealed class ChatRow {
         /** False when Settings hides the card text. Buttons stay on the bar. */
         val revealText: Boolean = true,
         /** 1-based session order. Past rows use their list index instead. */
-        val questionOrdinal: Int = 0
+        val questionOrdinal: Int = 0,
+        val cardId: Long = 0L,
+        val chosenLetter: String? = null,
+        val suggestedEase: Int? = null,
+        val followUps: List<FollowUp> = emptyList()
     ) : ChatRow() {
         override val key: String = "live"
     }
@@ -40,7 +44,8 @@ object ChatFeed {
     fun rows(
         turns: List<ReviewTurn>,
         state: DrillUiState,
-        embedControls: Boolean = true
+        embedControls: Boolean = true,
+        liveFollowUps: List<FollowUp> = emptyList()
     ): List<ChatRow> {
         val out = ArrayList<ChatRow>(turns.size + 2)
         for (turn in turns) out += ChatRow.Past(turn)
@@ -60,7 +65,11 @@ object ChatFeed {
             showAnswer = buttons && controls.showAnswer,
             rating = buttons && controls.rating,
             selectedEase = if (buttons && controls.rating) state.selectedEase else null,
-            questionOrdinal = state.questionOrdinal
+            questionOrdinal = state.questionOrdinal,
+            cardId = state.cardId,
+            chosenLetter = state.chosenLetter,
+            suggestedEase = if (buttons && controls.rating) state.suggestedEase else null,
+            followUps = liveFollowUps
         )
         return out
     }
