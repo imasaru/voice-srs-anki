@@ -48,7 +48,12 @@ data class DrillUiState(
     /** Original letter the learner picked, before the grade. */
     val chosenLetter: String? = null,
     /** 1 Again or 3 Good. An outline only. It is not a grade. */
-    val suggestedEase: Int? = null
+    val suggestedEase: Int? = null,
+    /** QUESTION N or CARD N for the live card. */
+    val questionLabel: String = "",
+    /** Resume is shown while paused; pulsed after a question was sent. */
+    val chatShowResume: Boolean = false,
+    val chatResumePulse: Boolean = false
 )
 
 object DrillUi {

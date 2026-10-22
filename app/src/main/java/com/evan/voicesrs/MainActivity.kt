@@ -7,6 +7,10 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import android.content.pm.PackageManager
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.transition.Fade
@@ -47,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     private var backLabel: TextView? = null
     private var cardBack: TextView? = null
     private var heardText: TextView? = null
+    private var resumePulse: ObjectAnimator? = null
     private var chipAgain: Chip? = null
     private var chipHard: Chip? = null
     private var chipGood: Chip? = null
@@ -271,6 +276,7 @@ class MainActivity : AppCompatActivity() {
         chatDictation?.stop()
         chatDictation = null
         DrillService.dictationFinished()
+        stopResumePulse(findViewById(R.id.chatResumeButton))
         chatPane?.detach()
         chatPane = null
         super.onDestroy()
@@ -299,16 +305,27 @@ class MainActivity : AppCompatActivity() {
         }
         input.setOnFocusChangeListener { _, hasFocus ->
             paintShell()
-            if (hasFocus) DrillService.pauseForChat(ChatPause.Trigger.FOCUS_INPUT)
+            if (hasFocus) {
+                DrillService.pauseForChat(ChatPause.Trigger.FOCUS_INPUT)
+                DrillService.noteChatReengage()
+            } else {
+                DrillService.noteChatDisengage(ChatPause.Disengage.UNFOCUSED)
+            }
         }
+        var hadComposerText = !input.text.isNullOrEmpty()
         input.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 paintShell()
                 if (!s.isNullOrEmpty()) {
+                    hadComposerText = true
                     hint?.visibility = View.GONE
                     DrillService.pauseForChat(ChatPause.Trigger.TYPING)
+                    DrillService.noteChatReengage()
+                } else if (hadComposerText) {
+                    hadComposerText = false
+                    DrillService.noteChatDisengage(ChatPause.Disengage.INPUT_CLEARED)
                 }
             }
         })
@@ -327,6 +344,7 @@ class MainActivity : AppCompatActivity() {
         }
         dictate?.setOnClickListener {
             hint?.visibility = View.GONE
+            DrillService.noteChatReengage()
             DrillService.prepareDictation {
                 if (isDestroyed) {
                     DrillService.dictationFinished()
@@ -356,6 +374,7 @@ class MainActivity : AppCompatActivity() {
                             if (isDestroyed) return@runOnUiThread
                             DrillService.dictationFinished()
                             hint?.visibility = View.VISIBLE
+                            DrillService.noteChatDisengage(ChatPause.Disengage.DICTATION_FAILED)
                         }
                     }
                 )
@@ -366,12 +385,11 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * The main box targets the card on screen, the same one named above the field.
-     * Older cards are reached only from their own thread. Asking does not grade.
+     * No card is a general question about the selected deck. Failures are visible.
+     * Asking does not grade, and it does not pause a drill that is not running.
      * @return true when the question was accepted.
      */
     private fun sendChatQuestion(raw: String, byVoice: Boolean): Boolean {
-        val q = raw.trim()
-        if (q.isEmpty()) return false
         val state = DrillUi.state
         val drilling = state.drillRunning || DrillService.running
         val screen = if (drilling && state.questionOrdinal > 0 && state.frontHtml.isNotBlank()) {
@@ -379,12 +397,32 @@ class MainActivity : AppCompatActivity() {
         } else {
             null
         }
-        return when (ChatTarget.composer(screen)) {
-            is ChatTarget.Target.Live -> {
-                LiveThread.ask(this, q, byVoice)
+        val deck = try {
+            val cfg = Prefs.load(this)
+            DeckName.split(cfg.deck).second.ifBlank { cfg.deck }
+        } catch (_: Exception) {
+            ""
+        }
+        return when (val outcome = ChatSend.resolve(raw, screen, deck)) {
+            is ChatSend.Outcome.Visible -> {
+                GeneralChat.showNotice(outcome.message)
+                false
+            }
+            is ChatSend.Outcome.General -> {
+                GeneralChat.ask(this, outcome.deck, outcome.question)
+                DrillService.noteQuestionSent()
                 true
             }
-            else -> false
+            is ChatSend.Outcome.Card -> {
+                val accepted = LiveThread.ask(this, outcome.question, byVoice)
+                if (!accepted) {
+                    GeneralChat.showNotice(ChatSend.visible(ChatSend.Fail.AI))
+                    false
+                } else {
+                    DrillService.noteQuestionSent()
+                    true
+                }
+            }
         }
     }
 
@@ -473,7 +511,9 @@ class MainActivity : AppCompatActivity() {
                 }
             } else if (renderedFront != state.frontHtml) {
                 renderedFront = state.frontHtml
-                CardFaceBinder.setMarkup(frontView, state.frontHtml)
+                val face = QuestionLabel.of(state.frontHtml, state.questionOrdinal.coerceAtLeast(1))
+                val shown = if (face.fromCard) face.stem else state.frontHtml
+                CardFaceBinder.setMarkup(frontView, shown.ifBlank { state.frontHtml })
             }
             val showBack = state.showBack && state.backHtml.isNotBlank()
             val backVis = if (showBack) View.VISIBLE else View.GONE
@@ -486,12 +526,8 @@ class MainActivity : AppCompatActivity() {
                 renderedBack = state.backHtml
                 CardFaceBinder.setMarkup(backView, state.backHtml)
             }
-            if (state.heard.isBlank()) {
-                heardText?.visibility = View.GONE
-            } else {
-                heardText?.visibility = View.VISIBLE
-                heardText?.text = state.heard
-            }
+            heardText?.visibility = View.GONE
+            heardText?.text = ""
         }
         val progressLine = SessionProgress.visibleLine(DrillService.running, state.progressLine)
         val voice = currentVoiceLine(cfg, state)
@@ -538,11 +574,14 @@ class MainActivity : AppCompatActivity() {
         val silentOn = switchModel.on
         val hasQuestion = drilling && state.frontHtml.isNotBlank()
         val askAbout = findViewById<TextView>(R.id.chatAskAbout)
+        val leaf = DeckName.split(cfg.deck).second.ifBlank { cfg.deck }
         val askLine = if (hasQuestion) {
-            val leaf = DeckName.split(cfg.deck).second.ifBlank { cfg.deck }
-            ChatAskLabel.line(state.questionOrdinal, leaf)
+            val label = state.questionLabel.ifBlank {
+                QuestionLabel.of(state.frontHtml, state.questionOrdinal).label
+            }
+            ChatAskLabel.line(label, leaf)
         } else {
-            null
+            ChatAskLabel.general(leaf)
         }
         if (askAbout != null) {
             if (askLine == null) {
@@ -583,17 +622,47 @@ class MainActivity : AppCompatActivity() {
         val pauseRow = findViewById<View>(R.id.chatPauseRow)
         val countdown = findViewById<TextView>(R.id.thinkCountdown)
         val seconds = state.thinkSecondsLeft
+        val resume = findViewById<Button>(R.id.chatResumeButton)
         if (drilling && state.chatPaused) {
             pauseRow?.visibility = View.VISIBLE
             countdown?.visibility = View.GONE
+            resume?.visibility = if (state.chatShowResume) View.VISIBLE else View.GONE
+            pulseResume(resume, state.chatShowResume && state.chatResumePulse)
         } else if (drilling && !silentOn && seconds != null && seconds > 0 && !state.showBack) {
             pauseRow?.visibility = View.GONE
             countdown?.visibility = View.VISIBLE
             countdown?.text = ThinkTime.countdownText(seconds)
+            stopResumePulse(resume)
         } else {
             pauseRow?.visibility = View.GONE
             countdown?.visibility = View.GONE
+            stopResumePulse(resume)
         }
+    }
+
+    /** Soft accent-pink pulse after a question was sent. Idle resume stays still. */
+    private fun pulseResume(button: Button?, on: Boolean) {
+        if (button == null) return
+        if (!on) {
+            stopResumePulse(button)
+            return
+        }
+        val tint = Color.parseColor(ChatPause.RESUME_PULSE)
+        button.backgroundTintList = ColorStateList.valueOf(tint)
+        if (resumePulse?.isRunning == true) return
+        resumePulse = ObjectAnimator.ofFloat(button, View.ALPHA, 1f, 0.45f).apply {
+            duration = 700L
+            repeatMode = ValueAnimator.REVERSE
+            repeatCount = ValueAnimator.INFINITE
+            start()
+        }
+    }
+
+    private fun stopResumePulse(button: Button?) {
+        resumePulse?.cancel()
+        resumePulse = null
+        button?.alpha = 1f
+        button?.backgroundTintList = null
     }
 
     private fun ratingOpen(): Boolean {

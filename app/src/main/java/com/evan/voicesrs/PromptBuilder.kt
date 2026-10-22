@@ -20,8 +20,28 @@ object PromptBuilder {
             "If the card's answer looks outdated or wrong relative to current Databricks docs, " +
             "end with one line starting \"Note:\". No preamble."
 
-    fun userMessage(front: String, back: String): String {
-        return "Card front: ${AnkiText.stripHtml(front)}\nCard back: ${AnkiText.stripHtml(back)}"
+    fun userMessage(front: String, back: String, label: String = ""): String {
+        val body = "Card front: ${AnkiText.stripHtml(front)}\nCard back: ${AnkiText.stripHtml(back)}"
+        val name = label.trim()
+        if (name.isEmpty()) return body
+        return "Card: $name\n$body"
+    }
+
+    /**
+     * A question with no card on screen. [SYSTEM] and [PROMPT_VERSION] stay as they are.
+     */
+    fun generalSystem(): String =
+        "You are a concise tutor for the Databricks Certified Data Engineer Associate exam. " +
+            "The learner asked a general question about the selected deck. There is no specific card. " +
+            "Stay under 120 words. No preamble."
+
+    fun generalMessages(deck: String, question: String): List<ChatMsg> {
+        return listOf(
+            ChatMsg(
+                "user",
+                "Deck: ${deck.trim()}\nThere is no specific card.\nQuestion: ${question.trim()}"
+            )
+        )
     }
 
     const val FOLLOW_UP_EXTRA =
@@ -41,10 +61,11 @@ object PromptBuilder {
         transcript: String,
         explanation: String,
         prior: List<FollowUp>,
-        question: String
+        question: String,
+        label: String = ""
     ): List<ChatMsg> {
         val context = buildString {
-            append(userMessage(front, back))
+            append(userMessage(front, back, label))
             append("\nLearner said: ")
             append(transcript.trim())
             if (explanation.isNotBlank()) {
@@ -78,11 +99,14 @@ object PromptBuilder {
             "Say that you are withholding the answer until he answers. " +
             "Stay under 120 words. No preamble."
 
-    fun hintMessages(front: String, prior: List<FollowUp>, question: String): List<ChatMsg> {
+    fun hintMessages(front: String, prior: List<FollowUp>, question: String, label: String = ""): List<ChatMsg> {
         val messages = ArrayList<ChatMsg>()
+        val heading = label.trim().let { name ->
+            if (name.isEmpty()) "" else "Card: $name\n"
+        }
         messages += ChatMsg(
             "user",
-            "Card front: ${AnkiText.stripHtml(front)}\nThe learner has not answered yet. The answer is hidden."
+            "${heading}Card front: ${AnkiText.stripHtml(front)}\nThe learner has not answered yet. The answer is hidden."
         )
         val done = prior.mapNotNull { follow ->
             val ready = follow.state as? ExplState.Ready ?: return@mapNotNull null

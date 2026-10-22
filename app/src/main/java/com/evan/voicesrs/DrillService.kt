@@ -219,11 +219,30 @@ class DrillService : Service(), VoiceIo {
             val svc = active ?: return
             if (!ChatPause.pauses(running, trigger)) return
             svc.enterChatPause()
+            if (ChatPause.triggerReengages(trigger)) svc.cancelAutoResume(showButton = true)
         }
 
         /** Resume button. A rating tap resumes inside [submitTestGrade]. */
         fun resumeFromChat() {
             active?.leaveChatPause(ChatPause.Action.RESUME)
+        }
+
+        /** Focus, typing, or dictation again. Drops a pending auto-resume. */
+        fun noteChatReengage() {
+            active?.cancelAutoResume(showButton = true)
+        }
+
+        /**
+         * The composer engagement ended. No question schedules a one-second resume.
+         * A sent question stays paused and pulses Resume.
+         */
+        fun noteChatDisengage(end: ChatPause.Disengage) {
+            active?.onChatDisengage(end)
+        }
+
+        /** A question left the composer. The card stays paused. */
+        fun noteQuestionSent() {
+            active?.onQuestionSent()
         }
 
         /**
@@ -306,6 +325,19 @@ class DrillService : Service(), VoiceIo {
     @Volatile private var speakUtterance: String? = null
     /** Set only when the recognizer returns a real error, not silence or no-match. */
     @Volatile private var listenFault = false
+    /** The error that set [listenFault]. The mic sentence uses only a few of these. */
+    @Volatile private var listenErrorCode: Int? = null
+    /** SpeechRecognizer missing, or createSpeechRecognizer failed. */
+    @Volatile private var recognizerUnavailable = false
+    /** A question was sent during this pause. Unfocus must not auto-resume. */
+    private var questionSentWhilePaused = false
+    private var autoResumeArmed = false
+    private val autoResumeRunnable = Runnable {
+        autoResumeArmed = false
+        if (chatPaused.get() && !questionSentWhilePaused) {
+            leaveChatPause(ChatPause.Action.RESUME)
+        }
+    }
     @Volatile private var listenLatch: CountDownLatch? = null
     private val showAnswerLatch = AtomicReference<CountDownLatch?>(null)
     /** A Show answer tap that landed before the wait latch existed. */
@@ -685,6 +717,8 @@ class DrillService : Service(), VoiceIo {
         micWarned = false
         listenHealth.reset()
         listenFault = false
+        listenErrorCode = null
+        recognizerUnavailable = false
         dictating = false
         chosenLetter = null
         shownOrdinal = 0
@@ -789,7 +823,11 @@ class DrillService : Service(), VoiceIo {
                         questionOrdinal = 0,
                         cardId = 0L,
                         chosenLetter = null,
-                        suggestedEase = null
+                        suggestedEase = null,
+                        questionLabel = "",
+                        chatShowResume = false,
+                        chatResumePulse = false,
+                        heard = ""
                     )
                     when {
                         pendingRestart.get() -> cleared
@@ -852,7 +890,8 @@ class DrillService : Service(), VoiceIo {
                     chosenLetter = null,
                     suggestedEase = null,
                     thinkSecondsLeft = null,
-                    chatPaused = pausedNow
+                    chatPaused = pausedNow,
+                    questionLabel = QuestionLabel.of(questionHtml, ordinal).label
                 )
             }
         }
@@ -1169,6 +1208,8 @@ class DrillService : Service(), VoiceIo {
         if (recognitionAvailable || scripted) {
             speak("Voice recognition ready.")
         } else {
+            recognizerUnavailable = true
+            postMicWarning(null, unavailable = true, speakIt = false)
             speak("Warning: speech recognition is not available on this phone. " +
                     "Cards will be read aloud, but I cannot hear your grades.")
         }
@@ -1806,12 +1847,22 @@ class DrillService : Service(), VoiceIo {
     /** Spoken answer captured during think time. Null for show-answer, silence, and expiry. */
     @Volatile private var thinkTranscript: String? = null
 
-    /** Speech for the question. Unchanged cards keep [AnkiText.spokenText]. */
+    /**
+     * Speech for the question. A number printed on the card is not read again.
+     * Unchanged cards keep [AnkiText.spokenText]. [ContentHash] does not use this.
+     */
     private fun spokenQuestion(questionHtml: String, cardId: Long): String {
         val original = AnkiText.spokenText(questionHtml)
         val plain = BubbleModel.fullQuestion(questionHtml).ifBlank { AnkiText.stripHtml(questionHtml) }
-        val parsed = QuestionCard.parse(plain)
-        if (!parsed.mcq) return original
+        val face = QuestionLabel.resolve(plain.trim(), 1)
+        val spoken = if (!face.fromCard) {
+            original
+        } else {
+            val fromSpoken = QuestionLabel.resolve(original.trim(), 1)
+            if (fromSpoken.fromCard) fromSpoken.spoken else face.spoken
+        }
+        val parsed = QuestionCard.parse(if (face.fromCard) face.stem else plain)
+        if (!parsed.mcq) return spoken
         val enabled = try {
             Prefs.load(this).shuffleOptions
         } catch (_: Exception) {
@@ -1819,7 +1870,7 @@ class DrillService : Service(), VoiceIo {
         }
         val ordered = OptionShuffle.order(parsed.options, cardId, sessionStartedMs, enabled)
         val changed = ordered.map { it.letter } != parsed.options.map { it.letter }
-        if (!changed) return original
+        if (!changed) return spoken
         return OptionShuffle.spoken(parsed.stem, ordered)
     }
 
@@ -1968,6 +2019,54 @@ class DrillService : Service(), VoiceIo {
         if (::mainHandler.isInitialized) mainHandler.removeCallbacks(thinkTicker)
         shownPaused = false
         shownThinkSec = null
+        clearResumeChrome()
+    }
+
+    private fun onQuestionSent() {
+        if (!chatPaused.get()) return
+        questionSentWhilePaused = true
+        onChatDisengage(ChatPause.Disengage.QUESTION_SENT)
+    }
+
+    private fun onChatDisengage(end: ChatPause.Disengage) {
+        if (!chatPaused.get()) return
+        if (questionSentWhilePaused && end != ChatPause.Disengage.QUESTION_SENT) return
+        if (!::mainHandler.isInitialized) return
+        val plan = ChatPause.afterDisengage(end)
+        mainHandler.removeCallbacks(autoResumeRunnable)
+        autoResumeArmed = false
+        if (end == ChatPause.Disengage.QUESTION_SENT) questionSentWhilePaused = true
+        if (plan.autoResume) {
+            autoResumeArmed = true
+            mainHandler.postDelayed(autoResumeRunnable, plan.delayMs)
+            publishResume(show = false, pulse = false)
+        } else {
+            publishResume(plan.showResume, plan.pulse)
+        }
+    }
+
+    private fun cancelAutoResume(showButton: Boolean) {
+        val armed = autoResumeArmed
+        if (ChatPause.reengageCancels(armed)) {
+            if (::mainHandler.isInitialized) mainHandler.removeCallbacks(autoResumeRunnable)
+            autoResumeArmed = false
+        }
+        if (!chatPaused.get()) return
+        if (questionSentWhilePaused) publishResume(show = true, pulse = true)
+        else if (showButton) publishResume(show = true, pulse = false)
+    }
+
+    private fun publishResume(show: Boolean, pulse: Boolean) {
+        runCatching {
+            DrillUi.update { it.copy(chatShowResume = show, chatResumePulse = pulse) }
+        }
+    }
+
+    private fun clearResumeChrome() {
+        questionSentWhilePaused = false
+        autoResumeArmed = false
+        if (::mainHandler.isInitialized) mainHandler.removeCallbacks(autoResumeRunnable)
+        publishResume(show = false, pulse = false)
     }
 
     private fun enterChatPause(endTone: Boolean = true) {
@@ -1983,6 +2082,7 @@ class DrillService : Service(), VoiceIo {
                 silentGradeLatch.get()?.countDown()
                 chatPauseLatch.get()?.countDown()
                 if (::mainHandler.isInitialized) mainHandler.removeCallbacks(thinkTicker)
+                publishEnterChrome()
             }
             publishCue(true, null)
             return
@@ -2002,6 +2102,13 @@ class DrillService : Service(), VoiceIo {
         chatPauseLatch.get()?.countDown()
         publishCue(true, null)
         mainHandler.removeCallbacks(thinkTicker)
+        publishEnterChrome()
+    }
+
+    /** Resume is on the pause row immediately. The pulse is a later plan. */
+    private fun publishEnterChrome() {
+        val plan = ChatPause.onEnter()
+        publishResume(plan.showResume, plan.pulse)
     }
 
     private fun leaveChatPause(action: ChatPause.Action) {
@@ -2015,6 +2122,7 @@ class DrillService : Service(), VoiceIo {
         }
         chatPauseLatch.get()?.countDown()
         val left = if (thinkDeadlineMs > 0L) ThinkTime.remainingSec(now, thinkDeadlineMs) else null
+        clearResumeChrome()
         publishCue(false, if (left != null && left > 0) left else null)
     }
 
@@ -2300,11 +2408,8 @@ class DrillService : Service(), VoiceIo {
             Log.w(TAG, "silent persist failed", e)
         }
         val notice = ListenWindow.SILENT_NOTICE
-        runCatching {
-            DrillUi.update {
-                it.copy(status = notice, heard = notice, silentSession = true)
-            }
-        }
+        postStatusNotice(notice)
+        runCatching { DrillUi.update { it.copy(silentSession = true, heard = "") } }
     }
 
     /** Silent flag plus the generation a stale snapshot cannot beat. */
@@ -2353,23 +2458,39 @@ class DrillService : Service(), VoiceIo {
     }
 
     /**
-     * A real recognizer error may warn once. Silence, no-match, and the listen
-     * timeout do not. The warning never ends the drill.
+     * A real recognizer error may warn once. The sentence is only for audio,
+     * permission, or no recognizer. Silence, no-match, and the listen timeout
+     * do not blame the mic. The warning is the status line. It never ends the drill.
      * @return true when this window was a microphone fault.
      */
     private fun consumeMicFault(): Boolean {
         val fault = listenFault
+        val error = listenErrorCode
+        val unavailable = recognizerUnavailable
         listenFault = false
-        if (!fault) return false
-        if (sessionSilent || stopRequested.get()) return true
-        if (listenHealth.recordFault() && !micWarned) {
-            micWarned = true
-            val warning = "The microphone does not seem to be working. " +
-                "Please check the microphone permission and your connection, then restart the drill."
-            runCatching { DrillUi.update { it.copy(heard = warning) } }
-            speak(warning)
+        listenErrorCode = null
+        if (!fault && !unavailable) return false
+        if (sessionSilent || stopRequested.get()) return fault
+        if (fault) listenHealth.recordFault()
+        if (DrillNotice.blamesMic(error, unavailable)) {
+            postMicWarning(error, unavailable, speakIt = true)
         }
-        return true
+        return fault
+    }
+
+    /** Drill notices draw on the status line, never inside the card. */
+    private fun postStatusNotice(text: String) {
+        if (text.isBlank()) return
+        if (DrillNotice.route(text) != DrillNotice.Sink.STATUS) return
+        runCatching { DrillUi.update { it.copy(status = text, heard = "") } }
+    }
+
+    private fun postMicWarning(error: Int?, unavailable: Boolean, speakIt: Boolean) {
+        val warning = DrillNotice.text(error, unavailable) ?: return
+        if (micWarned) return
+        micWarned = true
+        postStatusNotice(warning)
+        if (speakIt) speak(warning)
     }
 
     /** Hear-back for microphone transcripts. Tap words skip this. Nulls do not end the drill. */
@@ -2380,7 +2501,7 @@ class DrillService : Service(), VoiceIo {
         val speed = try { Prefs.load(this).speedMode } catch (_: Exception) { false }
         if (verboseHearBack && !speed) {
             val line = if (result.isNullOrBlank()) "I heard nothing." else "I heard: $result"
-            runCatching { DrillUi.update { it.copy(heard = line) } }
+            postStatusNotice(line)
             speak(line)
         } else if (speed) {
             runCatching { DrillUi.update { it.copy(heard = "") } }
@@ -2752,6 +2873,9 @@ class DrillService : Service(), VoiceIo {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             Log.w(TAG, "SpeechRecognizer not available on this device")
             recognitionAvailable = false
+            recognizerUnavailable = true
+            listenFault = true
+            listenErrorCode = null
             return false
         }
         return try {
@@ -2759,12 +2883,16 @@ class DrillService : Service(), VoiceIo {
             val created = SpeechRecognizer.createSpeechRecognizer(this)
             created.setRecognitionListener(SpeechListener(session, gen, epoch, created))
             recognizer = created
+            recognizerUnavailable = false
             Log.i(TAG, "recognizer created")
             Log.i(TAG, "SpeechRecognizer created for listen session")
             true
         } catch (e: Exception) {
             Log.w(TAG, "recognizer creation failed", e)
             recognizer = null
+            recognizerUnavailable = true
+            listenFault = true
+            listenErrorCode = null
             false
         }
     }
@@ -2960,6 +3088,7 @@ class DrillService : Service(), VoiceIo {
             }
             if (ListenWindow.isMicFault(error)) {
                 listenFault = true
+                listenErrorCode = error
                 if (retryable) {
                     backoffUntilElapsed = SystemClock.elapsedRealtime() + NEXT_LISTEN_BACKOFF_MS
                 }

@@ -18,6 +18,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.chip.Chip
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.slider.Slider
 import com.google.android.material.snackbar.Snackbar
@@ -89,6 +90,11 @@ class SettingsActivity : AppCompatActivity() {
         val speedSwitch: MaterialSwitch = findViewById(R.id.speedModeSwitch)
         val showCardSwitch: MaterialSwitch = findViewById(R.id.showCardSwitch)
         val shuffleSwitch: MaterialSwitch = findViewById(R.id.shuffleOptionsSwitch)
+        val detectCodeSwitch: MaterialSwitch = findViewById(R.id.detectCodeSwitch)
+        val explainAgain: Chip = findViewById(R.id.autoExplainAgain)
+        val explainHard: Chip = findViewById(R.id.autoExplainHard)
+        val explainGood: Chip = findViewById(R.id.autoExplainGood)
+        val explainEasy: Chip = findViewById(R.id.autoExplainEasy)
         val listenWaitView: MaterialAutoCompleteTextView = findViewById(R.id.listenWaitInput)
         val endSilenceView: MaterialAutoCompleteTextView = findViewById(R.id.endSilenceInput)
         val listenAttemptsView: MaterialAutoCompleteTextView = findViewById(R.id.listenAttemptsInput)
@@ -113,6 +119,11 @@ class SettingsActivity : AppCompatActivity() {
         speedSwitch.isChecked = held.speedMode
         showCardSwitch.isChecked = held.showCard
         shuffleSwitch.isChecked = held.shuffleOptions
+        detectCodeSwitch.isChecked = held.detectCode
+        explainAgain.isChecked = 1 in held.autoExplainEases
+        explainHard.isChecked = 2 in held.autoExplainEases
+        explainGood.isChecked = 3 in held.autoExplainEases
+        explainEasy.isChecked = 4 in held.autoExplainEases
         val waitLabels = ListenWindow.WAIT_SEC_CHOICES.map {
             getString(R.string.settings_listen_wait_choice, it)
         }
@@ -234,6 +245,22 @@ class SettingsActivity : AppCompatActivity() {
         }
         shuffleSwitch.setOnCheckedChangeListener { _, checked ->
             persist { it.copy(shuffleOptions = checked) }
+        }
+        detectCodeSwitch.setOnCheckedChangeListener { _, checked ->
+            persist { it.copy(detectCode = checked) }
+        }
+        val explainChips = listOf(explainAgain, explainHard, explainGood, explainEasy)
+        val saveExplain = {
+            val selected = buildSet {
+                if (explainAgain.isChecked) add(1)
+                if (explainHard.isChecked) add(2)
+                if (explainGood.isChecked) add(3)
+                if (explainEasy.isChecked) add(4)
+            }
+            persist { it.copy(autoExplainEases = selected) }
+        }
+        for (chip in explainChips) {
+            chip.setOnCheckedChangeListener { _, _ -> saveExplain() }
         }
         goalModeView.doAfterTextChanged { refreshDrillFields() }
         commitGoalMode = {

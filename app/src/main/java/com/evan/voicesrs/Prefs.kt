@@ -52,7 +52,11 @@ data class AnkiConfig(
     /** Optional. Stored only in encrypted prefs. Never logged. */
     val aiApiKey: String = "",
     val aiLookahead: Int = 2,
-    val aiBatch: Boolean = false
+    val aiBatch: Boolean = false,
+    /** Ease values (1–4) that generate an explanation after a grade. */
+    val autoExplainEases: Set<Int> = AutoExplain.DEFAULT,
+    /** Wrap detected code on card faces. Display only. */
+    val detectCode: Boolean = true
 )
 
 /** SharedPreferences-backed settings. The API key and neural token live in encrypted prefs. */
@@ -89,6 +93,9 @@ object Prefs {
     private const val KEY_AI_KEY = "ai_api_key"
     private const val KEY_AI_LOOKAHEAD = "ai_lookahead"
     private const val KEY_AI_BATCH = "ai_batch"
+    private const val KEY_AUTO_EXPLAIN_EASES = "auto_explain_eases"
+    private const val KEY_AUTO_EXPLAIN = "auto_explain"
+    private const val KEY_DETECT_CODE = "detect_code"
 
     const val DEFAULT_URL = "http://192.0.2.10:8765"
     const val DEFAULT_DECK = "VoiceSRS-Test"
@@ -182,6 +189,9 @@ object Prefs {
             .putString(KEY_AI_MODEL, cfg.aiModel.ifBlank { DEFAULT_AI_MODEL })
             .putInt(KEY_AI_LOOKAHEAD, cfg.aiLookahead.coerceIn(0, 5))
             .putBoolean(KEY_AI_BATCH, cfg.aiBatch)
+            .putString(KEY_AUTO_EXPLAIN_EASES, AutoExplain.encode(cfg.autoExplainEases))
+            .putBoolean(KEY_DETECT_CODE, cfg.detectCode)
+            .remove(KEY_AUTO_EXPLAIN)
             .remove(KEY_API_KEY)
             .remove(KEY_NEURAL_TOKEN)
             .apply()
@@ -244,7 +254,12 @@ object Prefs {
             aiBaseUrl = p.getString(KEY_AI_URL, DEFAULT_AI_URL).orEmpty().ifBlank { DEFAULT_AI_URL },
             aiModel = p.getString(KEY_AI_MODEL, DEFAULT_AI_MODEL).orEmpty().ifBlank { DEFAULT_AI_MODEL },
             aiLookahead = p.getInt(KEY_AI_LOOKAHEAD, DEFAULT_AI_LOOKAHEAD).coerceIn(0, 5),
-            aiBatch = p.getBoolean(KEY_AI_BATCH, false)
+            aiBatch = p.getBoolean(KEY_AI_BATCH, false),
+            autoExplainEases = AutoExplain.migrate(
+                stored = if (p.contains(KEY_AUTO_EXPLAIN_EASES)) p.getString(KEY_AUTO_EXPLAIN_EASES, null) else null,
+                legacy = if (p.contains(KEY_AUTO_EXPLAIN)) p.getBoolean(KEY_AUTO_EXPLAIN, true) else null
+            ),
+            detectCode = p.getBoolean(KEY_DETECT_CODE, CodeDetect.SETTING_DEFAULT)
         )
     }
 

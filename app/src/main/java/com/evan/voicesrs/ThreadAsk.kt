@@ -39,6 +39,7 @@ object ThreadAsk {
         if (index < 0) return
         persist(app, turnId)
         Thread({
+            var lastPaint = -1L
             try {
                 val turn = ReviewLog.snapshot().firstOrNull { it.turnId == turnId } ?: return@Thread
                 val cfg = Prefs.load(app)
@@ -48,13 +49,17 @@ object ThreadAsk {
                     is ExplState.Streaming -> BubbleModel.visibleExplanation(state.partial, turn.frontText, turn.backText)
                     else -> ""
                 }
+                val label = turn.questionLabel.ifBlank {
+                    QuestionLabel.of(turn.frontText, 1).label
+                }
                 val messages = PromptBuilder.followUpMessages(
                     turn.frontText,
                     turn.backText,
                     turn.transcript,
                     explanation,
                     prior,
-                    q
+                    q,
+                    label
                 )
                 val text = AiClient().completeChat(
                     baseUrl = cfg.aiBaseUrl,
@@ -64,8 +69,14 @@ object ThreadAsk {
                     messages = messages,
                     cancelled = { false }
                 ) { partial ->
-                    val shown = BubbleModel.visibleExplanation(partial, turn.frontText, turn.backText)
-                    if (shown.isNotBlank()) ReviewLog.markFollowStreaming(turnId, index, shown)
+                    val now = System.currentTimeMillis()
+                    if (ScrollAnchor.paintNow(now, lastPaint, streamingOnly = true)) {
+                        val shown = BubbleModel.visibleExplanation(partial, turn.frontText, turn.backText)
+                        if (shown.isNotBlank()) {
+                            lastPaint = now
+                            ReviewLog.markFollowStreaming(turnId, index, shown)
+                        }
+                    }
                 }
                 val shown = BubbleModel.visibleExplanation(text, turn.frontText, turn.backText)
                 if (shown.isBlank()) {
@@ -76,7 +87,7 @@ object ThreadAsk {
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "thread reply failed: ${e.javaClass.simpleName}")
-                ReviewLog.markFollowFailed(turnId, index, AiClient.publicMessage(e))
+                ReviewLog.markFollowFailed(turnId, index, ChatSend.visible(ChatSend.kindOf(e)))
             }
             persist(app, turnId)
         }, "thread-ask").start()

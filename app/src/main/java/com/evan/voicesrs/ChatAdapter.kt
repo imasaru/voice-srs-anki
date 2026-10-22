@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.chip.Chip
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 /**
  * Past exchanges, the "● New" divider, and the live question at the bottom.
@@ -25,6 +26,8 @@ class ChatAdapter(
 
     private val cardOpen = HashSet<Long>()
     private val explOpen = HashSet<Long>()
+    /** Letter shown on a past card while the grade-change dialog is open. */
+    private val pendingPick = HashMap<Long, String>()
 
     fun expandedIds(): Set<Long> = explOpen.toSet()
 
@@ -34,6 +37,8 @@ class ChatAdapter(
         is ChatRow.Past -> TYPE_PAST
         ChatRow.Divider -> TYPE_DIVIDER
         is ChatRow.Live -> TYPE_LIVE
+        is ChatRow.Ask -> TYPE_ASK
+        is ChatRow.Notice -> TYPE_NOTICE
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
@@ -41,6 +46,8 @@ class ChatAdapter(
         return when (viewType) {
             TYPE_DIVIDER -> DividerHolder(inflater.inflate(R.layout.item_chat_divider, parent, false))
             TYPE_LIVE -> LiveHolder(inflater.inflate(R.layout.item_chat_live, parent, false))
+            TYPE_ASK -> AskHolder(inflater.inflate(R.layout.item_chat_ask, parent, false))
+            TYPE_NOTICE -> NoticeHolder(inflater.inflate(R.layout.item_chat_notice, parent, false))
             else -> PastHolder(inflater.inflate(R.layout.item_chat_turn, parent, false))
         }
     }
@@ -57,6 +64,8 @@ class ChatAdapter(
         when {
             holder is PastHolder && row is ChatRow.Past -> holder.bind(row.turn)
             holder is LiveHolder && row is ChatRow.Live -> holder.bind(row)
+            holder is AskHolder && row is ChatRow.Ask -> holder.bind(row)
+            holder is NoticeHolder && row is ChatRow.Notice -> holder.bind(row)
             holder is DividerHolder -> Unit
         }
     }
@@ -97,6 +106,7 @@ class ChatAdapter(
         private val blocks: LinearLayout = view.findViewById(R.id.explBlocks)
         private val footer: TextView = view.findViewById(R.id.explFooter)
         private val retry: Button = view.findViewById(R.id.explRetry)
+        private val explain: Button = view.findViewById(R.id.explAsk)
         private val thread: TextView = view.findViewById(R.id.threadLink)
 
         fun bind(turn: ReviewTurn) {
@@ -112,12 +122,19 @@ class ChatAdapter(
             thread.setOnClickListener { onThread(turn.turnId) }
             val session = DrillUi.state.sessionStartedMs
             val shuffle = shuffleOn(itemView)
-            val chosen = TapAnswer.parseSpoken(
-                turn.transcript,
-                QuestionCard.parse(
+            val parsed = QuestionCard.parse(
+                QuestionLabel.of(turn.frontText, ordinal).stem.ifBlank {
                     BubbleModel.fullQuestion(turn.frontText).ifBlank { turn.frontText }
-                ).options.map { it.letter }.toSet()
+                }
             )
+            val storedLetter = TapAnswer.parseSpoken(
+                turn.transcript,
+                parsed.options.map { it.letter }.toSet()
+            )
+            val chosen = pendingPick[turn.turnId] ?: storedLetter
+            val live = DrillUi.state
+            val currentCard = live.drillRunning && live.cardId == turn.cardId && live.frontHtml.isNotBlank()
+            val canCorrect = turn.ease != null && parsed.mcq && !currentCard
             val mcq = CardFaceBinder.bindQuestion(
                 questionLabel,
                 cardStem,
@@ -129,20 +146,31 @@ class ChatAdapter(
                 cardId = turn.cardId,
                 sessionStartMs = session,
                 shuffle = shuffle,
-                chosenLetter = chosen
+                chosenLetter = chosen,
+                onOption = if (canCorrect) { letter -> offerGradeChange(turn, letter, parsed) } else null,
+                pastEditable = canCorrect
             )
+            if (turn.questionLabel.isNotBlank()) {
+                questionLabel.visibility = View.VISIBLE
+                questionLabel.text = turn.questionLabel
+            }
             if (mcq) {
                 cardStem.maxLines = Integer.MAX_VALUE
                 cardStem.ellipsize = null
             } else {
-                CardFaceBinder.setMarkup(cardStem, BubbleModel.cardText(turn.frontText, expanded))
+                val stem = QuestionLabel.of(turn.frontText, ordinal).stem.ifBlank { turn.frontText }
+                CardFaceBinder.setMarkup(cardStem, BubbleModel.cardText(stem, expanded))
                 cardStem.maxLines = if (expanded) Integer.MAX_VALUE else BubbleModel.COLLAPSED_LINES
                 cardStem.ellipsize = if (expanded) null else TextUtils.TruncateAt.END
             }
             CardFaceBinder.bindPills(userAnswer, userPill, turn.transcript, turn.ease, userLabel)
             val shown = BubbleModel.displayAi(turn.explanation, turn.frontText, turn.backText, turn.unread)
+            val showExplain = AutoExplain.showButton(turn.explanation)
             body.visibility = View.GONE
-            if (!shown.visible) {
+            explain.setOnClickListener { ExplainQueue.retry(itemView.context, turn.turnId) }
+            explain.visibility = if (showExplain) View.VISIBLE else View.GONE
+            explain.isEnabled = showExplain
+            if (!shown.visible && !showExplain) {
                 ai.visibility = View.GONE
                 section.visibility = View.GONE
             } else {
@@ -171,6 +199,37 @@ class ChatAdapter(
             thread.text = ThreadLabel.text(replies, last)
         }
 
+        private fun offerGradeChange(turn: ReviewTurn, letter: String, parsed: QuestionCard.Parsed) {
+            val live = DrillUi.state
+            val currentCard = live.drillRunning && live.cardId == turn.cardId && live.frontHtml.isNotBlank()
+            val correct = QuestionCard.correctLetter(turn.backText, parsed.options)
+            val preview = PastGrade.preview(
+                letter,
+                correct,
+                currentCard = currentCard,
+                rated = turn.ease != null,
+                mcq = parsed.mcq
+            ) ?: return
+            pendingPick[turn.turnId] = preview.letter
+            notifyTurn(turn.turnId)
+            MaterialAlertDialogBuilder(itemView.context)
+                .setMessage(preview.prompt)
+                .setPositiveButton(android.R.string.ok) { _, _ ->
+                    pendingPick.remove(turn.turnId)
+                    GradeFix.apply(itemView.context, turn, preview)
+                }
+                .setNegativeButton(android.R.string.cancel) { _, _ ->
+                    val restored = PastGrade.cancel(pendingPick.remove(turn.turnId))
+                    if (restored != null) pendingPick.remove(turn.turnId)
+                    notifyTurn(turn.turnId)
+                }
+                .setOnCancelListener {
+                    pendingPick.remove(turn.turnId)
+                    notifyTurn(turn.turnId)
+                }
+                .show()
+        }
+
         private fun toggleExpl(id: Long) {
             val open = toggle(explOpen, id)
             notifyTurn(id)
@@ -179,6 +238,41 @@ class ChatAdapter(
     }
 
     class DividerHolder(view: View) : RecyclerView.ViewHolder(view)
+
+    class AskHolder(view: View) : RecyclerView.ViewHolder(view) {
+        private val question: TextView = view.findViewById(R.id.askQuestion)
+        private val reply: TextView = view.findViewById(R.id.askReply)
+
+        fun bind(row: ChatRow.Ask) {
+            question.text = row.question
+            val text = when (val state = row.state) {
+                is ExplState.Ready -> state.text
+                is ExplState.Streaming -> state.partial.ifBlank { BubbleModel.GENERATING }
+                is ExplState.Error -> state.message
+                ExplState.Pending, ExplState.Queued -> BubbleModel.GENERATING
+                ExplState.None -> ""
+            }
+            if (text.isBlank()) {
+                reply.visibility = View.GONE
+                reply.text = ""
+            } else {
+                reply.visibility = View.VISIBLE
+                if (row.state is ExplState.Ready || row.state is ExplState.Streaming) {
+                    CardFaceBinder.applySections(reply, text)
+                } else {
+                    reply.text = text
+                }
+            }
+        }
+    }
+
+    class NoticeHolder(view: View) : RecyclerView.ViewHolder(view) {
+        private val notice: TextView = view.findViewById(R.id.chatNotice)
+
+        fun bind(row: ChatRow.Notice) {
+            notice.text = row.message
+        }
+    }
 
     inner class LiveHolder(view: View) : RecyclerView.ViewHolder(view) {
         private val label: TextView = view.findViewById(R.id.liveQuestionLabel)
@@ -220,7 +314,14 @@ class ChatAdapter(
                     chosenLetter = row.chosenLetter,
                     onOption = if (row.showBack) null else { letter -> DrillService.submitLetter(letter) }
                 )
-                if (!mcq) CardFaceBinder.setMarkup(question, row.front)
+                if (!mcq) {
+                    val stem = QuestionLabel.of(row.front, row.questionOrdinal).stem
+                    CardFaceBinder.setMarkup(question, stem.ifBlank { row.front })
+                }
+                if (row.questionLabel.isNotBlank()) {
+                    label.visibility = View.VISIBLE
+                    label.text = row.questionLabel
+                }
                 if (row.showBack) {
                     val parts = Citation.splitHtml(row.back)
                     answer.visibility = View.VISIBLE
@@ -239,13 +340,8 @@ class ChatAdapter(
                     answerFooter.text = ""
                 }
             }
-            if (!row.revealText || row.heard.isBlank()) {
-                heard.visibility = View.GONE
-                heard.text = ""
-            } else {
-                heard.visibility = View.VISIBLE
-                heard.text = row.heard
-            }
+            heard.visibility = View.GONE
+            heard.text = ""
             showAnswer.visibility = if (row.showAnswer) View.VISIBLE else View.GONE
             showAnswer.setOnClickListener { DrillService.submitShowAnswer() }
             chips.visibility = if (row.rating) View.VISIBLE else View.GONE
@@ -306,6 +402,8 @@ class ChatAdapter(
         private const val TYPE_PAST = 1
         private const val TYPE_DIVIDER = 2
         private const val TYPE_LIVE = 3
+        private const val TYPE_ASK = 4
+        private const val TYPE_NOTICE = 5
 
         private val DIFF = object : DiffUtil.ItemCallback<ChatRow>() {
             override fun areItemsTheSame(a: ChatRow, b: ChatRow): Boolean = a.key == b.key

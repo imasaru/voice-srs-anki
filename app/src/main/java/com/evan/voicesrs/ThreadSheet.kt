@@ -159,10 +159,11 @@ class ThreadSheet : BottomSheetDialogFragment() {
             shuffle = shuffle
         )
         if (!mcq) {
-            CardFaceBinder.setMarkup(
-                question,
-                BubbleModel.fullQuestion(turn.frontText).ifBlank { turn.frontText }
-            )
+            val stem = QuestionLabel.of(turn.frontText, index + 1).stem
+            CardFaceBinder.setMarkup(question, BubbleModel.cardText(stem, expanded = true))
+        }
+        if (turn.questionLabel.isNotBlank()) {
+            root.findViewById<TextView>(R.id.threadQuestionLabel).text = turn.questionLabel
         }
         CardFaceBinder.bindPills(
             root.findViewById(R.id.threadSpokenPill),

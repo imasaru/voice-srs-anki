@@ -6,22 +6,23 @@ import org.junit.Test
 
 class ChatAskLabelTest {
     @Test
-    fun `line names the question and the deck`() {
+    fun `line names the shared label and the deck`() {
         assertEquals(
-            "Asking about: Question 3 · Leaf",
-            ChatAskLabel.line(3, "Leaf")
+            "Asking about: QUESTION 4 · Leaf",
+            ChatAskLabel.line("QUESTION 4", "Leaf")
         )
         assertEquals(
-            "Asking about: Question 1 · Databricks",
-            ChatAskLabel.line(1, "  Databricks  ")
+            "Asking about: CARD 1 · Databricks",
+            ChatAskLabel.line("CARD 1", "  Databricks  ")
         )
     }
 
     @Test
-    fun `no card or no deck hides the line`() {
-        assertNull(ChatAskLabel.line(0, "Leaf"))
-        assertNull(ChatAskLabel.line(-1, "Leaf"))
-        assertNull(ChatAskLabel.line(2, " "))
-        assertNull(ChatAskLabel.line(2, ""))
+    fun `a blank label or deck hides the card line and a general line stays readable`() {
+        assertNull(ChatAskLabel.line("", "Leaf"))
+        assertNull(ChatAskLabel.line("CARD 2", " "))
+        assertNull(ChatAskLabel.line("CARD 2", ""))
+        assertEquals("General question · Leaf", ChatAskLabel.general("Leaf"))
+        assertEquals("General question", ChatAskLabel.general(""))
     }
 }

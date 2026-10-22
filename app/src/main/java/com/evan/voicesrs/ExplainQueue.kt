@@ -130,12 +130,15 @@ object ExplainQueue {
         }
         var lastUi = 0L
         try {
+            val turn = job.turnId?.let { id -> ReviewLog.snapshot().firstOrNull { it.turnId == id } }
+            val label = turn?.questionLabel?.ifBlank { null }
+                ?: QuestionLabel.promptName(job.front, sessionCount = 0)
             val raw = client.complete(
                 baseUrl = cfg.aiBaseUrl,
                 apiKey = cfg.aiApiKey,
                 model = cfg.aiModel,
                 system = PromptBuilder.SYSTEM,
-                user = PromptBuilder.userMessage(job.front, job.back),
+                user = PromptBuilder.userMessage(job.front, job.back, label),
                 cancelled = { job.cancelRequested },
                 onThinking = {
                     val id = job.turnId ?: return@complete
@@ -146,7 +149,7 @@ object ExplainQueue {
                 val shown = BubbleModel.visibleExplanation(partial, job.front, job.back)
                 if (shown.isBlank()) return@complete
                 val now = System.currentTimeMillis()
-                if (now - lastUi < 250L) return@complete
+                if (now - lastUi < ScrollAnchor.COALESCE_MS) return@complete
                 lastUi = now
                 ReviewLog.markStreaming(id, shown)
             }

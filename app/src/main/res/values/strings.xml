@@ -120,6 +120,12 @@
     <string name="expl_show_more">Show more</string>
     <string name="expl_show_less">Show less</string>
     <string name="expl_retry">Retry</string>
+    <string name="expl_ask">Explain</string>
+    <string name="past_grade_confirm">Change</string>
+    <string name="settings_auto_explain">Auto-explain after</string>
+    <string name="settings_auto_explain_note">Other ratings get an Explain button instead.</string>
+    <string name="settings_detect_code">Detect code automatically</string>
+    <string name="settings_detect_code_help">Wrap code-like tokens as chips when a card has no code tags.</string>
     <string name="silent_switch">🔇 Silent mode</string>
     <string name="silent_switch_sub">No voice: questions and answers are text only</string>
     <string name="chat_new_divider">● New</string>

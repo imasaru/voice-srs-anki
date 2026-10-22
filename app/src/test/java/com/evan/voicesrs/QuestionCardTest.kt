@@ -26,7 +26,7 @@ class QuestionCardTest {
         assertEquals(listOf("A", "B", "C", "D"), parsed.options.map { it.letter })
         assertEquals("filter(arr, x -> x > 100)", parsed.options[1].text)
         assertTrue(parsed.options.none { it.correct })
-        assertEquals("QUESTION 24", QuestionCard.label(24))
+        assertEquals("CARD 24", QuestionCard.label(24))
 
         val paren = QuestionCard.parse("Stem line\nA) one\nF) six")
         assertTrue(paren.mcq)

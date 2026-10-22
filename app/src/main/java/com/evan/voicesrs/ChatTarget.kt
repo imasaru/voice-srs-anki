@@ -13,12 +13,17 @@ object ChatTarget {
     sealed class Target {
         data class Live(val cardId: Long, val ordinal: Int, val revealed: Boolean) : Target()
         data class OlderThread(val turnId: Long) : Target()
+        /** No card on screen. The question is about the selected deck. */
+        data object General : Target()
         data object None : Target()
     }
 
-    /** The composer. Never the previous graded turn. */
+    /**
+     * The composer. A card on screen stays that card.
+     * No card is a general question, never the previous graded turn.
+     */
     fun composer(screen: Screen?): Target {
-        if (screen == null || screen.ordinal <= 0) return Target.None
+        if (screen == null || screen.ordinal <= 0) return Target.General
         return Target.Live(screen.cardId, screen.ordinal, screen.revealed)
     }
 

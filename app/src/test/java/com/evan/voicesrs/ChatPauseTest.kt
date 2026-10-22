@@ -44,4 +44,49 @@ class ChatPauseTest {
         assertFalse(ChatPause.speakReply(paused = true, silent = false, askedByVoice = false))
         assertFalse(ChatPause.speakReply(paused = false, silent = false, askedByVoice = true))
     }
+
+    @Test
+    fun `no question sent auto resumes after one second and re engage cancels it`() {
+        assertEquals(1_000L, ChatPause.AUTO_RESUME_MS)
+        assertEquals("#f5b8c8", ChatPause.RESUME_PULSE)
+        for (end in listOf(
+            ChatPause.Disengage.DICTATION_FAILED,
+            ChatPause.Disengage.DICTATION_CANCELLED,
+            ChatPause.Disengage.INPUT_CLEARED,
+            ChatPause.Disengage.UNFOCUSED
+        )) {
+            val plan = ChatPause.afterDisengage(end)
+            assertTrue(plan.autoResume)
+            assertEquals(1_000L, plan.delayMs)
+            assertFalse(plan.pulse)
+            assertTrue(plan.stayPausedUntilTimer)
+        }
+        assertTrue(ChatPause.reengageCancels(timerArmed = true))
+        assertFalse(ChatPause.reengageCancels(timerArmed = false))
+    }
+
+    @Test
+    fun `entering a pause shows resume and opening a thread cancels auto resume`() {
+        val enter = ChatPause.onEnter()
+        assertTrue(enter.showResume)
+        assertFalse(enter.pulse)
+        assertFalse(enter.autoResume)
+        assertTrue(ChatPause.triggerReengages(ChatPause.Trigger.OPEN_THREAD))
+        assertTrue(ChatPause.triggerReengages(ChatPause.Trigger.FOCUS_INPUT))
+        assertTrue(ChatPause.triggerReengages(ChatPause.Trigger.TYPING))
+        assertTrue(ChatPause.triggerReengages(ChatPause.Trigger.DICTATION))
+    }
+
+    @Test
+    fun `a sent question stays paused and pulses the resume button`() {
+        val plan = ChatPause.afterDisengage(ChatPause.Disengage.QUESTION_SENT)
+        assertFalse(plan.autoResume)
+        assertEquals(0L, plan.delayMs)
+        assertTrue(plan.stayPausedUntilTimer)
+        assertTrue(plan.showResume)
+        assertTrue(plan.pulse)
+        assertEquals("#f5b8c8", plan.pulseColor)
+        assertTrue(ChatPause.accepts(ChatPause.Action.RATING))
+        assertTrue(ChatPause.accepts(ChatPause.Action.RESUME))
+    }
 }

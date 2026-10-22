@@ -12,7 +12,10 @@ data class StoredThread(
     val cardId: Long,
     val noteId: Long?,
     val contentHash: String,
-    val messages: List<ThreadMessage>
+    val messages: List<ThreadMessage>,
+    /** Corrected grade, when a past answer was changed. Null until then. */
+    val ease: Int? = null,
+    val transcript: String? = null
 )
 
 /**
@@ -131,6 +134,8 @@ object ThreadStore {
                 .put("contentHash", thread.contentHash)
                 .put("messages", messages)
             if (thread.noteId != null) obj.put("noteId", thread.noteId)
+            if (thread.ease != null) obj.put("ease", thread.ease)
+            if (!thread.transcript.isNullOrBlank()) obj.put("transcript", thread.transcript)
             array.put(obj)
         }
         return JSONObject().put("threads", array).toString()
@@ -157,7 +162,9 @@ object ThreadStore {
                     cardId = obj.optLong("cardId"),
                     noteId = if (obj.has("noteId") && !obj.isNull("noteId")) obj.optLong("noteId") else null,
                     contentHash = obj.optString("contentHash"),
-                    messages = messages
+                    messages = messages,
+                    ease = if (obj.has("ease") && !obj.isNull("ease")) obj.optInt("ease") else null,
+                    transcript = obj.optString("transcript").ifBlank { null }
                 )
             }
             out

@@ -94,11 +94,12 @@ object LiveThread {
         out
     }
 
-    fun ask(context: Context, question: String, byVoice: Boolean) {
+    /** @return false when there is no live card to attach the question to. */
+    fun ask(context: Context, question: String, byVoice: Boolean): Boolean {
         val q = question.trim()
-        if (q.isEmpty()) return
+        if (q.isEmpty()) return false
         val shot = synchronized(lock) {
-            val screen = current ?: return
+            val screen = current ?: return false
             val at = System.currentTimeMillis()
             val next = followUps + FollowUp(q, ExplState.Pending, at)
             val index = next.lastIndex
@@ -108,10 +109,12 @@ object LiveThread {
         dispatch()
         val app = context.applicationContext
         Thread({
+            var lastPaint = -1L
             try {
                 val cfg = Prefs.load(app)
                 val messages: List<PromptBuilder.ChatMsg>
                 val system: String
+                val label = QuestionLabel.of(shot.front, shot.screen.ordinal).label
                 if (shot.screen.revealed) {
                     messages = PromptBuilder.followUpMessages(
                         shot.front,
@@ -119,11 +122,12 @@ object LiveThread {
                         shot.transcript,
                         "",
                         shot.prior,
-                        q
+                        q,
+                        label
                     )
                     system = PromptBuilder.followUpSystem()
                 } else {
-                    messages = PromptBuilder.hintMessages(shot.front, shot.prior, q)
+                    messages = PromptBuilder.hintMessages(shot.front, shot.prior, q, label)
                     system = PromptBuilder.hintSystem()
                 }
                 val text = AiClient().completeChat(
@@ -134,8 +138,14 @@ object LiveThread {
                     messages = messages,
                     cancelled = { false }
                 ) { partial ->
-                    val shown = BubbleModel.visibleExplanation(partial, shot.front, shot.back)
-                    if (shown.isNotBlank()) mark(shot.screen, shot.index, ExplState.Streaming(shown))
+                    val now = System.currentTimeMillis()
+                    if (ScrollAnchor.paintNow(now, lastPaint, streamingOnly = true)) {
+                        val shown = BubbleModel.visibleExplanation(partial, shot.front, shot.back)
+                        if (shown.isNotBlank()) {
+                            lastPaint = now
+                            mark(shot.screen, shot.index, ExplState.Streaming(shown))
+                        }
+                    }
                 }
                 val shown = BubbleModel.visibleExplanation(text, shot.front, shot.back)
                 if (shown.isBlank()) {
@@ -146,9 +156,14 @@ object LiveThread {
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "live reply failed: ${e.javaClass.simpleName}")
-                mark(shot.screen, shot.index, ExplState.Error(AiClient.publicMessage(e), retryable = true))
+                mark(
+                    shot.screen,
+                    shot.index,
+                    ExplState.Error(ChatSend.visible(ChatSend.kindOf(e)), retryable = true)
+                )
             }
         }, "live-ask").start()
+        return true
     }
 
     private data class Shot(

@@ -35,30 +35,33 @@ object CardFaceBinder {
         sessionStartMs: Long = 0L,
         shuffle: Boolean = true,
         chosenLetter: String? = null,
-        onOption: ((String) -> Unit)? = null
+        onOption: ((String) -> Unit)? = null,
+        pastEditable: Boolean = false
     ): Boolean {
-        val plain = BubbleModel.fullQuestion(source).ifBlank { AnkiText.stripHtml(source) }
+        val face = QuestionLabel.of(source, number.coerceAtLeast(1))
         val answer = AnkiText.stripHtml(answerPlain).ifBlank { answerPlain.trim() }
-        val parsedRaw = QuestionCard.parse(plain)
+        val parsedRaw = QuestionCard.parse(face.stem)
         val ordered = parsedRaw.copy(
             options = OptionShuffle.order(parsedRaw.options, cardId, sessionStartMs, shuffle && parsedRaw.mcq)
         )
         val parsed = QuestionCard.present(ordered, answer, revealed, chosenLetter)
-        if (!parsed.mcq || options == null) {
-            label?.visibility = View.GONE
-            options?.visibility = View.GONE
-            options?.removeAllViews()
-            return false
-        }
         if (label != null) {
             label.visibility = View.VISIBLE
-            label.text = QuestionCard.label(number.coerceAtLeast(1))
+            label.text = face.label
+        }
+        if (!parsed.mcq || options == null) {
+            options?.visibility = View.GONE
+            options?.removeAllViews()
+            setMarkup(stem, face.stem)
+            return false
         }
         setMarkup(stem, parsed.stem)
         options.visibility = View.VISIBLE
         options.removeAllViews()
         val density = options.resources.displayMetrics.density
-        val canTap = onOption != null && TapAnswer.tappable(parsed.mcq, revealed)
+        val canTap = onOption != null && (
+            TapAnswer.tappable(parsed.mcq, revealed) || (pastEditable && parsed.mcq)
+        )
         for (option in parsed.options) {
             val row = TextView(options.context)
             setMarkup(row, QuestionCard.optionRow(option))
@@ -202,16 +205,21 @@ object CardFaceBinder {
      * and `<code>` / `<pre>` become the chip and code-block styles.
      */
     fun setMarkup(view: TextView, markup: String) {
-        if (markup.isEmpty()) {
+        val shown = try {
+            CodeDetect.forDisplay(markup, Prefs.load(view.context).detectCode)
+        } catch (_: Exception) {
+            CodeDetect.forDisplay(markup, CodeDetect.SETTING_DEFAULT)
+        }
+        if (shown.isEmpty()) {
             view.text = ""
             return
         }
-        if (!markup.contains('<') && !markup.contains('&')) {
-            view.text = markup
+        if (!shown.contains('<') && !shown.contains('&')) {
+            view.text = shown
             return
         }
         view.text = HtmlCompat.fromHtml(
-            CodeMarkup.prepareForHtml(markup),
+            CodeMarkup.prepareForHtml(shown),
             HtmlCompat.FROM_HTML_MODE_COMPACT,
             null,
             ChipTagHandler(view)

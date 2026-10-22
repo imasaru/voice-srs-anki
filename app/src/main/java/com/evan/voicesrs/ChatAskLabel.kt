@@ -2,13 +2,19 @@ package com.evan.voicesrs
 
 /**
  * The grey line above the Ask the AI field.
- * Blank when no card is on screen, so the view can hide.
+ * [line] uses the same QUESTION / CARD label as the bubble.
+ * With no card up, [general] names the deck, or just says it is general.
  */
 object ChatAskLabel {
-    fun line(questionNumber: Int, deckName: String): String? {
-        if (questionNumber <= 0) return null
+    fun line(label: String, deckName: String): String? {
+        val name = label.trim()
         val deck = deckName.trim()
-        if (deck.isEmpty()) return null
-        return "Asking about: Question $questionNumber · $deck"
+        if (name.isEmpty() || deck.isEmpty()) return null
+        return "Asking about: $name · $deck"
+    }
+
+    fun general(deckName: String): String {
+        val deck = deckName.trim()
+        return if (deck.isEmpty()) "General question" else "General question · $deck"
     }
 }

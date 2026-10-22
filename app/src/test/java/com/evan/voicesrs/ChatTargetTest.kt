@@ -31,9 +31,9 @@ class ChatTargetTest {
     }
 
     @Test
-    fun `no card on screen sends nowhere`() {
-        assertTrue(ChatTarget.composer(null) is ChatTarget.Target.None)
-        assertTrue(ChatTarget.composer(ChatTarget.Screen(20L, 0, false)) is ChatTarget.Target.None)
+    fun `no card on screen is a general question`() {
+        assertTrue(ChatTarget.composer(null) is ChatTarget.Target.General)
+        assertTrue(ChatTarget.composer(ChatTarget.Screen(20L, 0, false)) is ChatTarget.Target.General)
         assertFalse(ChatTarget.countsAsGrade())
     }
 }

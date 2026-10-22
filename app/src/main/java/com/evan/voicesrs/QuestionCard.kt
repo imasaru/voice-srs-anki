@@ -20,7 +20,8 @@ object QuestionCard {
 
     const val ANSWER_RATING = "YOUR ANSWER · RATING"
 
-    fun label(n: Int): String = "QUESTION $n"
+    /** Session count when the card text has no number of its own. */
+    fun label(n: Int): String = QuestionLabel.resolve("", n).label
 
     fun parse(plain: String): Parsed {
         val (source, slots) = maskPre(plain)

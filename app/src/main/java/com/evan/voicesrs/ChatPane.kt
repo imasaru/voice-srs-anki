@@ -59,11 +59,41 @@ class ChatPane(
         list.post { if (attached) render() }
     }
 
+    private val generalListener: () -> Unit = {
+        list.post { if (attached) render() }
+    }
+
+    /** Top of the live question before the last layout, while follow mode is on. */
+    private var anchorTop: Int? = null
+    private var followAnchor = false
+    private var anchorSuppress = false
+
+    private val anchorLayout = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+        if (anchorSuppress) return@OnLayoutChangeListener
+        val before = anchorTop
+        val after = liveQuestionTop()
+        if (followAnchor && before != null && after != null) {
+            val delta = ScrollAnchor.scrollDelta(following = true, beforeTop = before, afterTop = after)
+            if (delta != 0) {
+                anchorSuppress = true
+                list.scrollBy(0, delta)
+                anchorSuppress = false
+                anchorTop = liveQuestionTop()
+                return@OnLayoutChangeListener
+            }
+        }
+        if (followAnchor) anchorTop = after
+    }
+
     private val scroller = object : RecyclerView.OnScrollListener() {
         override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
             sample(null)
             if (dy == 0) return
             val bottom = isAtBottom()
+            if (!anchorSuppress) {
+                followAnchor = ScrollAnchor.following(bottom, followView.holdingOrdinal, liveRowVisible())
+                anchorTop = liveQuestionTop()
+            }
             applyFollow(follow.onScroll(followView.copy(atBottom = bottom), bottom), scrollNow = true)
         }
     }
@@ -78,6 +108,8 @@ class ChatPane(
         ReviewLog.addListener(listener)
         DrillUi.addListener(uiListener)
         LiveThread.addListener(liveListener)
+        GeneralChat.addListener(generalListener)
+        list.addOnLayoutChangeListener(anchorLayout)
         nextPill?.setOnClickListener {
             applyFollow(follow.onPill(followView), scrollNow = true)
         }
@@ -105,6 +137,8 @@ class ChatPane(
         ReviewLog.removeListener(listener)
         DrillUi.removeListener(uiListener)
         LiveThread.removeListener(liveListener)
+        GeneralChat.removeListener(generalListener)
+        list.removeOnLayoutChangeListener(anchorLayout)
         DrillService.reportChatScreen(attached = false, ordinal = followView.liveOrdinal, ready = false)
     }
 
@@ -116,7 +150,14 @@ class ChatPane(
             true
         }
         val liveFollows = LiveThread.snapshot()?.followUps.orEmpty()
-        val rows = ChatFeed.rows(turns, DrillUi.state, embedControls, liveFollows).map { row ->
+        val rows = ChatFeed.rows(
+            turns,
+            DrillUi.state,
+            embedControls,
+            liveFollows,
+            asks = GeneralChat.snapshot(),
+            notice = GeneralChat.notice()
+        ).map { row ->
             if (row is ChatRow.Live && !showCard) row.copy(revealText = false) else row
         }
         emptyView?.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
@@ -144,7 +185,18 @@ class ChatPane(
         }
         lastKeys = keys
         lastOrdinal = ordinal
-        val preserve = decision.scroll == ChatFollow.Scroll.NONE &&
+        val followingNow = ScrollAnchor.following(
+            atBottom = measured.atBottom,
+            holdingOrdinal = measured.holdingOrdinal,
+            liveVisible = measured.liveVisible
+        )
+        if (decision.scroll != ChatFollow.Scroll.TO_LIVE) {
+            followAnchor = followingNow
+            if (followingNow) anchorTop = liveQuestionTop()
+        } else {
+            followAnchor = false
+        }
+        val preserve = !followingNow && decision.scroll == ChatFollow.Scroll.NONE &&
             (explanationOnly || !decision.view.atBottom || decision.view.holdingOrdinal != 0)
         val lm = list.layoutManager as? LinearLayoutManager
         val first = if (preserve) lm?.findFirstVisibleItemPosition() ?: -1 else -1
@@ -197,6 +249,15 @@ class ChatPane(
         if (range <= extent + 1) return true
         val slop = (ChatFollow.BOTTOM_SLOP_DP * list.resources.displayMetrics.density).toInt()
         return range - (offset + extent) <= slop
+    }
+
+    private fun liveQuestionTop(): Int? {
+        for (i in 0 until list.childCount) {
+            val child = list.getChildAt(i) ?: continue
+            val pos = list.getChildAdapterPosition(child)
+            if (adapter.currentList.getOrNull(pos) is ChatRow.Live) return child.top
+        }
+        return null
     }
 
     private fun liveRowVisible(): Boolean {

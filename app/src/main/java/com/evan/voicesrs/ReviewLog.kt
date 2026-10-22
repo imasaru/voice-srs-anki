@@ -17,7 +17,9 @@ data class ReviewTurn(
     val ease: Int?,
     val explanation: ExplState,
     val followUps: List<FollowUp> = emptyList(),
-    val unread: Boolean = false
+    val unread: Boolean = false,
+    /** QUESTION N or CARD N. Empty on turns recorded before v0.1.19. */
+    val questionLabel: String = ""
 )
 
 sealed interface ExplState {
@@ -80,13 +82,16 @@ object ReviewLog {
         contentHash: String,
         transcript: String,
         cachedText: String?,
-        aiEnabled: Boolean
+        aiEnabled: Boolean,
+        autoExplain: Boolean = true,
+        questionLabel: String = ""
     ): ReviewTurn? {
         if (ease == null) return null
         val explanation = when {
             !aiEnabled -> ExplState.None
             cachedText != null -> ExplState.Ready(cachedText, cached = true)
-            else -> ExplState.Queued
+            autoExplain -> ExplState.Queued
+            else -> ExplState.None
         }
         val turn = synchronized(lock) {
             val created = ReviewTurn(
@@ -99,7 +104,8 @@ object ReviewLog {
                 transcript = transcript,
                 ease = ease,
                 explanation = explanation,
-                unread = false
+                unread = false,
+                questionLabel = questionLabel
             )
             turns = turns + created
             created
@@ -160,6 +166,21 @@ object ReviewLog {
 
     fun replaceFollowUps(turnId: Long, followUps: List<FollowUp>) = replace(turnId) { turn ->
         if (turn.followUps == followUps) turn else turn.copy(followUps = followUps)
+    }
+
+    /** A later correction of the learner's letter and ease. Does not speak or advance. */
+    fun updateGrade(turnId: Long, transcript: String, ease: Int): Boolean {
+        var found = false
+        replace(turnId) { turn ->
+            found = true
+            turn.copy(transcript = transcript, ease = ease)
+        }
+        return found
+    }
+
+    /** Drop a finished explanation so a new one can run. */
+    fun forceQueued(turnId: Long) = replace(turnId) { turn ->
+        turn.copy(explanation = ExplState.Queued, unread = false)
     }
 
     /** @return index of the new question, or -1 when the turn is gone. */

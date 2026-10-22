@@ -178,6 +178,16 @@
                 android:text="@string/expl_retry"
                 android:textColor="@color/bubble_ai_on"
                 android:visibility="gone" />
+
+            <Button
+                android:id="@+id/explAsk"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="@string/expl_ask"
+                android:textColor="@color/bubble_ai_on"
+                android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>
 

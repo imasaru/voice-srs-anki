@@ -98,6 +98,9 @@ class ExplainSession private constructor(
         val hash = ContentHash.of(PromptBuilder.PROMPT_VERSION, front, back)
         val noteKey = noteId ?: cardId
         val cached = if (cfg.aiEnabled) cachedText(noteKey, hash) else null
+        val ordinal = DrillUi.state.questionOrdinal.coerceAtLeast(ReviewLog.snapshot().size + 1)
+        val label = QuestionLabel.of(front, ordinal).label
+        val auto = AutoExplain.shouldAuto(cfg.autoExplainEases, ease)
         val turn = ReviewLog.appendAfterGrade(
             ease = ease,
             cardId = cardId,
@@ -107,7 +110,9 @@ class ExplainSession private constructor(
             contentHash = hash,
             transcript = transcript,
             cachedText = cached,
-            aiEnabled = cfg.aiEnabled
+            aiEnabled = cfg.aiEnabled,
+            autoExplain = auto,
+            questionLabel = label
         ) ?: return
         attachThread(turn)
         mergeLiveAsks(turn)
@@ -116,6 +121,7 @@ class ExplainSession private constructor(
             ExplainLog.ready(turn.turnId, cached = true)
             return
         }
+        if (!auto) return
         ExplainQueue.enqueueAnswered(
             context,
             ExplainKey(noteKey, hash),

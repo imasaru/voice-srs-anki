@@ -33,4 +33,75 @@ object ChatPause {
     fun freeze(nowMs: Long, deadlineMs: Long): Long = (deadlineMs - nowMs).coerceAtLeast(0L)
 
     fun resumeDeadline(nowMs: Long, frozenMs: Long): Long = nowMs + frozenMs.coerceAtLeast(0L)
+
+    /** Wait this long, then resume, when the pause ends without a question. */
+    const val AUTO_RESUME_MS = 1_000L
+
+    /** Soft accent pink for the Resume pulse after a question was sent. */
+    const val RESUME_PULSE = "#f5b8c8"
+
+    enum class Disengage {
+        QUESTION_SENT,
+        DICTATION_FAILED,
+        DICTATION_CANCELLED,
+        INPUT_CLEARED,
+        UNFOCUSED
+    }
+
+    data class ResumePlan(
+        val autoResume: Boolean,
+        val delayMs: Long,
+        /** The card stays paused until the timer fires, or until Resume or a rating. */
+        val stayPausedUntilTimer: Boolean,
+        val showResume: Boolean,
+        val pulse: Boolean,
+        val pulseColor: String
+    )
+
+    /**
+     * A sent question stays paused and pulses Resume.
+     * Dictation that failed or was cancelled, a cleared field, or leaving the
+     * composer without sending schedules [AUTO_RESUME_MS].
+     */
+    fun afterDisengage(end: Disengage): ResumePlan {
+        if (end == Disengage.QUESTION_SENT) {
+            return ResumePlan(
+                autoResume = false,
+                delayMs = 0L,
+                stayPausedUntilTimer = true,
+                showResume = true,
+                pulse = true,
+                pulseColor = RESUME_PULSE
+            )
+        }
+        return ResumePlan(
+            autoResume = true,
+            delayMs = AUTO_RESUME_MS,
+            stayPausedUntilTimer = true,
+            showResume = false,
+            pulse = false,
+            pulseColor = RESUME_PULSE
+        )
+    }
+
+    /** Focusing, typing, or dictating again drops a pending auto-resume. */
+    fun reengageCancels(timerArmed: Boolean): Boolean = timerArmed
+
+    /**
+     * The pause row shows Resume as soon as the drill freezes.
+     * The accent pulse waits until a question was actually sent.
+     */
+    fun onEnter(): ResumePlan = ResumePlan(
+        autoResume = false,
+        delayMs = 0L,
+        stayPausedUntilTimer = true,
+        showResume = true,
+        pulse = false,
+        pulseColor = RESUME_PULSE
+    )
+
+    /** Focus, typing, dictation, and opening a thread all drop a pending auto-resume. */
+    fun triggerReengages(trigger: Trigger): Boolean = when (trigger) {
+        Trigger.FOCUS_INPUT, Trigger.OPEN_THREAD, Trigger.TYPING, Trigger.DICTATION -> true
+    }
 }

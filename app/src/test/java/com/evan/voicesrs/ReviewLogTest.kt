@@ -98,6 +98,39 @@ class ReviewLogTest {
         assertFalse(ReviewLog.markRead(turn.turnId))
     }
 
+    @Test
+    fun `a past grade update replaces the transcript and ease`() {
+        val turn = append(ease = 1, cachedText = "why A")
+        assertTrue(ReviewLog.updateGrade(turn.turnId, transcript = "B", ease = 3))
+        val updated = ReviewLog.snapshot().single()
+        assertEquals("B", updated.transcript)
+        assertEquals(3, updated.ease)
+        assertEquals("QUESTION 4", updated.questionLabel)
+        assertTrue(updated.explanation is ExplState.Ready)
+        assertFalse(ReviewLog.updateGrade(turnId = 0L, transcript = "C", ease = 1))
+    }
+
+    @Test
+    fun `ratings that do not auto explain stay without a queued job`() {
+        val none = ReviewLog.appendAfterGrade(
+            ease = 3,
+            cardId = 1L,
+            noteId = 2L,
+            frontText = "front",
+            backText = "back",
+            contentHash = "h",
+            transcript = "B",
+            cachedText = null,
+            aiEnabled = true,
+            autoExplain = false,
+            questionLabel = "CARD 1"
+        )!!
+        assertTrue(none.explanation is ExplState.None)
+        assertEquals("CARD 1", none.questionLabel)
+        ReviewLog.forceQueued(none.turnId)
+        assertTrue(ReviewLog.snapshot().single().explanation is ExplState.Queued)
+    }
+
     private fun append(ease: Int, cachedText: String?, aiEnabled: Boolean = true): ReviewTurn {
         return ReviewLog.appendAfterGrade(
             ease = ease,
@@ -108,7 +141,8 @@ class ReviewLogTest {
             contentHash = "hash",
             transcript = "said it",
             cachedText = cachedText,
-            aiEnabled = aiEnabled
+            aiEnabled = aiEnabled,
+            questionLabel = "QUESTION 4"
         )!!
     }
 }

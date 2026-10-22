@@ -30,9 +30,24 @@ sealed class ChatRow {
         val cardId: Long = 0L,
         val chosenLetter: String? = null,
         val suggestedEase: Int? = null,
-        val followUps: List<FollowUp> = emptyList()
+        val followUps: List<FollowUp> = emptyList(),
+        val questionLabel: String = ""
     ) : ChatRow() {
         override val key: String = "live"
+    }
+
+    /** A question with no card. Stands alone in the thread. */
+    data class Ask(
+        val id: Long,
+        val question: String,
+        val state: ExplState,
+        val deck: String = ""
+    ) : ChatRow() {
+        override val key: String = "ask$id"
+    }
+
+    data class Notice(val message: String) : ChatRow() {
+        override val key: String = "notice"
     }
 }
 
@@ -45,10 +60,15 @@ object ChatFeed {
         turns: List<ReviewTurn>,
         state: DrillUiState,
         embedControls: Boolean = true,
-        liveFollowUps: List<FollowUp> = emptyList()
+        liveFollowUps: List<FollowUp> = emptyList(),
+        asks: List<ChatRow.Ask> = emptyList(),
+        notice: String? = null
     ): List<ChatRow> {
-        val out = ArrayList<ChatRow>(turns.size + 2)
+        val out = ArrayList<ChatRow>(turns.size + asks.size + 3)
         for (turn in turns) out += ChatRow.Past(turn)
+        for (ask in asks) out += ask
+        val note = notice?.trim().orEmpty()
+        if (note.isNotEmpty()) out += ChatRow.Notice(note)
         if (!state.drillRunning || state.frontHtml.isBlank()) return out
         val controls = AnswerControls.of(
             hasQuestion = true,
@@ -69,7 +89,8 @@ object ChatFeed {
             cardId = state.cardId,
             chosenLetter = state.chosenLetter,
             suggestedEase = if (buttons && controls.rating) state.suggestedEase else null,
-            followUps = liveFollowUps
+            followUps = liveFollowUps,
+            questionLabel = state.questionLabel
         )
         return out
     }
