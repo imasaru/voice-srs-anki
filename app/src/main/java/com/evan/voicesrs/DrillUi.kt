@@ -29,7 +29,13 @@ data class DrillUiState(
     /** Silent question is on screen and the drill is waiting for Show answer. */
     val awaitingShowAnswer: Boolean = false,
     /** Ease (1-4) of the grade chosen for the current card by tap or voice; null clears the chips. */
-    val selectedEase: Int? = null
+    val selectedEase: Int? = null,
+    /** Whole seconds left on the think timer. Null hides the countdown. */
+    val thinkSecondsLeft: Int? = null,
+    /** Chat input, a thread, or a chat question has frozen this card. */
+    val chatPaused: Boolean = false,
+    /** 1-based session order of the live question. Zero when no card is up. */
+    val questionOrdinal: Int = 0
 )
 
 object DrillUi {

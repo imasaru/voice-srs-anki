@@ -11,11 +11,16 @@ import android.os.Build
 import android.os.Bundle
 import android.transition.Fade
 import android.transition.TransitionManager
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
+import android.view.inputmethod.EditorInfo
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
@@ -74,6 +79,7 @@ class MainActivity : AppCompatActivity() {
     /** Last [DrillUiState.drillRunning] applied by [uiListener]; used to refresh due on session end. */
     private var lastDrillRunning = false
     private var chatPane: ChatPane? = null
+    private var chatDictation: ChatDictation? = null
 
     private val reviewListener: (List<ReviewTurn>) -> Unit = {
         runOnUiThread {
@@ -160,6 +166,7 @@ class MainActivity : AppCompatActivity() {
         }
         showCrashIfAny()
         bindDeckTitle(Prefs.load(this).deck)
+        wireChatComposer()
         val chatList = findViewById<RecyclerView>(R.id.chatList)
         val chatUnread = findViewById<TextView>(R.id.chatUnread)
         if (chatList != null && chatUnread != null) {
@@ -262,9 +269,71 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        chatDictation?.stop()
+        chatDictation = null
         chatPane?.detach()
         chatPane = null
         super.onDestroy()
+    }
+
+    /**
+     * Focus, typing, and dictation pause the drill. Sending does not resume.
+     * The listener is attached after the start button takes focus so opening
+     * the screen does not pause a running drill.
+     */
+    private fun wireChatComposer() {
+        val input = findViewById<EditText>(R.id.chatInput) ?: return
+        val dictate = findViewById<Button>(R.id.chatDictate)
+        val send = findViewById<Button>(R.id.chatSend)
+        val resume = findViewById<Button>(R.id.chatResumeButton)
+        input.clearFocus()
+        window.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+                WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
+        )
+        startButton.requestFocus()
+        input.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) DrillService.pauseForChat(ChatPause.Trigger.FOCUS_INPUT)
+        }
+        input.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (!s.isNullOrEmpty()) DrillService.pauseForChat(ChatPause.Trigger.TYPING)
+            }
+        })
+        val submit = {
+            sendChatQuestion(input.text?.toString().orEmpty(), byVoice = false)
+            input.setText("")
+        }
+        send?.setOnClickListener { submit() }
+        input.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEND) {
+                submit()
+                true
+            } else {
+                false
+            }
+        }
+        dictate?.setOnClickListener {
+            DrillService.pauseForChat(ChatPause.Trigger.DICTATION)
+            if (chatDictation == null) chatDictation = ChatDictation(this)
+            chatDictation?.start { spoken ->
+                runOnUiThread {
+                    if (isDestroyed) return@runOnUiThread
+                    sendChatQuestion(spoken, byVoice = true)
+                }
+            }
+        }
+        resume?.setOnClickListener { DrillService.resumeFromChat() }
+    }
+
+    /** Latest graded card. A question with no turn yet does not send. */
+    private fun sendChatQuestion(raw: String, byVoice: Boolean) {
+        val q = raw.trim()
+        if (q.isEmpty()) return
+        val turn = ReviewLog.snapshot().lastOrNull() ?: return
+        ThreadAsk.ask(this, turn.turnId, q, byVoice)
     }
 
     /** The unfolded right pane is the chat. It stays full height with or without AI. */
@@ -434,6 +503,25 @@ class MainActivity : AppCompatActivity() {
             silentBinding = false
         }
         showAnswerButton?.visibility = if (controls.showAnswer) View.VISIBLE else View.GONE
+        renderCue(state, drilling)
+    }
+
+    /** Countdown while thinking. The pause row replaces it and stays until Resume or a rating. */
+    private fun renderCue(state: DrillUiState, drilling: Boolean) {
+        val pauseRow = findViewById<View>(R.id.chatPauseRow)
+        val countdown = findViewById<TextView>(R.id.thinkCountdown)
+        val seconds = state.thinkSecondsLeft
+        if (drilling && state.chatPaused) {
+            pauseRow?.visibility = View.VISIBLE
+            countdown?.visibility = View.GONE
+        } else if (drilling && seconds != null && seconds > 0 && !state.showBack) {
+            pauseRow?.visibility = View.GONE
+            countdown?.visibility = View.VISIBLE
+            countdown?.text = ThinkTime.countdownText(seconds)
+        } else {
+            pauseRow?.visibility = View.GONE
+            countdown?.visibility = View.GONE
+        }
     }
 
     private fun ratingOpen(): Boolean {

@@ -30,7 +30,7 @@ object ThreadAsk {
         }
     }
 
-    fun ask(context: Context, turnId: Long, question: String) {
+    fun ask(context: Context, turnId: Long, question: String, byVoice: Boolean = false) {
         val q = question.trim()
         if (q.isEmpty()) return
         val app = context.applicationContext
@@ -72,6 +72,7 @@ object ThreadAsk {
                     ReviewLog.markFollowFailed(turnId, index, AiMessages.NO_TEXT)
                 } else {
                     ReviewLog.markFollowReady(turnId, index, shown, System.currentTimeMillis())
+                    DrillService.offerChatReply(shown, byVoice)
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "thread reply failed: ${e.javaClass.simpleName}")

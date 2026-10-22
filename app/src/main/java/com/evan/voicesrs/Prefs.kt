@@ -27,6 +27,8 @@ data class AnkiConfig(
     val endSilenceMs: Int = ListenWindow.DEFAULT_SILENCE_MS,
     /** How many times to listen for an answer or a grade before auto-silent. 1–5, default 3. */
     val listenAttempts: Int = ListenWindow.DEFAULT_ATTEMPTS,
+    /** Seconds to think before the answer is read. 0 is Off. Default 20. Not used in Silent mode. */
+    val thinkTimeSec: Int = ThinkTime.DEFAULT_SEC,
     /** Show the card front and back on the main screen. */
     val showCard: Boolean = true,
     /** Tap-only review. Read once at session start. The microphone stays closed. */
@@ -70,6 +72,7 @@ object Prefs {
     private const val KEY_END_SILENCE_MS = "end_silence_ms"
     private const val KEY_RELISTEN_ONCE = "relisten_once"
     private const val KEY_LISTEN_ATTEMPTS = "listen_attempts"
+    private const val KEY_THINK_TIME_SEC = "think_time_sec"
     private const val KEY_SHOW_CARD = "show_card"
     private const val KEY_SILENT = "silent_mode"
     private const val KEY_OFFLINE = "offline_batch"
@@ -161,6 +164,7 @@ object Prefs {
             .putInt(KEY_LISTEN_WAIT_SEC, ListenWindow.normalizeWaitSec(cfg.listenWaitSec))
             .putInt(KEY_END_SILENCE_MS, ListenWindow.normalizeSilenceMs(cfg.endSilenceMs))
             .putInt(KEY_LISTEN_ATTEMPTS, ListenWindow.clampAttempts(cfg.listenAttempts))
+            .putInt(KEY_THINK_TIME_SEC, ThinkTime.normalize(cfg.thinkTimeSec))
             .remove(KEY_RELISTEN_ONCE)
             .putBoolean(KEY_SHOW_CARD, cfg.showCard)
             .putBoolean(KEY_SILENT, cfg.silentMode)
@@ -219,6 +223,9 @@ object Prefs {
                     null
                 },
                 legacyOn = if (p.contains(KEY_RELISTEN_ONCE)) p.getBoolean(KEY_RELISTEN_ONCE, true) else null
+            ),
+            thinkTimeSec = ThinkTime.normalize(
+                p.getInt(KEY_THINK_TIME_SEC, ThinkTime.DEFAULT_SEC)
             ),
             showCard = p.getBoolean(KEY_SHOW_CARD, true),
             silentMode = p.getBoolean(KEY_SILENT, false),

@@ -6,18 +6,19 @@ package com.evan.voicesrs
  * of [ContentHash]; bumping it misses every cached row.
  */
 object PromptBuilder {
-    const val PROMPT_VERSION = 1
+    const val PROMPT_VERSION = 2
 
     /**
-     * Verbatim system prompt (design §7). Do not reflow.
+     * System prompt for headed thread sections. PROMPT_VERSION is in the cache key.
      */
     const val SYSTEM: String =
         "You are a concise tutor for the Databricks Certified Data Engineer Associate exam. " +
-            "Explain flashcards in ≤120 words: (1) the core concept in one sentence, " +
-            "(2) why the answer is correct, (3) one common exam trap or distractor, " +
-            "(4) a tiny example (SQL/PySpark/CLI) only if it clarifies. " +
-            "Use plain text, no headings or preamble. If the card's answer looks outdated " +
-            "or wrong relative to current Databricks docs, say so in one line starting \"Note:\"."
+            "Explain flashcards in ≤120 words. Always reply with these headed sections, in order: " +
+            "Core concept, Why <letter>, Common traps, Example. " +
+            "Core concept is one sentence. Why <letter> names the correct option letter and says why it is right. " +
+            "Common traps is a bullet list. Example is a fenced code block. Put code in backticks. " +
+            "If the card's answer looks outdated or wrong relative to current Databricks docs, " +
+            "end with one line starting \"Note:\". No preamble."
 
     fun userMessage(front: String, back: String): String {
         return "Card front: ${AnkiText.stripHtml(front)}\nCard back: ${AnkiText.stripHtml(back)}"

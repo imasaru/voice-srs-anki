@@ -132,6 +132,8 @@ class DrillService : Service(), VoiceIo {
                 pendingGrades.clear()
                 pendingGrades.add(word)
             }
+            // A rating on the revealed card resumes a chat pause and then grades.
+            active?.leaveChatPause(ChatPause.Action.RATING)
             // Voice and silent: a rating tap cuts TTS and the open microphone, then grades.
             val svc = active
             svc?.interruptSpeech()
@@ -155,6 +157,10 @@ class DrillService : Service(), VoiceIo {
                 Log.i(TAG, "show answer ignored")
                 return
             }
+            if (svc.chatPaused.get()) {
+                Log.i(TAG, "show answer ignored: paused for chat")
+                return
+            }
             svc.releaseShowAnswer()
         }
 
@@ -166,6 +172,31 @@ class DrillService : Service(), VoiceIo {
                 return
             }
             svc.applySilent(on)
+        }
+
+        /** Freeze TTS, listening, and the think timer. The card stays where it is. */
+        fun pauseForChat(trigger: ChatPause.Trigger) {
+            val svc = active ?: return
+            if (!ChatPause.pauses(running, trigger)) return
+            svc.enterChatPause()
+        }
+
+        /** Resume button. A rating tap resumes inside [submitTestGrade]. */
+        fun resumeFromChat() {
+            active?.leaveChatPause(ChatPause.Action.RESUME)
+        }
+
+        /**
+         * Speak a reply only while paused, with Silent off, after a dictated question.
+         * Typed questions stay on screen. The footer is not spoken.
+         */
+        fun offerChatReply(text: String, askedByVoice: Boolean) {
+            val svc = active ?: return
+            if (!ChatPause.speakReply(svc.chatPaused.get(), svc.sessionSilent, askedByVoice)) return
+            val spoken = SectionFormat.spoken(text)
+            if (spoken.isBlank()) return
+            svc.pendingVoiceReply.set(spoken)
+            svc.chatPauseLatch.get()?.countDown()
         }
     }
 
@@ -215,6 +246,18 @@ class DrillService : Service(), VoiceIo {
     private val showAnswerLatch = AtomicReference<CountDownLatch?>(null)
     /** A Show answer tap that landed before the wait latch existed. */
     private val showAnswerEarly = AtomicBoolean(false)
+    /** Chat pause blocks the session thread on this card. It does not end the drill. */
+    private val chatPaused = AtomicBoolean(false)
+    private val chatPauseLatch = AtomicReference<CountDownLatch?>(null)
+    @Volatile private var thinkDeadlineMs = 0L
+    /** Remaining think time frozen by a chat pause. Negative means the timer is not frozen. */
+    @Volatile private var frozenThinkMs = -1L
+    /** Think-time mic restarts skip the listen cue so only the first beep is heard. */
+    @Volatile private var quietListen = false
+    private val pendingVoiceReply = AtomicReference<String?>(null)
+    @Volatile private var shownThinkSec: Int? = null
+    @Volatile private var shownPaused = false
+    private val thinkTicker = Runnable { onThinkTick() }
     private val silentGradeLatch = AtomicReference<CountDownLatch?>(null)
     private val listenResult = AtomicReference<String?>(null)
     @Volatile private var listenToken = 0
@@ -350,6 +393,7 @@ class DrillService : Service(), VoiceIo {
                     pendingRestart.set(true)
                     stopRequested.set(true)
                     speechInterrupted = true
+                    releaseChatPause()
                     speakLatch?.countDown()
                     try { tts?.stop() } catch (_: Exception) {}
                     sessionThread?.interrupt()
@@ -411,6 +455,7 @@ class DrillService : Service(), VoiceIo {
 
     private fun requestStop() {
         stopRequested.set(true)
+        releaseChatPause()
         showAnswerLatch.get()?.countDown()
         silentGradeLatch.get()?.countDown()
         runCatching { explainSession?.stop() }
@@ -633,6 +678,7 @@ class DrillService : Service(), VoiceIo {
             explainSession = null
             gradeGate.close()
             pendingGrades.clear()
+            releaseChatPause()
             publishDrillRunning(false)
             runCatching {
                 DrillUi.update {
@@ -642,7 +688,10 @@ class DrillService : Service(), VoiceIo {
                         progressLine = "",
                         ratingVisible = false,
                         selectedEase = null,
-                        awaitingShowAnswer = false
+                        awaitingShowAnswer = false,
+                        thinkSecondsLeft = null,
+                        chatPaused = false,
+                        questionOrdinal = 0
                     )
                     when {
                         pendingRestart.get() -> cleared
@@ -668,7 +717,7 @@ class DrillService : Service(), VoiceIo {
         runCatching { DrillUi.update { it.copy(engineLabel = label) } }
     }
 
-    private fun showQuestionUi(questionHtml: String) = synchronized(gradeGate) {
+    private fun showQuestionUi(questionHtml: String, cardIndex: Int) = synchronized(gradeGate) {
         synchronized(injectLock) {
             pendingGrades.clear()
             gradeGate.newCard()
@@ -676,6 +725,7 @@ class DrillService : Service(), VoiceIo {
         tapGrade = false
         tapTranscript = false
         val silent = sessionSilent
+        val pausedNow = chatPaused.get()
         runCatching {
             DrillUi.update {
                 it.copy(
@@ -688,7 +738,10 @@ class DrillService : Service(), VoiceIo {
                     ratingMicOpen = false,
                     selectedEase = null,
                     awaitingShowAnswer = true,
-                    silentSession = silent
+                    silentSession = silent,
+                    questionOrdinal = cardIndex + 1,
+                    thinkSecondsLeft = null,
+                    chatPaused = pausedNow
                 )
             }
         }
@@ -837,16 +890,22 @@ class DrillService : Service(), VoiceIo {
     override fun stopped(): Boolean = stopRequested.get() || destroyed
 
     override fun listen(timeoutMs: Long): String? {
-        if (!AudioGate.micAllowed(sessionSilent)) return null
-        if (showAnswerEarly.get()) return null
-        tapTranscript = false
-        val result = captureListen(timeoutMs)
-        // A tap word is not a mic sample: no "I heard" and no dead-mic streak change.
-        if (tapTranscript) {
+        while (!stopped()) {
+            if (!awaitChatResume()) return null
+            if (!AudioGate.micAllowed(sessionSilent)) return null
+            if (showAnswerEarly.get()) return null
             tapTranscript = false
-            return result
+            val result = captureListen(timeoutMs)
+            // Pause killed this window. Retry it without charging a listen attempt.
+            if (chatPaused.get()) continue
+            // A tap word is not a mic sample: no "I heard" and no dead-mic streak change.
+            if (tapTranscript) {
+                tapTranscript = false
+                return result
+            }
+            return afterListen(result)
         }
-        return afterListen(result)
+        return null
     }
 
     /**
@@ -859,8 +918,10 @@ class DrillService : Service(), VoiceIo {
         val max = ListenWindow.clampAttempts(listenAttempts)
         var completed = 0
         while (completed < max) {
+            if (!awaitChatResume()) return null
             if (sessionSilent || showAnswerEarly.get() || stopped()) return null
             val heard = captureListen(timeoutMs)
+            if (chatPaused.get()) continue
             completed += 1
             consumeMicFault()
             if (stopped()) return null
@@ -874,6 +935,7 @@ class DrillService : Service(), VoiceIo {
             Log.i(TAG, "relisten answer $completed/$max")
             if (!speedMode) speak(ListenWindow.ANSWER_RELISTEN_CUE)
             if (stopped() || sessionSilent || showAnswerEarly.get()) return null
+            if (chatPaused.get()) continue
             beep()
         }
         giveUpToSilent()
@@ -888,7 +950,7 @@ class DrillService : Service(), VoiceIo {
             val deadline = SystemClock.elapsedRealtime() + timeoutMs
             var text: String? = null
             while (text == null) {
-                if (showAnswerEarly.get() || sessionSilent) break
+                if (showAnswerEarly.get() || sessionSilent || chatPaused.get()) break
                 consumeQueuedGrade()?.let { text = it }
                 if (text != null || stopRequested.get() || destroyed) break
                 val left = deadline - SystemClock.elapsedRealtime()
@@ -1054,7 +1116,8 @@ class DrillService : Service(), VoiceIo {
                 cfg.speedMode,
                 card.buttons,
                 ListenWindow.waitMs(cfg.listenWaitSec),
-                cfg.listenAttempts
+                cfg.listenAttempts,
+                ThinkTime.normalize(cfg.thinkTimeSec)
             ) {
                 anki.guiShowAnswer()
                 val shown = anki.guiCurrentCard()
@@ -1198,7 +1261,8 @@ class DrillService : Service(), VoiceIo {
                 cfg.speedMode,
                 card.buttons,
                 ListenWindow.waitMs(cfg.listenWaitSec),
-                cfg.listenAttempts
+                cfg.listenAttempts,
+                ThinkTime.normalize(cfg.thinkTimeSec)
             ) {
                 Revealed.Answer(card.front, card.back, card.buttons)
             }
@@ -1260,16 +1324,19 @@ class DrillService : Service(), VoiceIo {
         buttons: List<Int>,
         listenWaitMs: Long,
         listenAttempts: Int,
+        thinkTimeSec: Int,
         reveal: () -> Revealed
     ): CardStep {
         val question = AnkiText.spokenText(questionHtml)
         if (question.isBlank()) return CardStep.Blank
         val started = SystemClock.elapsedRealtime()
         showAnswerEarly.set(false)
-        showQuestionUi(questionHtml)
+        if (!awaitChatResume()) return CardStep.Paused
+        showQuestionUi(questionHtml, cardIndex)
         var repeats = 0
         var transcript = ""
         while (!stopRequested.get()) {
+            if (!awaitChatResume()) return CardStep.Paused
             if (showAnswerEarly.getAndSet(false)) break
             when (AudioGate.resume(sessionSilent, cardUp = true, answerShown = false)) {
                 CardResume.HOLD -> when (awaitShowAnswer()) {
@@ -1281,13 +1348,31 @@ class DrillService : Service(), VoiceIo {
                 CardResume.READ_QUESTION -> {
                     speak(question)
                     if (stopRequested.get()) return CardStep.Paused
+                    if (chatPaused.get()) continue
                     if (showAnswerEarly.get() || sessionSilent) continue
                     showStatus("Listening for your answer")
+                    if (ThinkTime.armed(thinkTimeSec, sessionSilent)) {
+                        when (val end = thinkForAnswer(thinkTimeSec, listenWaitMs)) {
+                            ThinkResult.Reveal -> {
+                                thinkTranscript?.let { transcript = it }
+                                thinkTranscript = null
+                                break
+                            }
+                            ThinkResult.Again -> continue
+                            ThinkResult.Repeat -> {
+                                repeats++
+                                if (repeats >= 8) break
+                                continue
+                            }
+                            ThinkResult.Skip -> return CardStep.Skipped
+                            ThinkResult.Stop -> return CardStep.Paused
+                        }
+                    }
                     beep()
-                    if (showAnswerEarly.get() || sessionSilent) continue
+                    if (showAnswerEarly.get() || sessionSilent || chatPaused.get()) continue
                     val heard = listenForAnswer(listenWaitMs, listenAttempts, speedMode)
                     if (stopRequested.get()) return CardStep.Paused
-                    if (showAnswerEarly.get() || sessionSilent) continue
+                    if (chatPaused.get() || showAnswerEarly.get() || sessionSilent) continue
                     when (val action = GradeMapper.parse(heard)) {
                         VoiceAction.Repeat -> {
                             repeats++
@@ -1308,6 +1393,7 @@ class DrillService : Service(), VoiceIo {
             }
         }
         showAnswerEarly.set(false)
+        if (!awaitChatResume()) return CardStep.Paused
         if (stopRequested.get()) return CardStep.Paused
         val revealed = reveal()
         if (revealed is Revealed.Changed) return CardStep.Resync
@@ -1322,6 +1408,7 @@ class DrillService : Service(), VoiceIo {
         val questionForGrade = answer.questionHtml.ifBlank { questionHtml }
         var speakAnswer = true
         while (!stopRequested.get()) {
+            if (!awaitChatResume()) return CardStep.Paused
             val tappedEarly = claimedEase()
             if (tappedEarly != null) {
                 return gradedByTap(tappedEarly, gradeButtons, started, transcript, answerHtml, questionForGrade)
@@ -1340,6 +1427,11 @@ class DrillService : Service(), VoiceIo {
                 CardResume.READ_ANSWER -> {
                     if (speakAnswer && answerText.isNotBlank()) {
                         speak(answerText)
+                        if (stopRequested.get()) return CardStep.Paused
+                        if (chatPaused.get()) {
+                            speakAnswer = true
+                            continue
+                        }
                         speakAnswer = sessionSilent || speechInterrupted
                         if (stopRequested.get()) return CardStep.Paused
                         continue
@@ -1406,6 +1498,174 @@ class DrillService : Service(), VoiceIo {
         return CardStep.Paused
     }
 
+    private enum class ThinkResult { Reveal, Again, Repeat, Skip, Stop }
+
+    /**
+     * App-side think timer. Silence restarts the mic inside the deadline and
+     * does not charge Listen attempts or say "I heard nothing".
+     * A spoken answer, "show answer", or the Show answer tap reveals early.
+     */
+    private fun thinkForAnswer(thinkTimeSec: Int, listenWaitMs: Long): ThinkResult {
+        val opened = SystemClock.elapsedRealtime()
+        thinkDeadlineMs = if (frozenThinkMs >= 0L) {
+            val restored = ChatPause.resumeDeadline(opened, frozenThinkMs)
+            frozenThinkMs = -1L
+            restored
+        } else {
+            opened + ThinkTime.durationMs(thinkTimeSec)
+        }
+        quietListen = true
+        thinkTranscript = null
+        armThinkTicker()
+        beep()
+        try {
+            while (!stopRequested.get() && !destroyed) {
+                if (chatPaused.get()) {
+                    if (!awaitChatResume()) return ThinkResult.Stop
+                    continue
+                }
+                if (showAnswerEarly.getAndSet(false)) return ThinkResult.Reveal
+                if (sessionSilent) return ThinkResult.Again
+                val now = SystemClock.elapsedRealtime()
+                if (thinkDeadlineMs <= 0L || ThinkTime.expired(now, thinkDeadlineMs)) {
+                    return ThinkResult.Reveal
+                }
+                val slice = ThinkTime.listenSliceMs(thinkDeadlineMs - now, listenWaitMs)
+                if (slice <= 0L) return ThinkResult.Reveal
+                val heard = captureListen(slice)
+                if (chatPaused.get()) continue
+                if (showAnswerEarly.getAndSet(false)) return ThinkResult.Reveal
+                if (sessionSilent) return ThinkResult.Again
+                if (stopRequested.get()) return ThinkResult.Stop
+                if (listenFault) consumeMicFault()
+                when (ThinkTime.classify(heard)) {
+                    ThinkTime.Hear.EMPTY -> {
+                        Log.i(TAG, "think silence; mic restart")
+                        continue
+                    }
+                    ThinkTime.Hear.SHOW_ANSWER -> return ThinkResult.Reveal
+                    ThinkTime.Hear.ANSWER -> {
+                        thinkTranscript = heard?.trim().orEmpty()
+                        return ThinkResult.Reveal
+                    }
+                    ThinkTime.Hear.REPEAT -> return ThinkResult.Repeat
+                    ThinkTime.Hear.SKIP -> return ThinkResult.Skip
+                    ThinkTime.Hear.STOP_DRILL -> {
+                        stopFromSession()
+                        return ThinkResult.Stop
+                    }
+                }
+            }
+            return ThinkResult.Stop
+        } finally {
+            thinkDeadlineMs = 0L
+            frozenThinkMs = -1L
+            quietListen = false
+            mainHandler.removeCallbacks(thinkTicker)
+            if (chatPaused.get()) publishCue(true, null) else publishCue(false, null)
+        }
+    }
+
+    /** Spoken answer captured during think time. Null for show-answer, silence, and expiry. */
+    @Volatile private var thinkTranscript: String? = null
+
+    private fun releaseChatPause() {
+        chatPaused.set(false)
+        chatPauseLatch.get()?.countDown()
+        pendingVoiceReply.set(null)
+        thinkDeadlineMs = 0L
+        frozenThinkMs = -1L
+        quietListen = false
+        if (::mainHandler.isInitialized) mainHandler.removeCallbacks(thinkTicker)
+        shownPaused = false
+        shownThinkSec = null
+    }
+
+    private fun enterChatPause() {
+        if (!chatPaused.compareAndSet(false, true)) {
+            publishCue(true, null)
+            return
+        }
+        if (thinkDeadlineMs > 0L) {
+            frozenThinkMs = ChatPause.freeze(SystemClock.elapsedRealtime(), thinkDeadlineMs)
+            thinkDeadlineMs = 0L
+        }
+        stopPlaybackNow()
+        finishListen(null)
+        showAnswerLatch.get()?.countDown()
+        silentGradeLatch.get()?.countDown()
+        chatPauseLatch.get()?.countDown()
+        publishCue(true, null)
+        mainHandler.removeCallbacks(thinkTicker)
+    }
+
+    private fun leaveChatPause(action: ChatPause.Action) {
+        if (!ChatPause.accepts(action)) return
+        if (!chatPaused.compareAndSet(true, false)) return
+        val now = SystemClock.elapsedRealtime()
+        if (frozenThinkMs >= 0L) {
+            thinkDeadlineMs = ChatPause.resumeDeadline(now, frozenThinkMs)
+            frozenThinkMs = -1L
+            armThinkTicker()
+        }
+        chatPauseLatch.get()?.countDown()
+        val left = if (thinkDeadlineMs > 0L) ThinkTime.remainingSec(now, thinkDeadlineMs) else null
+        publishCue(false, if (left != null && left > 0) left else null)
+    }
+
+    /**
+     * Block until Resume, a rating tap, or Stop.
+     * A dictated reply is spoken here, while the card is still paused.
+     * @return false when the drill is stopping.
+     */
+    private fun awaitChatResume(): Boolean {
+        while (chatPaused.get() && !stopRequested.get() && !destroyed) {
+            val reply = pendingVoiceReply.getAndSet(null)
+            if (!reply.isNullOrBlank()) {
+                speechInterrupted = false
+                speak(reply)
+            }
+            if (!chatPaused.get() || stopRequested.get() || destroyed) break
+            val latch = CountDownLatch(1)
+            chatPauseLatch.set(latch)
+            if (!chatPaused.get() || stopRequested.get() || destroyed) {
+                chatPauseLatch.compareAndSet(latch, null)
+                break
+            }
+            try {
+                latch.await(250, TimeUnit.MILLISECONDS)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
+        }
+        return !stopRequested.get() && !destroyed
+    }
+
+    private fun armThinkTicker() {
+        mainHandler.removeCallbacks(thinkTicker)
+        mainHandler.post(thinkTicker)
+    }
+
+    private fun onThinkTick() {
+        if (destroyed || chatPaused.get() || thinkDeadlineMs <= 0L) return
+        val sec = ThinkTime.remainingSec(SystemClock.elapsedRealtime(), thinkDeadlineMs)
+        if (sec <= 0) {
+            publishCue(false, null)
+            return
+        }
+        publishCue(false, sec)
+        mainHandler.postDelayed(thinkTicker, 250L)
+    }
+
+    private fun publishCue(paused: Boolean, think: Int?) {
+        val shown = if (paused) null else think
+        if (paused == shownPaused && shown == shownThinkSec) return
+        shownPaused = paused
+        shownThinkSec = shown
+        runCatching { DrillUi.update { it.copy(chatPaused = paused, thinkSecondsLeft = shown) } }
+    }
+
     private fun claimedEase(): Int? = synchronized(gradeGate) {
         if (gradeGate.isClaimed()) gradeGate.ease() else null
     }
@@ -1423,50 +1683,61 @@ class DrillService : Service(), VoiceIo {
      * Silent off does not count as a reveal.
      */
     private fun awaitShowAnswer(): ShowWait {
-        if (showAnswerEarly.get()) {
-            Log.i(TAG, "show answer already tapped")
-            return if (stopRequested.get() || destroyed) ShowWait.STOPPED else ShowWait.SHOWN
-        }
-        if (!sessionSilent) return ShowWait.RESUME_VOICE
-        val latch = CountDownLatch(1)
-        showAnswerLatch.set(latch)
-        if (showAnswerEarly.get()) {
-            showAnswerLatch.compareAndSet(latch, null)
-            Log.i(TAG, "show answer already tapped")
-            return if (stopRequested.get() || destroyed) ShowWait.STOPPED else ShowWait.SHOWN
-        }
-        return try {
-            Log.i(TAG, "waiting for show answer")
-            runCatching {
-                DrillUi.update {
-                    val notice = it.status == ListenWindow.SILENT_NOTICE ||
-                        it.heard == ListenWindow.SILENT_NOTICE
-                    it.copy(
-                        awaitingShowAnswer = true,
-                        status = if (notice) ListenWindow.SILENT_NOTICE else "Tap to show the answer"
-                    )
-                }
+        while (!stopRequested.get() && !destroyed) {
+            if (chatPaused.get()) {
+                if (!awaitChatResume()) return ShowWait.STOPPED
+                continue
             }
-            while (!stopRequested.get() && !destroyed) {
-                if (showAnswerEarly.get()) return ShowWait.SHOWN
+            if (showAnswerEarly.get()) {
+                Log.i(TAG, "show answer already tapped")
+                return ShowWait.SHOWN
+            }
+            if (!sessionSilent) return ShowWait.RESUME_VOICE
+            val latch = CountDownLatch(1)
+            showAnswerLatch.set(latch)
+            try {
+                if (chatPaused.get()) continue
+                if (showAnswerEarly.get()) {
+                    Log.i(TAG, "show answer already tapped")
+                    return ShowWait.SHOWN
+                }
                 if (!sessionSilent) return ShowWait.RESUME_VOICE
-                try {
-                    if (latch.await(250, TimeUnit.MILLISECONDS)) {
-                        if (showAnswerEarly.get()) return ShowWait.SHOWN
-                        if (!sessionSilent) return ShowWait.RESUME_VOICE
+                Log.i(TAG, "waiting for show answer")
+                runCatching {
+                    DrillUi.update {
+                        val notice = it.status == ListenWindow.SILENT_NOTICE ||
+                            it.heard == ListenWindow.SILENT_NOTICE
+                        it.copy(
+                            awaitingShowAnswer = true,
+                            status = if (notice) ListenWindow.SILENT_NOTICE else "Tap to show the answer"
+                        )
                     }
-                } catch (_: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    return ShowWait.STOPPED
+                }
+                while (!stopRequested.get() && !destroyed) {
+                    if (chatPaused.get()) break
+                    if (showAnswerEarly.get()) return ShowWait.SHOWN
+                    if (!sessionSilent) return ShowWait.RESUME_VOICE
+                    try {
+                        if (latch.await(250, TimeUnit.MILLISECONDS)) {
+                            if (chatPaused.get()) break
+                            if (showAnswerEarly.get()) return ShowWait.SHOWN
+                            if (!sessionSilent) return ShowWait.RESUME_VOICE
+                        }
+                    } catch (_: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        return ShowWait.STOPPED
+                    }
+                }
+                if (chatPaused.get()) continue
+                return ShowWait.STOPPED
+            } finally {
+                showAnswerLatch.compareAndSet(latch, null)
+                if (showAnswerEarly.get() || sessionSilent) {
+                    runCatching { DrillUi.update { it.copy(awaitingShowAnswer = !showAnswerEarly.get()) } }
                 }
             }
-            ShowWait.STOPPED
-        } finally {
-            showAnswerLatch.compareAndSet(latch, null)
-            if (showAnswerEarly.get() || sessionSilent) {
-                runCatching { DrillUi.update { it.copy(awaitingShowAnswer = !showAnswerEarly.get()) } }
-            }
         }
+        return ShowWait.STOPPED
     }
 
     /**
@@ -1474,37 +1745,53 @@ class DrillService : Service(), VoiceIo {
      * Voice resuming is not a grade.
      */
     private fun awaitSilentGrade(): GradeWait {
-        val latch = CountDownLatch(1)
-        silentGradeLatch.set(latch)
-        return try {
-            val already = claimedEase()
-            if (already != null) return GradeWait.Ease(already)
-            if (!sessionSilent) return GradeWait.ResumeVoice
-            Log.i(TAG, "waiting for grade")
-            while (!stopRequested.get() && !destroyed) {
+        while (!stopRequested.get() && !destroyed) {
+            if (chatPaused.get()) {
+                if (!awaitChatResume()) return GradeWait.Stopped
+                continue
+            }
+            val latch = CountDownLatch(1)
+            silentGradeLatch.set(latch)
+            try {
+                val already = claimedEase()
+                if (already != null) return GradeWait.Ease(already)
+                if (chatPaused.get()) continue
                 if (!sessionSilent) return GradeWait.ResumeVoice
-                val claimed = claimedEase()
-                if (claimed != null) return GradeWait.Ease(claimed)
-                try {
-                    if (latch.await(250, TimeUnit.MILLISECONDS)) {
-                        if (!sessionSilent && claimedEase() == null) return GradeWait.ResumeVoice
+                Log.i(TAG, "waiting for grade")
+                var paused = false
+                while (!stopRequested.get() && !destroyed) {
+                    if (chatPaused.get()) {
+                        paused = true
                         break
                     }
-                } catch (_: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    return GradeWait.Stopped
+                    if (!sessionSilent) return GradeWait.ResumeVoice
+                    val claimed = claimedEase()
+                    if (claimed != null) return GradeWait.Ease(claimed)
+                    try {
+                        if (latch.await(250, TimeUnit.MILLISECONDS)) {
+                            if (chatPaused.get() && claimedEase() == null) {
+                                paused = true
+                                break
+                            }
+                            if (!sessionSilent && claimedEase() == null) return GradeWait.ResumeVoice
+                            break
+                        }
+                    } catch (_: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        return GradeWait.Stopped
+                    }
                 }
+                if (paused || chatPaused.get()) continue
+                if (stopRequested.get() || destroyed) return GradeWait.Stopped
+                val ease = claimedEase()
+                if (ease != null) return GradeWait.Ease(ease)
+                if (!sessionSilent) return GradeWait.ResumeVoice
+                return GradeWait.Stopped
+            } finally {
+                silentGradeLatch.compareAndSet(latch, null)
             }
-            if (stopRequested.get() || destroyed) return GradeWait.Stopped
-            val ease = claimedEase()
-            when {
-                ease != null -> GradeWait.Ease(ease)
-                !sessionSilent -> GradeWait.ResumeVoice
-                else -> GradeWait.Stopped
-            }
-        } finally {
-            silentGradeLatch.compareAndSet(latch, null)
         }
+        return GradeWait.Stopped
     }
 
     private fun releaseShowAnswer() {
@@ -1670,14 +1957,18 @@ class DrillService : Service(), VoiceIo {
     }
 
     private fun listenWithRecognizer(timeoutMs: Long): String? {
+        if (chatPaused.get()) return null
         if (!AudioGate.micAllowed(sessionSilent)) return null
         if (!awaitBackoff()) return null
-        if (stopRequested.get()) return null
+        if (stopRequested.get() || chatPaused.get()) return null
         // Cue finishes (and is stopped) before the microphone opens.
-        toneListenStart()
-        if (!sleepUnlessCardAdvances(LISTEN_CUE_WAIT_MS)) return null
-        try { toneGen?.stopTone() } catch (_: Exception) {}
-        if (stopRequested.get() || destroyed) return null
+        // Think-time restarts skip it so only the first beep is heard.
+        if (!quietListen) {
+            toneListenStart()
+            if (!sleepUnlessCardAdvances(LISTEN_CUE_WAIT_MS)) return null
+            try { toneGen?.stopTone() } catch (_: Exception) {}
+        }
+        if (stopRequested.get() || destroyed || chatPaused.get()) return null
         consumeQueuedGrade()?.let { return it }
         if (!recognitionAvailable) {
             Log.w(TAG, "no recognizer; skipping listen")
@@ -1763,12 +2054,12 @@ class DrillService : Service(), VoiceIo {
     private fun sleepUnlessCardAdvances(ms: Long): Boolean {
         var left = ms
         while (left > 0) {
-            if (stopRequested.get() || showAnswerEarly.get() || sessionSilent) return false
+            if (stopRequested.get() || showAnswerEarly.get() || sessionSilent || chatPaused.get()) return false
             val slice = minOf(50L, left)
             if (!sleepQuiet(slice)) return false
             left -= slice
         }
-        return !stopRequested.get() && !showAnswerEarly.get() && !sessionSilent
+        return !stopRequested.get() && !showAnswerEarly.get() && !sessionSilent && !chatPaused.get()
     }
 
     override fun beep() {
@@ -1778,12 +2069,14 @@ class DrillService : Service(), VoiceIo {
 
     /** Short HIGH tone. Played only while the recognizer is NOT listening. */
     private fun toneListenStart() {
+        if (quietListen) return
         if (!AudioGate.earconAllowed(sessionSilent)) return
         try { toneGen?.startTone(ToneGenerator.TONE_PROP_PROMPT, LISTEN_CUE_TONE_MS) } catch (_: Exception) {}
     }
 
     /** Short LOW tone: the listen just ended (result, error, or timeout). */
     private fun toneListenEnd() {
+        if (quietListen) return
         if (!AudioGate.earconAllowed(sessionSilent)) return
         try { toneGen?.startTone(ToneGenerator.TONE_PROP_NACK, 150) } catch (_: Exception) {}
     }
@@ -1855,7 +2148,7 @@ class DrillService : Service(), VoiceIo {
 
     /** Main thread. Drops any previous recognizer and starts a new session. */
     private fun beginListenOnMain(session: Int) {
-        if (sessionSilent) {
+        if (sessionSilent || chatPaused.get()) {
             finishListen(null)
             return
         }

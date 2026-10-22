@@ -1,6 +1,8 @@
 package com.evan.voicesrs
 
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -9,6 +11,7 @@ import android.widget.FrameLayout
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -20,6 +23,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 class ThreadSheet : BottomSheetDialogFragment() {
     private var turnId: Long = 0L
     private var list: RecyclerView? = null
+    private var dictation: ChatDictation? = null
     private val adapter = MessageAdapter()
 
     private val listener: (List<ReviewTurn>) -> Unit = {
@@ -57,6 +61,28 @@ class ThreadSheet : BottomSheetDialogFragment() {
                 false
             }
         }
+        input.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) DrillService.pauseForChat(ChatPause.Trigger.FOCUS_INPUT)
+        }
+        input.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (!s.isNullOrEmpty()) DrillService.pauseForChat(ChatPause.Trigger.TYPING)
+            }
+        })
+        view.findViewById<Button>(R.id.threadDictate).setOnClickListener {
+            DrillService.pauseForChat(ChatPause.Trigger.DICTATION)
+            val sheetView = view
+            if (dictation == null) dictation = ChatDictation(sheetView.context)
+            dictation?.start { spoken ->
+                sheetView.post {
+                    if (!isAdded) return@post
+                    ThreadAsk.ask(sheetView.context, turnId, spoken, byVoice = true)
+                }
+            }
+        }
+        DrillService.pauseForChat(ChatPause.Trigger.OPEN_THREAD)
         ThreadAsk.send(view.context, turnId)
         ReviewLog.addListener(listener)
         bind()
@@ -71,6 +97,8 @@ class ThreadSheet : BottomSheetDialogFragment() {
     }
 
     override fun onDestroyView() {
+        dictation?.stop()
+        dictation = null
         ReviewLog.removeListener(listener)
         list = null
         super.onDestroyView()
@@ -78,30 +106,37 @@ class ThreadSheet : BottomSheetDialogFragment() {
 
     private fun bind() {
         val root = view ?: return
-        val turn = ReviewLog.snapshot().firstOrNull { it.turnId == turnId }
+        val turns = ReviewLog.snapshot()
+        val index = turns.indexOfFirst { it.turnId == turnId }
+        val turn = if (index >= 0) turns[index] else null
         if (turn == null) {
             dismissAllowingStateLoss()
             return
         }
-        root.findViewById<TextView>(R.id.threadQuestion).text = turn.frontText
-        root.findViewById<TextView>(R.id.threadAnswer).text = BubbleModel.userPlain(turn.transcript, turn.ease)
-        val explView = root.findViewById<TextView>(R.id.threadExpl)
-        val footerView = root.findViewById<TextView>(R.id.threadExplFooter)
+        val question = root.findViewById<TextView>(R.id.threadQuestion)
+        val mcq = CardFaceBinder.bindQuestion(
+            root.findViewById(R.id.threadQuestionLabel),
+            question,
+            root.findViewById(R.id.threadOptions),
+            turn.frontText,
+            index + 1,
+            revealed = true,
+            answerPlain = turn.backText
+        )
+        if (!mcq) question.text = BubbleModel.fullQuestion(turn.frontText).ifBlank { turn.frontText }
+        CardFaceBinder.bindPills(
+            root.findViewById(R.id.threadSpokenPill),
+            root.findViewById(R.id.threadRatingPill),
+            turn.transcript,
+            turn.ease
+        )
         val expl = BubbleModel.displayAi(turn.explanation, turn.frontText, turn.backText, unread = false)
-        if (expl.body.isBlank()) {
-            explView.visibility = View.GONE
-            explView.text = ""
-        } else {
-            explView.visibility = View.VISIBLE
-            MarkdownSpans.apply(explView, expl.body)
-        }
-        if (expl.footer.isBlank()) {
-            footerView.visibility = View.GONE
-            footerView.text = ""
-        } else {
-            footerView.visibility = View.VISIBLE
-            footerView.text = expl.footer
-        }
+        CardFaceBinder.fillSections(
+            root.findViewById<LinearLayout>(R.id.threadSections),
+            root.findViewById(R.id.threadExplFooter),
+            expl.body,
+            expl.footer
+        )
         val rows = ArrayList<Row>()
         for (follow in turn.followUps) {
             rows += Row(follow.q, user = true, pending = false)
@@ -157,7 +192,7 @@ class ThreadSheet : BottomSheetDialogFragment() {
                 } else {
                     body.background = itemView.context.getDrawable(R.drawable.bg_bubble_ai)
                     body.setTextColor(itemView.context.getColor(R.color.bubble_ai_on))
-                    if (row.pending) body.text = row.text else MarkdownSpans.apply(body, row.text)
+                    if (row.pending) body.text = row.text else CardFaceBinder.applySections(body, row.text)
                 }
             }
         }

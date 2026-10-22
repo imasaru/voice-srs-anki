@@ -24,7 +24,9 @@ sealed class ChatRow {
         val rating: Boolean,
         val selectedEase: Int?,
         /** False when Settings hides the card text. Buttons stay on the bar. */
-        val revealText: Boolean = true
+        val revealText: Boolean = true,
+        /** 1-based session order. Past rows use their list index instead. */
+        val questionOrdinal: Int = 0
     ) : ChatRow() {
         override val key: String = "live"
     }
@@ -57,7 +59,8 @@ object ChatFeed {
             heard = state.heard,
             showAnswer = buttons && controls.showAnswer,
             rating = buttons && controls.rating,
-            selectedEase = if (buttons && controls.rating) state.selectedEase else null
+            selectedEase = if (buttons && controls.rating) state.selectedEase else null,
+            questionOrdinal = state.questionOrdinal
         )
         return out
     }

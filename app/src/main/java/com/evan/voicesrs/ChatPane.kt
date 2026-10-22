@@ -153,6 +153,7 @@ class ChatPane(
     private fun openThread(turnId: Long) {
         val activity = list.context as? FragmentActivity ?: return
         if (activity.supportFragmentManager.findFragmentByTag(THREAD_TAG) != null) return
+        DrillService.pauseForChat(ChatPause.Trigger.OPEN_THREAD)
         ThreadSheet.newInstance(turnId).show(activity.supportFragmentManager, THREAD_TAG)
     }
 

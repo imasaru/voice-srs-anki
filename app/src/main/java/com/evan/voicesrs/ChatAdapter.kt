@@ -1,12 +1,11 @@
 package com.evan.voicesrs
 
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.text.HtmlCompat
 import androidx.recyclerview.widget.DiffUtil
@@ -75,8 +74,10 @@ class ChatAdapter(
     }
 
     inner class PastHolder(view: View) : RecyclerView.ViewHolder(view) {
-        private val card: TextView = view.findViewById(R.id.cardBubble)
-        private val user: View = view.findViewById(R.id.userBubble)
+        private val card: View = view.findViewById(R.id.cardBubble)
+        private val questionLabel: TextView = view.findViewById(R.id.questionLabel)
+        private val cardStem: TextView = view.findViewById(R.id.cardStem)
+        private val optionRows: LinearLayout = view.findViewById(R.id.optionRows)
         private val userAnswer: TextView = view.findViewById(R.id.userAnswerText)
         private val userPill: TextView = view.findViewById(R.id.userRatingPill)
         private val ai: View = view.findViewById(R.id.aiBubble)
@@ -84,12 +85,15 @@ class ChatAdapter(
         private val badge: TextView = view.findViewById(R.id.explBadge)
         private val status: TextView = view.findViewById(R.id.explStatus)
         private val body: TextView = view.findViewById(R.id.explBody)
+        private val blocks: LinearLayout = view.findViewById(R.id.explBlocks)
         private val footer: TextView = view.findViewById(R.id.explFooter)
         private val retry: Button = view.findViewById(R.id.explRetry)
         private val thread: TextView = view.findViewById(R.id.threadLink)
 
         fun bind(turn: ReviewTurn) {
             val expanded = turn.turnId in cardOpen
+            val position = adapterPosition
+            val ordinal = if (position == RecyclerView.NO_POSITION) 1 else position + 1
             card.setOnClickListener {
                 toggle(cardOpen, turn.turnId)
                 notifyTurn(turn.turnId)
@@ -97,11 +101,26 @@ class ChatAdapter(
             ai.setOnClickListener { toggleExpl(turn.turnId) }
             retry.setOnClickListener { onRetry(turn.turnId) }
             thread.setOnClickListener { onThread(turn.turnId) }
-            card.text = BubbleModel.cardText(turn.frontText, expanded)
-            card.maxLines = if (expanded) Integer.MAX_VALUE else BubbleModel.COLLAPSED_LINES
-            card.ellipsize = if (expanded) null else TextUtils.TruncateAt.END
-            bindUser(turn.transcript, turn.ease)
+            val mcq = CardFaceBinder.bindQuestion(
+                questionLabel,
+                cardStem,
+                optionRows,
+                turn.frontText,
+                ordinal,
+                revealed = true,
+                answerPlain = turn.backText
+            )
+            if (mcq) {
+                cardStem.maxLines = Integer.MAX_VALUE
+                cardStem.ellipsize = null
+            } else {
+                cardStem.text = BubbleModel.cardText(turn.frontText, expanded)
+                cardStem.maxLines = if (expanded) Integer.MAX_VALUE else BubbleModel.COLLAPSED_LINES
+                cardStem.ellipsize = if (expanded) null else TextUtils.TruncateAt.END
+            }
+            CardFaceBinder.bindPills(userAnswer, userPill, turn.transcript, turn.ease)
             val shown = BubbleModel.displayAi(turn.explanation, turn.frontText, turn.backText, turn.unread)
+            body.visibility = View.GONE
             if (!shown.visible) {
                 ai.visibility = View.GONE
                 section.visibility = View.GONE
@@ -115,22 +134,13 @@ class ChatAdapter(
                 } else {
                     status.visibility = View.GONE
                 }
-                val explExpanded = turn.turnId in explOpen
-                if (shown.body.isNotBlank()) {
-                    body.visibility = View.VISIBLE
-                    MarkdownSpans.apply(body, shown.body)
-                    body.maxLines = if (explExpanded) Integer.MAX_VALUE else 8
-                    body.ellipsize = if (explExpanded) null else TextUtils.TruncateAt.END
+                if (shown.body.isNotBlank() || shown.footer.isNotBlank()) {
+                    CardFaceBinder.fillSections(blocks, footer, shown.body, shown.footer)
                 } else {
-                    body.visibility = View.GONE
-                    body.text = ""
-                }
-                if (shown.footer.isBlank()) {
+                    blocks.visibility = View.GONE
+                    blocks.removeAllViews()
                     footer.visibility = View.GONE
                     footer.text = ""
-                } else {
-                    footer.visibility = View.VISIBLE
-                    footer.text = shown.footer
                 }
                 retry.visibility = if (shown.retry) View.VISIBLE else View.GONE
             }
@@ -138,26 +148,6 @@ class ChatAdapter(
             val last = ThreadLabel.lastAt(turn.followUps)
             thread.visibility = View.VISIBLE
             thread.text = ThreadLabel.text(replies, last)
-        }
-
-        private fun bindUser(transcript: String, ease: Int?) {
-            val bubble = BubbleModel.userBubble(transcript, ease)
-            userAnswer.text = bubble.answer
-            userAnswer.setTypeface(null, if (bubble.answered) Typeface.NORMAL else Typeface.ITALIC)
-            val colors = RatingPill.of(bubble.ease)
-            if (colors == null || bubble.rating.isBlank()) {
-                userPill.visibility = View.GONE
-                user.contentDescription = "Answer ${bubble.answer}"
-                return
-            }
-            userPill.visibility = View.VISIBLE
-            userPill.text = bubble.rating
-            userPill.setTextColor(colors.text)
-            val bg = GradientDrawable()
-            bg.cornerRadius = 999f * userPill.resources.displayMetrics.density
-            bg.setColor(colors.background)
-            userPill.background = bg
-            user.contentDescription = "Answer ${bubble.answer}. Rating ${bubble.rating}."
         }
 
         private fun toggleExpl(id: Long) {
@@ -170,7 +160,9 @@ class ChatAdapter(
     class DividerHolder(view: View) : RecyclerView.ViewHolder(view)
 
     class LiveHolder(view: View) : RecyclerView.ViewHolder(view) {
+        private val label: TextView = view.findViewById(R.id.liveQuestionLabel)
         private val question: TextView = view.findViewById(R.id.liveQuestion)
+        private val options: LinearLayout = view.findViewById(R.id.liveOptions)
         private val answer: TextView = view.findViewById(R.id.liveAnswer)
         private val answerFooter: TextView = view.findViewById(R.id.liveAnswerFooter)
         private val heard: TextView = view.findViewById(R.id.liveHeard)
@@ -183,13 +175,25 @@ class ChatAdapter(
 
         fun bind(row: ChatRow.Live) {
             if (!row.revealText) {
+                label.visibility = View.GONE
+                options.visibility = View.GONE
+                options.removeAllViews()
                 question.text = ""
                 answer.visibility = View.GONE
                 answer.text = ""
                 answerFooter.visibility = View.GONE
                 answerFooter.text = ""
             } else {
-                question.text = html(row.front)
+                val mcq = CardFaceBinder.bindQuestion(
+                    label,
+                    question,
+                    options,
+                    row.front,
+                    row.questionOrdinal,
+                    revealed = row.showBack,
+                    answerPlain = row.back
+                )
+                if (!mcq) question.text = html(row.front)
                 if (row.showBack) {
                     val parts = Citation.splitHtml(row.back)
                     answer.visibility = View.VISIBLE

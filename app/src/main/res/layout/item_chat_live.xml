@@ -19,12 +19,29 @@
         android:paddingBottom="12dp">
 
         <TextView
+            android:id="@+id/liveQuestionLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:letterSpacing="0.08"
+            android:textAllCaps="true"
+            android:textAppearance="?attr/textAppearanceLabelSmall"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone" />
+
+        <TextView
             android:id="@+id/liveQuestion"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:lineSpacingMultiplier="1.15"
             android:textAppearance="?attr/textAppearanceBodyLarge"
             android:textColor="?attr/colorOnSurface" />
+
+        <LinearLayout
+            android:id="@+id/liveOptions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/liveAnswer"

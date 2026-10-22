@@ -152,6 +152,8 @@
             android:visibility="gone" />
     </FrameLayout>
 
+    <include layout="@layout/include_chat_composer" />
+
     <LinearLayout
         android:id="@+id/bottomBar"
         android:layout_width="match_parent"
@@ -163,6 +165,8 @@
         android:paddingTop="8dp"
         android:paddingEnd="12dp"
         android:paddingBottom="12dp">
+
+        <include layout="@layout/include_session_cue" />
 
         <Button
             android:id="@+id/showAnswerButton"

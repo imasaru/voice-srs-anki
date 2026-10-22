@@ -53,40 +53,51 @@
             </LinearLayout>
         </ScrollView>
 
-        <FrameLayout
+        <LinearLayout
             android:id="@+id/reviewPane"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_marginStart="@dimen/pane_gap"
-            android:layout_weight="1">
+            android:layout_weight="1"
+            android:orientation="vertical">
 
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/chatList"
+            <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:clipToPadding="false"
-                android:scrollbars="vertical" />
+                android:layout_height="0dp"
+                android:layout_weight="1">
 
-            <TextView
-                android:id="@+id/chatEmpty"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:text="@string/chat_empty"
-                android:textAppearance="?attr/textAppearanceBodyMedium"
-                android:textColor="?attr/colorOnSurfaceVariant" />
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/chatList"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:scrollbars="vertical" />
 
-            <TextView
-                android:id="@+id/chatUnread"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="end"
-                android:clickable="false"
-                android:focusable="false"
-                android:paddingStart="8dp"
-                android:paddingEnd="4dp"
-                android:textAppearance="?attr/textAppearanceTitleSmall"
-                android:visibility="gone" />
-        </FrameLayout>
+                <TextView
+                    android:id="@+id/chatEmpty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="8dp"
+                    android:text="@string/chat_empty"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <TextView
+                    android:id="@+id/chatUnread"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="end"
+                    android:clickable="false"
+                    android:focusable="false"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="4dp"
+                    android:textAppearance="?attr/textAppearanceTitleSmall"
+                    android:visibility="gone" />
+            </FrameLayout>
+
+            <include layout="@layout/include_chat_composer" />
+
+            <include layout="@layout/include_session_cue" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

@@ -1,0 +1,103 @@
+package com.evan.voicesrs
+
+/**
+ * App-side think timer. It is not a SpeechRecognizer timeout and it is not
+ * the "Wait for speech" window, which stays the per-listen mic window for grades.
+ * Silence and no-match restart the mic without an error and without a listen attempt.
+ * Silent mode does not arm the timer, so the answer is not revealed on its own.
+ */
+object ThinkTime {
+    const val OFF = 0
+    val CHOICES_SEC = intArrayOf(OFF, 5, 10, 15, 20, 30, 45, 60)
+    const val DEFAULT_SEC = 20
+    const val LABEL = "Think time"
+    const val HELP = "How long to give you to think before the answer is read."
+    const val OFF_LABEL = "Off"
+
+    /** One recognizer slice while thinking. Independent of the grade wait. */
+    const val MIC_SLICE_MS = 8_000L
+
+    fun normalize(sec: Int): Int = if (sec in CHOICES_SEC) sec else DEFAULT_SEC
+
+    fun label(sec: Int): String {
+        val n = normalize(sec)
+        return if (n == OFF) OFF_LABEL else "$n s"
+    }
+
+    fun fromLabel(label: String): Int {
+        val t = label.trim()
+        if (t.equals(OFF_LABEL, ignoreCase = true)) return OFF
+        val digits = StringBuilder()
+        for (ch in t) {
+            if (ch.isDigit()) digits.append(ch) else if (digits.isNotEmpty()) break
+        }
+        val n = digits.toString().toIntOrNull() ?: return DEFAULT_SEC
+        return normalize(n)
+    }
+
+    /** Countdown runs only in voice mode with a positive choice. */
+    fun armed(sec: Int, silent: Boolean): Boolean = !silent && normalize(sec) > 0
+
+    fun durationMs(sec: Int): Long = normalize(sec) * 1_000L
+
+    /**
+     * Whole seconds still on the clock, counting the current second.
+     * Zero once [deadlineMs] has been reached.
+     */
+    fun remainingSec(nowMs: Long, deadlineMs: Long): Int {
+        val left = deadlineMs - nowMs
+        if (left <= 0L) return 0
+        return ((left + 999L) / 1_000L).toInt()
+    }
+
+    fun expired(nowMs: Long, deadlineMs: Long): Boolean = nowMs >= deadlineMs
+
+    fun countdownText(remainingSec: Int): String = "${remainingSec.coerceAtLeast(0)}s"
+
+    /**
+     * Speech-timeout and no-match restart the microphone.
+     * They are not errors and do not consume a listen attempt.
+     */
+    fun silentRestart(error: Int): Boolean {
+        return error == ListenWindow.ERROR_NO_MATCH || error == ListenWindow.ERROR_SPEECH_TIMEOUT
+    }
+
+    /** Think-time restarts never charge the Listen attempts setting. */
+    fun attemptsCharged(restarts: Int): Int = 0
+
+    /**
+     * Slice for the open mic during think time.
+     * [gradeWaitMs] is the saved "Wait for speech" value and is ignored:
+     * that setting is the grade listen window only.
+     */
+    fun listenSliceMs(remainingMs: Long, gradeWaitMs: Long): Long {
+        if (remainingMs <= 0L) return 0L
+        val unused = gradeWaitMs
+        if (unused == Long.MIN_VALUE) return remainingMs
+        return minOf(remainingMs, MIC_SLICE_MS)
+    }
+
+    enum class Hear { EMPTY, SHOW_ANSWER, ANSWER, REPEAT, SKIP, STOP_DRILL }
+
+    /** A spoken answer or "show answer" ends the timer before it runs out. A tap is separate. */
+    fun endsEarly(hear: Hear): Boolean = hear == Hear.ANSWER || hear == Hear.SHOW_ANSWER
+
+    fun classify(raw: String?): Hear {
+        if (raw.isNullOrBlank()) return Hear.EMPTY
+        val text = raw.trim().lowercase().replace(Regex("\\s+"), " ")
+        if (isShowAnswer(text)) return Hear.SHOW_ANSWER
+        return when (GradeMapper.parse(text)) {
+            VoiceAction.Repeat -> Hear.REPEAT
+            VoiceAction.Skip -> Hear.SKIP
+            VoiceAction.Pause -> Hear.STOP_DRILL
+            else -> Hear.ANSWER
+        }
+    }
+
+    fun isShowAnswer(text: String): Boolean {
+        val t = text.trim().lowercase()
+            .replace(Regex("[.!?]+$"), "")
+            .replace(Regex("\\s+"), " ")
+        return t == "show answer" || t == "show the answer"
+    }
+}

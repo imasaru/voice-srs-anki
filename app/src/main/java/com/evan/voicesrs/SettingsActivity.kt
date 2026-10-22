@@ -91,6 +91,7 @@ class SettingsActivity : AppCompatActivity() {
         val listenWaitView: MaterialAutoCompleteTextView = findViewById(R.id.listenWaitInput)
         val endSilenceView: MaterialAutoCompleteTextView = findViewById(R.id.endSilenceInput)
         val listenAttemptsView: MaterialAutoCompleteTextView = findViewById(R.id.listenAttemptsInput)
+        val thinkTimeView: MaterialAutoCompleteTextView = findViewById(R.id.thinkTimeInput)
 
         held = Prefs.load(this)
         urlView.setText(held.url)
@@ -137,6 +138,14 @@ class SettingsActivity : AppCompatActivity() {
             ListenWindow.clampAttempts(held.listenAttempts).toString()
         ) { label ->
             persist { it.copy(listenAttempts = ListenWindow.attemptsFromLabel(label)) }
+        }
+        val thinkLabels = ThinkTime.CHOICES_SEC.map { ThinkTime.label(it) }
+        bindChoices(
+            thinkTimeView,
+            thinkLabels,
+            ThinkTime.label(held.thinkTimeSec)
+        ) { label ->
+            persist { it.copy(thinkTimeSec = ThinkTime.fromLabel(label)) }
         }
         offlineSwitch.isChecked = held.offlineBatch
         batchSizeView.setText(held.offlineBatchSize.toString())

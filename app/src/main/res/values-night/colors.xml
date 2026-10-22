@@ -25,4 +25,17 @@
     <color name="bubble_ai_on">#E7FBFF</color>
     <color name="bubble_user">#1B8A4A</color>
     <color name="bubble_user_on">#FFFFFF</color>
+    <color name="option_row">#232127</color>
+    <color name="option_text">#E6E1E5</color>
+    <color name="option_correct">#1F3A2A</color>
+    <color name="option_correct_text">#D8F5E3</color>
+    <color name="option_correct_stroke">#4CAF7A</color>
+    <color name="section_heading">#D0BCFF</color>
+    <color name="code_chip">#3A3740</color>
+    <color name="code_chip_text">#E6E1E5</color>
+    <color name="code_block">#121114</color>
+    <color name="code_block_text">#E6E1E5</color>
+    <color name="note_footer">#8A8590</color>
+    <color name="spoken_pill">#3A3740</color>
+    <color name="spoken_pill_text">#E6E1E5</color>
 </resources>
