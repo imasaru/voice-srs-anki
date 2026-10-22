@@ -1,5 +1,7 @@
 package com.evan.voicesrs
 
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.View
@@ -74,12 +76,15 @@ class ChatAdapter(
 
     inner class PastHolder(view: View) : RecyclerView.ViewHolder(view) {
         private val card: TextView = view.findViewById(R.id.cardBubble)
-        private val user: TextView = view.findViewById(R.id.userBubble)
+        private val user: View = view.findViewById(R.id.userBubble)
+        private val userAnswer: TextView = view.findViewById(R.id.userAnswerText)
+        private val userPill: TextView = view.findViewById(R.id.userRatingPill)
         private val ai: View = view.findViewById(R.id.aiBubble)
         private val section: View = view.findViewById(R.id.explSection)
         private val badge: TextView = view.findViewById(R.id.explBadge)
         private val status: TextView = view.findViewById(R.id.explStatus)
         private val body: TextView = view.findViewById(R.id.explBody)
+        private val footer: TextView = view.findViewById(R.id.explFooter)
         private val retry: Button = view.findViewById(R.id.explRetry)
         private val thread: TextView = view.findViewById(R.id.threadLink)
 
@@ -95,7 +100,7 @@ class ChatAdapter(
             card.text = BubbleModel.cardText(turn.frontText, expanded)
             card.maxLines = if (expanded) Integer.MAX_VALUE else BubbleModel.COLLAPSED_LINES
             card.ellipsize = if (expanded) null else TextUtils.TruncateAt.END
-            user.text = BubbleModel.userLabel(turn.transcript, turn.ease)
+            bindUser(turn.transcript, turn.ease)
             val shown = BubbleModel.displayAi(turn.explanation, turn.frontText, turn.backText, turn.unread)
             if (!shown.visible) {
                 ai.visibility = View.GONE
@@ -120,12 +125,39 @@ class ChatAdapter(
                     body.visibility = View.GONE
                     body.text = ""
                 }
+                if (shown.footer.isBlank()) {
+                    footer.visibility = View.GONE
+                    footer.text = ""
+                } else {
+                    footer.visibility = View.VISIBLE
+                    footer.text = shown.footer
+                }
                 retry.visibility = if (shown.retry) View.VISIBLE else View.GONE
             }
             val replies = turn.followUps.count { it.q.isNotBlank() }
             val last = ThreadLabel.lastAt(turn.followUps)
             thread.visibility = View.VISIBLE
             thread.text = ThreadLabel.text(replies, last)
+        }
+
+        private fun bindUser(transcript: String, ease: Int?) {
+            val bubble = BubbleModel.userBubble(transcript, ease)
+            userAnswer.text = bubble.answer
+            userAnswer.setTypeface(null, if (bubble.answered) Typeface.NORMAL else Typeface.ITALIC)
+            val colors = RatingPill.of(bubble.ease)
+            if (colors == null || bubble.rating.isBlank()) {
+                userPill.visibility = View.GONE
+                user.contentDescription = "Answer ${bubble.answer}"
+                return
+            }
+            userPill.visibility = View.VISIBLE
+            userPill.text = bubble.rating
+            userPill.setTextColor(colors.text)
+            val bg = GradientDrawable()
+            bg.cornerRadius = 999f * userPill.resources.displayMetrics.density
+            bg.setColor(colors.background)
+            userPill.background = bg
+            user.contentDescription = "Answer ${bubble.answer}. Rating ${bubble.rating}."
         }
 
         private fun toggleExpl(id: Long) {
@@ -140,6 +172,7 @@ class ChatAdapter(
     class LiveHolder(view: View) : RecyclerView.ViewHolder(view) {
         private val question: TextView = view.findViewById(R.id.liveQuestion)
         private val answer: TextView = view.findViewById(R.id.liveAnswer)
+        private val answerFooter: TextView = view.findViewById(R.id.liveAnswerFooter)
         private val heard: TextView = view.findViewById(R.id.liveHeard)
         private val showAnswer: Button = view.findViewById(R.id.chatShowAnswer)
         private val chips: View = view.findViewById(R.id.chatGradeChips)
@@ -149,16 +182,35 @@ class ChatAdapter(
         private val easy: Chip = view.findViewById(R.id.chatChipEasy)
 
         fun bind(row: ChatRow.Live) {
-            question.text = html(row.front)
-            if (row.showBack) {
-                answer.visibility = View.VISIBLE
-                answer.text = html(row.back)
-            } else {
+            if (!row.revealText) {
+                question.text = ""
                 answer.visibility = View.GONE
                 answer.text = ""
+                answerFooter.visibility = View.GONE
+                answerFooter.text = ""
+            } else {
+                question.text = html(row.front)
+                if (row.showBack) {
+                    val parts = Citation.splitHtml(row.back)
+                    answer.visibility = View.VISIBLE
+                    answer.text = html(parts.body)
+                    if (parts.footer.isBlank()) {
+                        answerFooter.visibility = View.GONE
+                        answerFooter.text = ""
+                    } else {
+                        answerFooter.visibility = View.VISIBLE
+                        answerFooter.text = parts.footer
+                    }
+                } else {
+                    answer.visibility = View.GONE
+                    answer.text = ""
+                    answerFooter.visibility = View.GONE
+                    answerFooter.text = ""
+                }
             }
-            if (row.heard.isBlank()) {
+            if (!row.revealText || row.heard.isBlank()) {
                 heard.visibility = View.GONE
+                heard.text = ""
             } else {
                 heard.visibility = View.VISIBLE
                 heard.text = row.heard

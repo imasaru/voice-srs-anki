@@ -84,8 +84,9 @@ class ThreadSheet : BottomSheetDialogFragment() {
             return
         }
         root.findViewById<TextView>(R.id.threadQuestion).text = turn.frontText
-        root.findViewById<TextView>(R.id.threadAnswer).text = BubbleModel.userLabel(turn.transcript, turn.ease)
+        root.findViewById<TextView>(R.id.threadAnswer).text = BubbleModel.userPlain(turn.transcript, turn.ease)
         val explView = root.findViewById<TextView>(R.id.threadExpl)
+        val footerView = root.findViewById<TextView>(R.id.threadExplFooter)
         val expl = BubbleModel.displayAi(turn.explanation, turn.frontText, turn.backText, unread = false)
         if (expl.body.isBlank()) {
             explView.visibility = View.GONE
@@ -93,6 +94,13 @@ class ThreadSheet : BottomSheetDialogFragment() {
         } else {
             explView.visibility = View.VISIBLE
             MarkdownSpans.apply(explView, expl.body)
+        }
+        if (expl.footer.isBlank()) {
+            footerView.visibility = View.GONE
+            footerView.text = ""
+        } else {
+            footerView.visibility = View.VISIBLE
+            footerView.text = expl.footer
         }
         val rows = ArrayList<Row>()
         for (follow in turn.followUps) {

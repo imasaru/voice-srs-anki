@@ -33,14 +33,29 @@ class BubbleModelTest {
     }
 
     @Test
-    fun `user label is answer times rating`() {
-        assertEquals("B · Good", BubbleModel.userLabel("B", 3))
-        assertEquals("B · Good", BubbleModel.userLabel("answer b", 3))
-        assertEquals("B · Again", BubbleModel.userLabel("Answer B", 1))
-        assertEquals("tokyo · Good", BubbleModel.userLabel("tokyo", 3))
-        assertEquals("— · Good", BubbleModel.userLabel("", 3))
-        assertEquals("— · Easy", BubbleModel.userLabel("   ", 4))
-        assertEquals("hard one · Hard", BubbleModel.userLabel("hard one", 2))
+    fun `user bubble labels the answer and a colored rating`() {
+        val good = BubbleModel.userBubble("B", 3)
+        assertEquals("B", good.answer)
+        assertTrue(good.answered)
+        assertEquals("Good", good.rating)
+        assertEquals(RatingPill.GOOD_BG, RatingPill.of(good.ease)!!.background)
+        assertEquals(RatingPill.GOOD_FG, RatingPill.of(good.ease)!!.text)
+        assertEquals("B", BubbleModel.userBubble("answer b", 3).answer)
+        assertEquals("Again", BubbleModel.userBubble("Answer B", 1).rating)
+        assertEquals(RatingPill.AGAIN_BG, RatingPill.of(1)!!.background)
+        assertEquals(RatingPill.AGAIN_FG, RatingPill.of(1)!!.text)
+
+        val blank = BubbleModel.userBubble("", 4)
+        assertEquals(BubbleModel.NOT_ANSWERED, blank.answer)
+        assertFalse(blank.answered)
+        assertEquals("Easy", blank.rating)
+        assertEquals(RatingPill.EASY_BG, RatingPill.of(4)!!.background)
+        assertEquals("Hard", BubbleModel.userBubble("hard one", 2).rating)
+        assertEquals(RatingPill.HARD_BG, RatingPill.of(2)!!.background)
+        assertEquals(
+            "ANSWER\nNot answered\nRATING\nAgain",
+            BubbleModel.userPlain("   ", 1)
+        )
     }
 
     @Test
@@ -64,7 +79,7 @@ class BubbleModelTest {
             front, back, "B", 3, ExplState.Ready(prompt, cached = false)
         )
         assertEquals("Which Databricks technology provides ACID guarantees?", echoed.card)
-        assertEquals("B · Good", echoed.user)
+        assertEquals("ANSWER\nB\nRATING\nGood", echoed.user)
         assertEquals("", echoed.aiBody)
         assertEquals(AiMessages.NO_TEXT, echoed.aiStatus)
         assertFalse(echoed.card.contains("Card front:"))
@@ -79,9 +94,22 @@ class BubbleModelTest {
         val row = BubbleModel.exchange(front, back, "B", 3, ExplState.Ready(text, cached = false), unread = true)
         assertEquals(text, row.aiBody)
         assertEquals("", row.aiStatus)
+        assertEquals("", BubbleModel.displayAi(ExplState.Ready(text, cached = false), front, back, true).footer)
         assertTrue(row.unread)
         assertFalse(row.aiBody.contains("Card front:"))
         assertFalse(row.aiBody.startsWith(front))
+    }
+
+    @Test
+    fun `source and license lines move to the explanation footer`() {
+        val text = "Delta is the storage layer.\nSource: https://example.com/delta\nLicense: MIT\nhttps://example.com/only"
+        val ai = BubbleModel.displayAi(ExplState.Ready(text, cached = false), front, back, unread = false)
+        assertEquals("Delta is the storage layer.", ai.body)
+        assertTrue(ai.footer.contains("Source:"))
+        assertTrue(ai.footer.contains("License:"))
+        assertTrue(ai.footer.contains("https://example.com/only"))
+        assertFalse(ai.body.contains("Source:"))
+        assertFalse(ai.body.contains("https://"))
     }
 
     @Test

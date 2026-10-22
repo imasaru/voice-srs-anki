@@ -19,7 +19,9 @@ import androidx.recyclerview.widget.RecyclerView
 class ChatPane(
     private val list: RecyclerView,
     private val unreadView: TextView,
-    private val emptyView: TextView? = null
+    private val emptyView: TextView? = null,
+    /** False when Show answer and the ratings are in a bar outside the list. */
+    private val embedControls: Boolean = true
 ) {
     private val adapter = ChatAdapter(
         onExplExpanded = { id -> sample(id) },
@@ -90,7 +92,14 @@ class ChatPane(
 
     private fun render() {
         val turns = ReviewLog.snapshot()
-        val rows = ChatFeed.rows(turns, DrillUi.state)
+        val showCard = try {
+            Prefs.load(list.context).showCard
+        } catch (_: Exception) {
+            true
+        }
+        val rows = ChatFeed.rows(turns, DrillUi.state, embedControls).map { row ->
+            if (row is ChatRow.Live && !showCard) row.copy(revealText = false) else row
+        }
         emptyView?.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
         val n = turns.count { it.unread }
         unreadView.text = if (n == 1) {

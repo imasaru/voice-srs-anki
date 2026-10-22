@@ -9,6 +9,7 @@ object BubbleModel {
     const val GENERATING = "Generating…"
     const val THINKING = "Thinking…"
     const val BLANK_ANSWER = "—"
+    const val NOT_ANSWERED = "Not answered"
 
     data class Exchange(
         val card: String,
@@ -24,7 +25,16 @@ object BubbleModel {
         val status: String,
         val body: String,
         val unread: Boolean,
-        val retry: Boolean
+        val retry: Boolean,
+        val footer: String = ""
+    )
+
+    /** Learner's answer bubble. Replaces the old "answer · rating" line. */
+    data class UserBubble(
+        val answer: String,
+        val answered: Boolean,
+        val rating: String,
+        val ease: Int?
     )
 
     /**
@@ -70,11 +80,25 @@ object BubbleModel {
     }
 
     /**
-     * Recognised spoken answer (or letter) plus the grade.
-     * Blank transcript is an em dash: `— · Good`.
+     * ANSWER text (or [NOT_ANSWERED]) and a separate rating word.
+     * A blank transcript is not an em dash.
      */
-    fun userLabel(transcript: String, ease: Int?): String {
-        return "${spokenAnswer(transcript)} · ${ratingLabel(ease)}"
+    fun userBubble(transcript: String, ease: Int?): UserBubble {
+        val spoken = spokenAnswer(transcript)
+        val answered = spoken != BLANK_ANSWER
+        val safeEase = ease?.takeIf { it in 1..4 }
+        return UserBubble(
+            answer = if (answered) spoken else NOT_ANSWERED,
+            answered = answered,
+            rating = if (safeEase == null) "" else ratingLabel(safeEase),
+            ease = safeEase
+        )
+    }
+
+    /** Plain form of [userBubble] for surfaces that are one text view. */
+    fun userPlain(transcript: String, ease: Int?): String {
+        val bubble = userBubble(transcript, ease)
+        return "ANSWER\n${bubble.answer}\nRATING\n${bubble.rating}"
     }
 
     fun spokenAnswer(raw: String): String {
@@ -129,23 +153,35 @@ object BubbleModel {
             ExplState.Queued -> AiDisplay(true, QUEUED, "", unread = false, retry = false)
             ExplState.Pending -> AiDisplay(true, GENERATING, "", unread = false, retry = false)
             is ExplState.Streaming -> {
-                val body = visibleExplanation(state.partial, front, back)
-                if (state.thinking && body.isBlank()) {
+                val parts = shownParts(state.partial, front, back)
+                if (state.thinking && parts.body.isBlank() && parts.footer.isBlank()) {
                     AiDisplay(true, THINKING, "", unread = false, retry = false)
                 } else {
-                    AiDisplay(true, GENERATING, body, unread = false, retry = false)
+                    AiDisplay(true, GENERATING, parts.body, unread = false, retry = false, footer = parts.footer)
                 }
             }
             is ExplState.Ready -> {
-                val body = visibleExplanation(state.text, front, back)
-                if (body.isBlank()) {
+                val parts = shownParts(state.text, front, back)
+                if (parts.body.isBlank() && parts.footer.isBlank()) {
                     AiDisplay(true, AiMessages.NO_TEXT, "", unread = false, retry = true)
                 } else {
-                    AiDisplay(true, "", body, unread = unread && !state.cached, retry = false)
+                    AiDisplay(
+                        true,
+                        "",
+                        parts.body,
+                        unread = unread && !state.cached,
+                        retry = false,
+                        footer = parts.footer
+                    )
                 }
             }
             is ExplState.Error -> AiDisplay(true, state.message, "", unread = false, retry = state.retryable)
         }
+    }
+
+    /** Body without Source / License / URL lines. Those stay on [Citation.Parts.footer]. */
+    private fun shownParts(text: String, front: String, back: String): Citation.Parts {
+        return Citation.splitPlain(visibleExplanation(text, front, back))
     }
 
     /** The three strings one exchange shows. Used by tests to prove no prompt echo. */
@@ -161,7 +197,7 @@ object BubbleModel {
         val ai = displayAi(state, front, back, unread)
         return Exchange(
             card = cardText(front, cardExpanded),
-            user = userLabel(transcript, ease),
+            user = userPlain(transcript, ease),
             aiBody = ai.body,
             aiStatus = ai.status,
             unread = ai.unread,

@@ -13,6 +13,8 @@ data class DrillUiState(
     val heard: String = "",
     val ratingMicOpen: Boolean = false,
     val engineLabel: String = "",
+    /** Home-card voice line. Blank until the engine that will speak is known. */
+    val voiceLine: String = "",
     /** "Done 4 · Left 16 · Streak 3 · ~8 min". Blank when idle. */
     val progressLine: String = "",
     val pendingSync: Int = 0,

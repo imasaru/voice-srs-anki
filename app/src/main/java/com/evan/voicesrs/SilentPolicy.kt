@@ -28,38 +28,65 @@ data class SessionMode(
 )
 
 /**
- * What the question row may be tapped while a card is up.
- * Silent mode shows Show answer and the rating options immediately.
- * Voice mode shows ratings only after the answer is revealed.
+ * Buttons on the open card. Visibility is the card face only.
+ * [silent] is accepted so a Silent toggle can be compared and ignored:
+ * question -> Show answer; answer -> Again / Hard / Good / Easy.
  */
 data class AnswerButtons(val showAnswer: Boolean, val rating: Boolean)
 
 object AnswerControls {
     fun of(
-        silent: Boolean,
         hasQuestion: Boolean,
         answerShown: Boolean,
-        voiceRating: Boolean
+        silent: Boolean = false
     ): AnswerButtons {
-        if (!hasQuestion) return AnswerButtons(showAnswer = false, rating = false)
-        if (silent) return AnswerButtons(showAnswer = !answerShown, rating = true)
-        return AnswerButtons(showAnswer = false, rating = voiceRating && answerShown)
+        val buttons = when {
+            !hasQuestion -> AnswerButtons(showAnswer = false, rating = false)
+            answerShown -> AnswerButtons(showAnswer = false, rating = true)
+            else -> AnswerButtons(showAnswer = true, rating = false)
+        }
+        // Same object either way. Silent must not hide or show a control.
+        return if (silent) buttons else buttons
     }
 }
 
 /**
+ * What turning Silent off does to the card that is already up.
+ * On stops audio and the mic. Off reads the face that is on screen.
+ */
+enum class CardResume {
+    /** Silent is on, or no card is up. Do not speak. */
+    HOLD,
+    /** Read the question aloud, then open the microphone. */
+    READ_QUESTION,
+    /** Read the answer that is already on screen. */
+    READ_ANSWER
+}
+
+/**
  * Live audio switch. Silent means no TTS, no beeps, and no microphone.
- * Turning it on aborts the utterance in progress. Turning it off does not
- * replay that utterance; the next prompt uses voice.
+ * Turning it on aborts the utterance in progress. Turning it off resumes
+ * the current card: the question (then listen) or the answer.
  */
 object AudioGate {
     fun outputAllowed(silent: Boolean): Boolean = !silent
     fun micAllowed(silent: Boolean): Boolean = !silent
     fun earconAllowed(silent: Boolean): Boolean = !silent
     fun abortInProgress(nowSilent: Boolean): Boolean = nowSilent
-    fun replayCurrentPrompt(): Boolean = false
 
-    /** A rating tap cuts TTS in both modes and the drill continues with that ease. */
+    /**
+     * Mid-card Silent off. [answerShown] is the card face, not the switch.
+     * No card means there is nothing to resume, so the next prompt uses voice.
+     */
+    fun resume(nowSilent: Boolean, cardUp: Boolean, answerShown: Boolean): CardResume {
+        if (nowSilent || !cardUp) return CardResume.HOLD
+        return if (answerShown) CardResume.READ_ANSWER else CardResume.READ_QUESTION
+    }
+
+    /** Show answer cuts TTS and the open microphone, then the answer is revealed. */
+    fun showAnswerTapInterruptsAudio(): Boolean = true
+
+    /** A rating tap cuts TTS and listening in both modes, then the drill grades. */
     fun ratingTapInterruptsTts(): Boolean = true
 }
 

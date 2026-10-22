@@ -47,6 +47,13 @@ class MainActivity : AppCompatActivity() {
     private var chipGood: Chip? = null
     private var chipEasy: Chip? = null
     private lateinit var progressText: TextView
+    /** Plain voice line on the wide status card. Absent on the narrow header. */
+    private var voiceLineView: TextView? = null
+    /** Narrow header: "Done N · Left N · 🔊 Voice: …". Absent on the wide layout. */
+    private var headerMeta: TextView? = null
+    /** Null until /health returns. Unknown health still shows Edge when it is selected. */
+    @Volatile private var edgeHealthy: Boolean? = null
+    private var edgeProbeGeneration = 0
     private lateinit var syncChip: Chip
     private lateinit var errorCard: MaterialCardView
     private lateinit var errorText: TextView
@@ -124,6 +131,8 @@ class MainActivity : AppCompatActivity() {
         chipGood = findViewById(R.id.chipGood)
         chipEasy = findViewById(R.id.chipEasy)
         progressText = findViewById(R.id.progressText)
+        voiceLineView = findViewById(R.id.voiceLine)
+        headerMeta = findViewById(R.id.headerMeta)
         syncChip = findViewById(R.id.syncChip)
         errorCard = findViewById(R.id.errorCard)
         errorText = findViewById(R.id.errorText)
@@ -154,7 +163,13 @@ class MainActivity : AppCompatActivity() {
         val chatList = findViewById<RecyclerView>(R.id.chatList)
         val chatUnread = findViewById<TextView>(R.id.chatUnread)
         if (chatList != null && chatUnread != null) {
-            chatPane = ChatPane(chatList, chatUnread, findViewById(R.id.chatEmpty)).also { it.attach() }
+            val embedControls = findViewById<View>(R.id.bottomBar) == null
+            chatPane = ChatPane(
+                chatList,
+                chatUnread,
+                findViewById(R.id.chatEmpty),
+                embedControls = embedControls
+            ).also { it.attach() }
         }
         applyAiChrome()
     }
@@ -225,6 +240,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         chatPane?.setResumed(true)
+        probeEdgeHealth()
         applyAiChrome()
         val pending = GradeSync.pendingCount(filesDir)
         if (pending != DrillUi.state.pendingSync) {
@@ -357,11 +373,20 @@ class MainActivity : AppCompatActivity() {
             }
         }
         val progressLine = SessionProgress.visibleLine(DrillService.running, state.progressLine)
-        if (progressLine.isBlank()) {
+        val voice = currentVoiceLine(cfg, state)
+        val meta = headerMeta
+        if (meta != null) {
+            meta.text = VoiceStatusLine.headerLine(progressLine, voice)
             progressText.visibility = View.GONE
         } else {
-            progressText.visibility = View.VISIBLE
-            progressText.text = progressLine
+            voiceLineView?.text = voice
+            voiceLineView?.visibility = View.VISIBLE
+            if (progressLine.isBlank()) {
+                progressText.visibility = View.GONE
+            } else {
+                progressText.visibility = View.VISIBLE
+                progressText.text = progressLine
+            }
         }
         if (state.pendingSync > 0) {
             syncChip.visibility = View.VISIBLE
@@ -381,11 +406,11 @@ class MainActivity : AppCompatActivity() {
         }
         val drilling = state.drillRunning || DrillService.running
         val silentOn = if (drilling) state.silentSession else cfg.silentMode
+        val hasQuestion = drilling && state.frontHtml.isNotBlank()
         val controls = AnswerControls.of(
-            silent = silentOn && drilling && state.frontHtml.isNotBlank(),
-            hasQuestion = drilling && state.frontHtml.isNotBlank(),
+            hasQuestion = hasQuestion,
             answerShown = state.showBack,
-            voiceRating = state.ratingVisible
+            silent = silentOn
         )
         val ratingVis = if (controls.rating) View.VISIBLE else View.GONE
         findViewById<View>(R.id.gradeGuideLabel)?.visibility = ratingVis
@@ -399,6 +424,9 @@ class MainActivity : AppCompatActivity() {
         chipGood?.isChecked = sel == 3
         chipEasy?.isChecked = sel == 4
         startButton.isEnabled = !state.drillRunning
+        if (headerMeta != null) {
+            startButton.visibility = if (drilling) View.GONE else View.VISIBLE
+        }
         stopButton.isEnabled = state.drillRunning
         if (silentSwitch?.isChecked != silentOn) {
             silentBinding = true
@@ -413,11 +441,56 @@ class MainActivity : AppCompatActivity() {
         val drilling = state.drillRunning || DrillService.running
         val silentOn = if (drilling) state.silentSession else Prefs.load(this).silentMode
         return AnswerControls.of(
-            silent = silentOn && drilling && state.frontHtml.isNotBlank(),
             hasQuestion = drilling && state.frontHtml.isNotBlank(),
             answerShown = state.showBack,
-            voiceRating = state.ratingVisible
+            silent = silentOn
         ).rating
+    }
+
+    /**
+     * The engine that will speak. A live drill label wins once the service has
+     * probed. Before that, a selected Edge voice stays on the line until /health
+     * fails. The line is not a chip and nothing here is logged.
+     */
+    private fun currentVoiceLine(cfg: AnkiConfig, state: DrillUiState): String {
+        val preferred = TtsEngines.preferred(cfg.ttsEngine)
+        val drilling = state.drillRunning || DrillService.running
+        val engine = when {
+            drilling && state.engineLabel == EngineLabel.NEURAL -> EngineChoice.NEURAL
+            drilling && state.engineLabel == EngineLabel.DEVICE -> EngineChoice.ON_DEVICE
+            else -> VoiceStatusLine.resolve(preferred, edgeHealthy)
+        }
+        val name = if (engine == EngineChoice.NEURAL) cfg.neuralVoice else cfg.ttsVoice
+        return VoiceStatusLine.format(engine, name)
+    }
+
+    /** Background /health. The token and URL are not written to the log. */
+    private fun probeEdgeHealth() {
+        val cfg = try {
+            Prefs.load(this)
+        } catch (_: Exception) {
+            return
+        }
+        if (TtsEngines.preferred(cfg.ttsEngine) != EngineChoice.NEURAL) {
+            edgeHealthy = null
+            return
+        }
+        val generation = ++edgeProbeGeneration
+        val app = applicationContext
+        val url = cfg.neuralUrl
+        val token = cfg.neuralToken
+        Thread {
+            val ok = try {
+                EdgeSpeaker(app).healthy(url, token)
+            } catch (_: Exception) {
+                false
+            }
+            if (generation != edgeProbeGeneration) return@Thread
+            edgeHealthy = ok
+            runOnUiThread {
+                if (!isDestroyed) render(DrillUi.state)
+            }
+        }.start()
     }
 
     private fun onSilentSwitch(checked: Boolean) {

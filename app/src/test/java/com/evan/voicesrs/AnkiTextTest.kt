@@ -156,14 +156,24 @@ class AnkiTextTest {
             kengioField("Basic (kengio)", "a")
         )
         for (html in samples) {
-            assertEquals(AnkiText.stripHtml(html), AnkiText.spokenText(html))
+            val spoken = AnkiText.spokenText(html)
+            if (html.contains("Source:") || html.contains("class=src")) {
+                assertFalse(spoken.contains("Source:"))
+                assertFalse(spoken.contains("License:"))
+                assertFalse(spoken.contains("https://"))
+                assertFalse(spoken.contains("http://"))
+            } else {
+                assertEquals(AnkiText.stripHtml(html), spoken)
+            }
             assertEquals(AnkiText.toDisplayHtml(html), AnkiText.displayHtml(html))
         }
         val basicAnswer = AnkiText.answerOnly(kengioField("Basic (kengio)", "a"))
-        assertEquals(AnkiText.stripHtml(basicAnswer), AnkiText.spokenText(basicAnswer))
+        val basicSpoken = AnkiText.spokenText(basicAnswer)
+        assertTrue(basicSpoken.contains("Parquet"))
+        assertFalse(basicSpoken.contains("Source:"))
+        assertFalse(basicSpoken.contains("License:"))
+        assertFalse(basicSpoken.contains("https://"))
         assertEquals(AnkiText.toDisplayHtml(basicAnswer), AnkiText.displayHtml(basicAnswer))
-        assertTrue(AnkiText.spokenText(basicAnswer).contains("Parquet"))
-        assertTrue(AnkiText.spokenText(basicAnswer).contains("Source:"))
     }
 
     @Test
@@ -178,21 +188,49 @@ class AnkiTextTest {
     }
 
     @Test
-    fun `mcq answer after the divider speaks the choice summary and source without the explanation`() {
+    fun `mcq answer after the divider speaks the choice summary without source or the explanation`() {
         val answer = AnkiText.spokenText(AnkiText.answerOnly(kengioField("Voice MCQ (kengio)", "a")))
         assertEquals(
             "Answer B: Delta Lake with transaction log ( _delta_log ) Delta Lake provides ACID " +
                 "transactions through its transaction log (_delta_log), which records every operation " +
-                "as an atomic commit. This enables concurrent readers and writers without data corruption. " +
-                "Source: https://github.com/kengio/databricks-certification-study-guide @78104bb " +
-                "License: MIT © 2026 Suppaseth Charoenkarnka (kengio)",
+                "as an atomic commit. This enables concurrent readers and writers without data corruption.",
             answer
         )
         assertFalse(answer.contains("Parquet alone"))
         assertFalse(answer.contains("governance"))
         assertFalse(answer.contains("Question 1"))
         assertFalse(answer.contains(mcqStem))
+        assertFalse(answer.contains("Source:"))
+        assertFalse(answer.contains("License:"))
+        assertFalse(answer.contains("https://"))
         assertFalse(answer.contains("<"))
+    }
+
+    @Test
+    fun `tts drops source license and url lines and keeps the sentence before them`() {
+        val html = "<p>The lakehouse stores tables.</p><p>Source: https://example.com/docs</p>" +
+            "<p>https://example.com/only</p><p>License: MIT</p><p>URL: https://example.com/u</p>"
+        assertEquals("The lakehouse stores tables.", AnkiText.spokenText(html))
+        assertEquals(
+            "Keep this.",
+            AnkiText.spokenText("<p>Keep this. Source: https://x.test/a</p>")
+        )
+    }
+
+    @Test
+    fun `answer display shows the longer explanation once and splits the citation footer`() {
+        val raw = AnkiText.answerOnly(kengioField("Voice MCQ (kengio)", "a"))
+        val back = AnkiText.displayHtml(raw)
+        val needle = "Delta Lake provides ACID transactions through its transaction log"
+        assertEquals(1, AnkiText.stripHtml(back).split(needle).size - 1)
+        assertTrue(back.contains("Answer B:"))
+        assertTrue(back.contains("Parquet alone has no transaction support"))
+        val parts = Citation.splitHtml(back)
+        assertFalse(AnkiText.stripHtml(parts.body).contains("Source:"))
+        assertFalse(AnkiText.stripHtml(parts.body).contains("License:"))
+        assertTrue(parts.footer.contains("Source:"))
+        assertTrue(parts.footer.contains("License:"))
+        assertTrue(parts.footer.contains("https://"))
     }
 
     @Test

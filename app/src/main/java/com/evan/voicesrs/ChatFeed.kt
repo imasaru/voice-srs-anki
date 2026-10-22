@@ -22,32 +22,42 @@ sealed class ChatRow {
         val heard: String,
         val showAnswer: Boolean,
         val rating: Boolean,
-        val selectedEase: Int?
+        val selectedEase: Int?,
+        /** False when Settings hides the card text. Buttons stay on the bar. */
+        val revealText: Boolean = true
     ) : ChatRow() {
         override val key: String = "live"
     }
 }
 
 object ChatFeed {
-    fun rows(turns: List<ReviewTurn>, state: DrillUiState): List<ChatRow> {
+    /**
+     * [embedControls] is false on the narrow layout, where Show answer and the
+     * rating buttons live in the fixed bottom bar. The row still shows the card.
+     */
+    fun rows(
+        turns: List<ReviewTurn>,
+        state: DrillUiState,
+        embedControls: Boolean = true
+    ): List<ChatRow> {
         val out = ArrayList<ChatRow>(turns.size + 2)
         for (turn in turns) out += ChatRow.Past(turn)
         if (!state.drillRunning || state.frontHtml.isBlank()) return out
         val controls = AnswerControls.of(
-            silent = state.silentSession,
             hasQuestion = true,
             answerShown = state.showBack,
-            voiceRating = state.ratingVisible
+            silent = state.silentSession
         )
+        val buttons = embedControls
         out += ChatRow.Divider
         out += ChatRow.Live(
             front = state.frontHtml,
             back = state.backHtml,
             showBack = state.showBack && state.backHtml.isNotBlank(),
             heard = state.heard,
-            showAnswer = controls.showAnswer,
-            rating = controls.rating,
-            selectedEase = if (controls.rating) state.selectedEase else null
+            showAnswer = buttons && controls.showAnswer,
+            rating = buttons && controls.rating,
+            selectedEase = if (buttons && controls.rating) state.selectedEase else null
         )
         return out
     }

@@ -37,8 +37,8 @@ android {
         applicationId = "com.evan.voicesrs"
         minSdk = 26
         targetSdk = 35
-        versionCode = 15
-        versionName = "0.1.14"
+        versionCode = 16
+        versionName = "0.1.15"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ANKI_API_KEY", javaStringLiteral(ankiApiKey))
         buildConfigField("String", "EDGE_TTS_TOKEN", javaStringLiteral(edgeTtsToken))

@@ -86,9 +86,9 @@ class VoiceSelfGrader : Grader {
             handedOff()
             tapped()?.let { return it }
             val action = GradeMapper.parse(io.listen(ctx.listenTimeoutMs))
-            handedOff()
-            // A tap during the listen wins over whatever the transcript said.
+            // A tap during the listen wins over the transcript and over Silent flipping on.
             tapped()?.let { return it }
+            handedOff()
             when (action) {
                 VoiceAction.Repeat -> {
                     io.speak(ctx.spokenAnswer)

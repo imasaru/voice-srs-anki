@@ -139,8 +139,19 @@ class ThreadStoreTest {
         val live = rows[2] as ChatRow.Live
         assertEquals("Current question line", live.front)
         assertTrue(live.showAnswer)
-        assertTrue(live.rating)
+        assertFalse(live.rating)
         assertFalse(live.showBack)
+        val voice = ChatFeed.rows(
+            emptyList(),
+            DrillUiState(
+                drillRunning = true,
+                silentSession = false,
+                frontHtml = "Current question line",
+                showBack = false
+            )
+        ).last() as ChatRow.Live
+        assertEquals(live.showAnswer, voice.showAnswer)
+        assertEquals(live.rating, voice.rating)
         ReviewLog.clear()
     }
 }

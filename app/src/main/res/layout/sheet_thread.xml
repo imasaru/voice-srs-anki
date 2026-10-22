@@ -37,6 +37,15 @@
         android:layout_marginTop="4dp"
         android:textAppearance="?attr/textAppearanceBodyMedium" />
 
+    <TextView
+        android:id="@+id/threadExplFooter"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textAppearance="?attr/textAppearanceBodySmall"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:visibility="gone" />
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/threadList"
         android:layout_width="match_parent"

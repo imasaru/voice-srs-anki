@@ -67,9 +67,27 @@ object AnkiText {
         val source = if (spoken.isNotEmpty()) spoken.joinToString("\n") else html
         val cleaned = removeElements(source) { attrs ->
             if (hasClass(attrs, "spoken")) false
-            else hasClass(attrs, "screen-only") || isInlineDisplayNone(attrs)
+            else hasClass(attrs, "screen-only") || isInlineDisplayNone(attrs) || hasClass(attrs, "src")
         }
-        return stripHtml(cleaned)
+        return speakable(cleaned)
+    }
+
+    /**
+     * Same words as [stripHtml], except Source / License / URL lines and a
+     * trailing citation clause are never spoken.
+     */
+    private fun speakable(html: String): String {
+        var s = scriptStyle.replace(html, " ")
+        s = lineBreak.replace(s, "\n")
+        s = tag.replace(s, " ")
+        s = decodeEntities(s)
+        val kept = ArrayList<String>()
+        for (line in s.split('\n')) {
+            val trimmed = whitespace.replace(line, " ").trim()
+            val spoken = Citation.withoutCitation(trimmed)
+            if (spoken.isNotEmpty()) kept.add(spoken)
+        }
+        return kept.joinToString(" ")
     }
 
     /**
@@ -127,12 +145,17 @@ object AnkiText {
 
     /**
      * On-screen HTML. Drops `.spoken` and inline `display:none`. Keeps `.screen-only`.
-     * Then the same sanitizer as [toDisplayHtml]. Cards with none of those markers
-     * match [toDisplayHtml] exactly.
+     * When a longer `.screen-only` explanation is present, the short `.summary`
+     * (what TTS reads) is not drawn, so the same paragraph is not shown twice.
+     * That choice is the class, not a string comparison. Then the same sanitizer
+     * as [toDisplayHtml]. Cards with none of those markers match [toDisplayHtml].
      */
     fun displayHtml(html: String): String {
-        val cleaned = removeElements(html) { attrs ->
+        var cleaned = removeElements(html) { attrs ->
             hasClass(attrs, "spoken") || isInlineDisplayNone(attrs)
+        }
+        if (findNextElement(cleaned, 0) { hasClass(it, "screen-only") } != null) {
+            cleaned = removeElements(cleaned) { hasClass(it, "summary") }
         }
         return toDisplayHtml(cleaned)
     }
