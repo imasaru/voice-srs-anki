@@ -44,34 +44,51 @@ class ListenWindowTest {
     }
 
     @Test
-    fun `answer relisten is one extra window and not for speed or stop`() {
-        assertTrue(ListenWindow.shouldRelistenAnswer(null, relistenOnce = true, stopped = false, speedMode = false))
-        assertFalse(ListenWindow.shouldRelistenAnswer(null, relistenOnce = false, stopped = false, speedMode = false))
-        assertFalse(ListenWindow.shouldRelistenAnswer(null, relistenOnce = true, stopped = true, speedMode = false))
-        assertFalse(ListenWindow.shouldRelistenAnswer(null, relistenOnce = true, stopped = false, speedMode = true))
-        assertFalse(ListenWindow.shouldRelistenAnswer("good", relistenOnce = true, stopped = false, speedMode = false))
-        assertFalse(ListenWindow.shouldRelistenAnswer("", relistenOnce = true, stopped = false, speedMode = false))
+    fun `a miss opens another listen until the attempt count`() {
+        assertTrue(ListenWindow.openAnother(1, 3, lastMissed = true, stopped = false))
+        assertTrue(ListenWindow.openAnother(2, 3, lastMissed = true, stopped = false))
+        assertFalse(ListenWindow.openAnother(3, 3, lastMissed = true, stopped = false))
+        assertTrue(ListenWindow.gaveUp(3, 3, lastMissed = true))
+        assertFalse(ListenWindow.gaveUp(2, 3, lastMissed = true))
+        assertFalse(ListenWindow.openAnother(1, 3, lastMissed = false, stopped = false))
+        assertFalse(ListenWindow.openAnother(1, 3, lastMissed = true, stopped = true))
+        assertFalse(ListenWindow.gaveUp(1, 1, lastMissed = false))
+        assertTrue(ListenWindow.gaveUp(1, 1, lastMissed = true))
+        assertEquals(ListenWindow.SILENT_NOTICE, "Didn't hear a grade, switched to silent")
     }
 
     @Test
-    fun `a silent answer plus a silent relisten is one null`() {
-        val t = ListenHealthTracker(3)
-        assertFalse(t.recordHeard(ListenWindow.healthSample(null, null, didRelisten = true)))
-        assertFalse(t.recordHeard(ListenWindow.healthSample(null, null, didRelisten = true)))
-        assertTrue(t.recordHeard(ListenWindow.healthSample(null, null, didRelisten = true)))
+    fun `listen attempts migrate the old switch and clamp to 1 through 5`() {
+        assertEquals(3, ListenWindow.migrateAttempts(null, null))
+        assertEquals(2, ListenWindow.migrateAttempts(null, true))
+        assertEquals(1, ListenWindow.migrateAttempts(null, false))
+        assertEquals(4, ListenWindow.migrateAttempts(4, true))
+        assertEquals(1, ListenWindow.migrateAttempts(0, null))
+        assertEquals(5, ListenWindow.migrateAttempts(9, false))
+        assertEquals(3, ListenWindow.DEFAULT_ATTEMPTS)
+        assertEquals(1, ListenWindow.MIN_ATTEMPTS)
+        assertEquals(5, ListenWindow.MAX_ATTEMPTS)
+        assertEquals(3, ListenWindow.attemptsFromLabel("3"))
+        assertEquals(5, ListenWindow.attemptsFromLabel("8"))
+        assertEquals(3, ListenWindow.attemptsFromLabel("nope"))
+        assertEquals(ListenWindow.ATTEMPTS_LABEL, "Listen attempts")
+        assertEquals(ListenWindow.ATTEMPTS_HELP, "How many times to listen before switching to silent.")
     }
 
     @Test
-    fun `a heard relisten clears the streak`() {
-        val t = ListenHealthTracker(3)
-        assertFalse(t.recordHeard(ListenWindow.healthSample(null, null, didRelisten = true)))
-        assertFalse(t.recordHeard(ListenWindow.healthSample(null, null, didRelisten = true)))
-        val heard = ListenWindow.healthSample("ignored", "paris", didRelisten = true)
-        assertEquals("paris", heard)
-        assertFalse(t.recordHeard(heard))
-        assertEquals("paris", ListenWindow.healthSample("paris", null, didRelisten = false))
-        assertFalse(t.recordHeard(null))
-        assertFalse(t.recordHeard(null))
+    fun `silence and no match are not a microphone fault`() {
+        assertFalse(ListenWindow.isMicFault(ListenWindow.ERROR_NO_MATCH))
+        assertFalse(ListenWindow.isMicFault(ListenWindow.ERROR_SPEECH_TIMEOUT))
+        assertFalse(ListenWindow.isMicFault(0))
+        assertTrue(ListenWindow.isMicFault(SpeechRecognizer.ERROR_AUDIO))
+        assertTrue(ListenWindow.isMicFault(SpeechRecognizer.ERROR_NETWORK))
+        assertTrue(ListenWindow.isMicFault(SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS))
+        assertTrue(ListenWindow.isMicFault(SpeechRecognizer.ERROR_CLIENT))
+        val health = ListenHealthTracker()
+        assertFalse(health.recordHeard(null))
+        assertFalse(health.recordHeard(null))
+        assertFalse(health.recordHeard(""))
+        assertTrue(health.recordFault())
     }
 
     @Test

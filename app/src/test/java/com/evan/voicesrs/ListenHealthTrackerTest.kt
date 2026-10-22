@@ -7,55 +7,54 @@ import org.junit.Test
 class ListenHealthTrackerTest {
 
     @Test
-    fun `nulls below threshold do not trip`() {
-        val t = ListenHealthTracker(3)
-        assertFalse(t.recordHeard(null))
-        assertFalse(t.recordHeard(null))
-    }
-
-    @Test
-    fun `third consecutive null trips`() {
-        val t = ListenHealthTracker(3)
-        assertFalse(t.recordHeard(null))
-        assertFalse(t.recordHeard(null))
-        assertTrue(t.recordHeard(null))
-    }
-
-    @Test
-    fun `heard transcript resets the streak`() {
-        val t = ListenHealthTracker(3)
-        assertFalse(t.recordHeard(null))
-        assertFalse(t.recordHeard(null))
-        assertFalse(t.recordHeard("good"))
-        assertFalse(t.recordHeard(null))
-        assertFalse(t.recordHeard(null))
-        assertTrue(t.recordHeard(null))
-    }
-
-    @Test
-    fun `blank transcript counts as heard, not a failure`() {
-        val t = ListenHealthTracker(3)
-        assertFalse(t.recordHeard(null))
-        assertFalse(t.recordHeard(null))
+    fun `null transcripts never trip the microphone warning`() {
+        val t = ListenHealthTracker(1)
+        repeat(6) {
+            assertFalse(t.recordHeard(null))
+        }
         assertFalse(t.recordHeard(""))
-        assertFalse(t.recordHeard(null))
+        assertFalse(t.recordHeard("   "))
     }
 
     @Test
-    fun `reset clears the streak`() {
-        val t = ListenHealthTracker(3)
+    fun `a real fault can warn and does not throw`() {
+        val t = ListenHealthTracker(1)
         assertFalse(t.recordHeard(null))
-        assertFalse(t.recordHeard(null))
-        t.reset()
-        assertFalse(t.recordHeard(null))
-        assertFalse(t.recordHeard(null))
-        assertTrue(t.recordHeard(null))
+        assertTrue(t.recordFault())
+        assertTrue(t.recordFault())
     }
 
     @Test
-    fun `custom threshold is respected`() {
+    fun `heard transcript resets the fault streak`() {
         val t = ListenHealthTracker(2)
-        assertFalse(t.recordHeard(null))
-        assertTrue(t.recordHeard(null))
+        assertFalse(t.recordFault())
+        assertFalse(t.recordHeard("good"))
+        assertFalse(t.recordFault())
+        assertTrue(t.recordFault())
+    }
+
+    @Test
+    fun `blank transcript does not clear or trip`() {
+        val t = ListenHealthTracker(2)
+        assertFalse(t.recordFault())
+        assertFalse(t.recordHeard(""))
+        assertTrue(t.recordFault())
+    }
+
+    @Test
+    fun `reset clears the fault streak`() {
+        val t = ListenHealthTracker(2)
+        assertFalse(t.recordFault())
+        t.reset()
+        assertFalse(t.recordFault())
+        assertTrue(t.recordFault())
+    }
+
+    @Test
+    fun `custom fault threshold is respected`() {
+        val t = ListenHealthTracker(3)
+        assertFalse(t.recordFault())
+        assertFalse(t.recordFault())
+        assertTrue(t.recordFault())
     }
 }

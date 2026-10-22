@@ -5,8 +5,12 @@ package com.evan.voicesrs
  * Strips tags, decodes common entities, collapses whitespace.
  *
  * Kengio decks hide a spoken script in `.spoken` (CSS `display:none`) and put a
- * longer on-screen explanation in `.screen-only`. [spokenText] and [displayHtml]
- * honor those classes. Cards with neither class match [stripHtml] / [toDisplayHtml].
+ * longer explanation in `.screen-only`, with a short `.summary` beside it.
+ * When `.spoken` is present, only that script is spoken. Otherwise the
+ * `.screen-only` explanation is spoken and the short `.summary` is not, so the
+ * explanation is read once. `.src` and Source / License / URL lines are never
+ * spoken. [displayHtml] still draws `.screen-only` and hides `.summary`.
+ * Cards with neither class match [stripHtml] / [toDisplayHtml].
  */
 object AnkiText {
     private val scriptStyle = Regex("<(script|style)[^>]*>.*?</\\1>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
@@ -55,19 +59,36 @@ object AnkiText {
      * Text to speak for one card side.
      *
      * If the side has an element classed `spoken`, only those elements are spoken.
-     * Otherwise the visible side is spoken. Elements classed `screen-only`, and
-     * elements with inline `display:none`, are always dropped. A `.spoken` element
-     * is the replacement, so it is kept even when it also has inline `display:none`.
-     * The result then goes through [stripHtml].
+     * A `.spoken` element is the replacement, so it is kept even when it also has
+     * inline `display:none`. Screen-only text nested inside that script is not spoken.
+     *
+     * Otherwise the visible side is spoken, including `.screen-only`. When a
+     * `.screen-only` explanation is present the short `.summary` is dropped, so
+     * the same paragraph is not read twice. Inline `display:none` and `.src`
+     * are dropped. Source / License / URL lines are dropped by [speakable].
      *
      * Does not look for the answer divider. Call [answerOnly] first on a back.
      */
     fun spokenText(html: String): String {
         val spoken = extractInners(html) { attrs -> hasClass(attrs, "spoken") }
-        val source = if (spoken.isNotEmpty()) spoken.joinToString("\n") else html
+        val source = if (spoken.isNotEmpty()) {
+            spoken.joinToString("\n")
+        } else {
+            var body = html
+            if (findNextElement(body, 0) { hasClass(it, "screen-only") } != null) {
+                body = removeElements(body) { attrs ->
+                    hasClass(attrs, "summary") && !hasClass(attrs, "screen-only")
+                }
+            }
+            body
+        }
         val cleaned = removeElements(source) { attrs ->
-            if (hasClass(attrs, "spoken")) false
-            else hasClass(attrs, "screen-only") || isInlineDisplayNone(attrs) || hasClass(attrs, "src")
+            when {
+                hasClass(attrs, "spoken") -> false
+                spoken.isNotEmpty() && hasClass(attrs, "screen-only") -> true
+                hasClass(attrs, "screen-only") -> false
+                else -> isInlineDisplayNone(attrs) || hasClass(attrs, "src")
+            }
         }
         return speakable(cleaned)
     }
@@ -146,9 +167,10 @@ object AnkiText {
     /**
      * On-screen HTML. Drops `.spoken` and inline `display:none`. Keeps `.screen-only`.
      * When a longer `.screen-only` explanation is present, the short `.summary`
-     * (what TTS reads) is not drawn, so the same paragraph is not shown twice.
-     * That choice is the class, not a string comparison. Then the same sanitizer
-     * as [toDisplayHtml]. Cards with none of those markers match [toDisplayHtml].
+     * is not drawn, so the same paragraph is not shown twice. TTS reads that
+     * `.screen-only` text (see [spokenText]). The choice is the class, not a
+     * string comparison. Then the same sanitizer as [toDisplayHtml]. Cards with
+     * none of those markers match [toDisplayHtml].
      */
     fun displayHtml(html: String): String {
         var cleaned = removeElements(html) { attrs ->

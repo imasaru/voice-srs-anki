@@ -188,22 +188,57 @@ class AnkiTextTest {
     }
 
     @Test
-    fun `mcq answer after the divider speaks the choice summary without source or the explanation`() {
+    fun `mcq answer after the divider speaks the screen explanation once without source`() {
         val answer = AnkiText.spokenText(AnkiText.answerOnly(kengioField("Voice MCQ (kengio)", "a")))
         assertEquals(
             "Answer B: Delta Lake with transaction log ( _delta_log ) Delta Lake provides ACID " +
-                "transactions through its transaction log (_delta_log), which records every operation " +
-                "as an atomic commit. This enables concurrent readers and writers without data corruption.",
+                "transactions through its transaction log ( _delta_log ), which records every operation " +
+                "as an atomic commit. This enables concurrent readers and writers without data corruption. " +
+                "Parquet alone has no transaction support, Serverless warehouses are a compute option, " +
+                "and Unity Catalog handles governance — not storage-level ACID.",
             answer
         )
-        assertFalse(answer.contains("Parquet alone"))
-        assertFalse(answer.contains("governance"))
+        val once = "This enables concurrent readers and writers without data corruption."
+        assertEquals(1, answer.split(once).size - 1)
+        assertTrue(answer.contains("Parquet alone"))
+        assertTrue(answer.contains("governance"))
         assertFalse(answer.contains("Question 1"))
         assertFalse(answer.contains(mcqStem))
         assertFalse(answer.contains("Source:"))
         assertFalse(answer.contains("License:"))
         assertFalse(answer.contains("https://"))
         assertFalse(answer.contains("<"))
+    }
+
+    @Test
+    fun `pivot explanation is spoken in full and source and license are skipped`() {
+        val full = "PIVOT in Databricks SQL rotates rows into columns. You specify the pivot column " +
+            "(categories) and the aggregation (SUM of sales). UNPIVOT does the reverse — converts " +
+            "columns to rows. CROSSTAB is not a standard SQL keyword in Databricks. TRANSPOSE is not " +
+            "a SQL operation."
+        val summary = "PIVOT in Databricks SQL rotates rows into columns. You specify the pivot column " +
+            "(categories) and the aggregation (SUM of sales)."
+        val html = "<div class=summary>$summary</div>" +
+            "<div class=screen-only><p>$full</p></div>" +
+            "<div class=src>Source: https://docs.databricks.com/sql/language-manual/sql-ref-syntax-qry-select-pivot.html" +
+            "<br>License: Databricks documentation</div>" +
+            "<p>Source: https://example.com/pivot</p>" +
+            "<p>License: CC BY 4.0</p>" +
+            "<p>https://example.com/only-url</p>"
+        assertEquals(full, AnkiText.spokenText(html))
+        assertEquals(
+            full,
+            AnkiText.spokenText(
+                "<p>$full</p><p>Source: https://example.com/a</p><p>License: MIT</p><p>URL: https://example.com/u</p>" +
+                    "<p>https://example.com/b</p>"
+            )
+        )
+        val shown = AnkiText.stripHtml(AnkiText.displayHtml(html))
+        assertEquals(1, shown.split("PIVOT in Databricks SQL").size - 1)
+        assertTrue(shown.contains("TRANSPOSE is not a SQL operation."))
+        assertFalse(AnkiText.spokenText(html).contains("Source"))
+        assertFalse(AnkiText.spokenText(html).contains("License"))
+        assertFalse(AnkiText.spokenText(html).contains("http"))
     }
 
     @Test
@@ -281,9 +316,9 @@ class AnkiTextTest {
     }
 
     @Test
-    fun `screen-only with a nested div is silent and still displayed`() {
+    fun `screen-only with a nested div is spoken and still displayed`() {
         val html = """<div>Keep</div><div class="screen-only"><div>nested <b>secret</b></div><p>more</p></div>"""
-        assertEquals("Keep", AnkiText.spokenText(html))
+        assertEquals("Keep nested secret more", AnkiText.spokenText(html))
         assertEquals(AnkiText.toDisplayHtml(html), AnkiText.displayHtml(html))
         val shown = AnkiText.displayHtml(html)
         assertTrue(shown.contains("Keep"))
@@ -292,15 +327,15 @@ class AnkiTextTest {
         assertTrue(shown.contains("more"))
 
         assertEquals(
-            "Keep",
+            "Keep deep",
             AnkiText.spokenText("""<div>Keep</div><div class='screen-only'><div><div>deep</div></div></div>""")
         )
         assertEquals(
-            "Keep",
+            "Keep deep",
             AnkiText.spokenText("""<div>Keep</div><div class=screen-only><div>deep</div></div>""")
         )
         assertEquals(
-            "Keep",
+            "Keep deep",
             AnkiText.spokenText("""<div>Keep</div><div class="note screen-only"><div>deep</div></div>""")
         )
     }
@@ -337,7 +372,7 @@ class AnkiTextTest {
     fun `answer side without spoken uses the answer normally and ignores the front spoken element`() {
         val html = """<div class=spoken>Question stem</div><div>Front</div><hr id=answer><div>The answer</div><div class=screen-only><div>Explain <b>why</b></div></div>"""
         val body = AnkiText.answerOnly(html)
-        assertEquals("The answer", AnkiText.spokenText(body))
+        assertEquals("The answer Explain why", AnkiText.spokenText(body))
         val shown = AnkiText.displayHtml(body)
         assertTrue(shown.contains("The answer"))
         assertTrue(shown.contains("Explain"))

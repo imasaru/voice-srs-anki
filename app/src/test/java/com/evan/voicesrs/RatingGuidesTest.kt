@@ -27,6 +27,6 @@ class RatingGuidesTest {
 
     @Test
     fun `reprompt names the four grades`() {
-        assertEquals("Say again, hard, good, or easy.", RatingGuides.reprompt(false))
+        assertEquals("Say a grade: again, hard, good or easy", RatingGuides.reprompt(false))
     }
 }

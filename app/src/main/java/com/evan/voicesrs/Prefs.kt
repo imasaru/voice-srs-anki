@@ -25,8 +25,8 @@ data class AnkiConfig(
     val listenWaitSec: Int = ListenWindow.DEFAULT_WAIT_SEC,
     /** End-of-speech silence hint, in milliseconds. One of [ListenWindow.SILENCE_MS_CHOICES]. */
     val endSilenceMs: Int = ListenWindow.DEFAULT_SILENCE_MS,
-    /** After a silent answer window, prompt once and listen again. */
-    val relistenOnce: Boolean = true,
+    /** How many times to listen for an answer or a grade before auto-silent. 1–5, default 3. */
+    val listenAttempts: Int = ListenWindow.DEFAULT_ATTEMPTS,
     /** Show the card front and back on the main screen. */
     val showCard: Boolean = true,
     /** Tap-only review. Read once at session start. The microphone stays closed. */
@@ -69,6 +69,7 @@ object Prefs {
     private const val KEY_LISTEN_WAIT_SEC = "listen_wait_sec"
     private const val KEY_END_SILENCE_MS = "end_silence_ms"
     private const val KEY_RELISTEN_ONCE = "relisten_once"
+    private const val KEY_LISTEN_ATTEMPTS = "listen_attempts"
     private const val KEY_SHOW_CARD = "show_card"
     private const val KEY_SILENT = "silent_mode"
     private const val KEY_OFFLINE = "offline_batch"
@@ -159,7 +160,8 @@ object Prefs {
             .putBoolean(KEY_SPEED_MODE, cfg.speedMode)
             .putInt(KEY_LISTEN_WAIT_SEC, ListenWindow.normalizeWaitSec(cfg.listenWaitSec))
             .putInt(KEY_END_SILENCE_MS, ListenWindow.normalizeSilenceMs(cfg.endSilenceMs))
-            .putBoolean(KEY_RELISTEN_ONCE, cfg.relistenOnce)
+            .putInt(KEY_LISTEN_ATTEMPTS, ListenWindow.clampAttempts(cfg.listenAttempts))
+            .remove(KEY_RELISTEN_ONCE)
             .putBoolean(KEY_SHOW_CARD, cfg.showCard)
             .putBoolean(KEY_SILENT, cfg.silentMode)
             .putBoolean(KEY_OFFLINE, cfg.offlineBatch)
@@ -210,7 +212,14 @@ object Prefs {
             endSilenceMs = ListenWindow.normalizeSilenceMs(
                 p.getInt(KEY_END_SILENCE_MS, ListenWindow.DEFAULT_SILENCE_MS)
             ),
-            relistenOnce = p.getBoolean(KEY_RELISTEN_ONCE, true),
+            listenAttempts = ListenWindow.migrateAttempts(
+                stored = if (p.contains(KEY_LISTEN_ATTEMPTS)) {
+                    p.getInt(KEY_LISTEN_ATTEMPTS, ListenWindow.DEFAULT_ATTEMPTS)
+                } else {
+                    null
+                },
+                legacyOn = if (p.contains(KEY_RELISTEN_ONCE)) p.getBoolean(KEY_RELISTEN_ONCE, true) else null
+            ),
             showCard = p.getBoolean(KEY_SHOW_CARD, true),
             silentMode = p.getBoolean(KEY_SILENT, false),
             offlineBatch = p.getBoolean(KEY_OFFLINE, false),

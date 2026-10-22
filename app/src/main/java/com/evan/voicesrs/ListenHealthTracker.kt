@@ -1,32 +1,42 @@
 package com.evan.voicesrs
 
 /**
- * Counts consecutive listen() calls that returned null (timeout, silence, or
- * recognizer error). Pure logic, no Android dependencies — unit-testable.
+ * Counts consecutive real microphone faults. Pure logic, no Android dependencies.
  *
- * The drill must fail LOUD instead of silently rolling through cards of dead
- * air: when [maxConsecutiveNulls] nulls happen in a row, the caller speaks a
- * warning and aborts via [MicDeadException].
- *
- * An answer re-listen is one sample. The caller passes [ListenWindow.healthSample]
- * so a silent window plus its retry does not count as two strikes.
+ * A null or blank transcript is silence, no-match, or a timeout. Those never
+ * count, never trip a warning, and never end the drill. Only [recordFault]
+ * (a recognizer error that is not silence or no-match) can ask the caller to
+ * warn. The caller must keep the session running. Only Stop ends a drill.
  */
-class ListenHealthTracker(private val maxConsecutiveNulls: Int = 3) {
-    private var consecutiveNulls = 0
+class ListenHealthTracker(private val maxConsecutiveFaults: Int = 1) {
+    private var consecutiveFaults = 0
 
     /**
-     * Record one listen result.
-     * @return true once [maxConsecutiveNulls] nulls have occurred consecutively.
+     * Record silence or a transcript.
+     * @return always false. Silence is not a microphone failure.
      */
     fun recordHeard(transcript: String?): Boolean {
-        consecutiveNulls = if (transcript == null) consecutiveNulls + 1 else 0
-        return consecutiveNulls >= maxConsecutiveNulls
+        if (!transcript.isNullOrBlank()) consecutiveFaults = 0
+        return false
+    }
+
+    /**
+     * Record one real recognizer fault.
+     * @return true when the caller should warn. This does not end the drill.
+     */
+    fun recordFault(): Boolean {
+        consecutiveFaults += 1
+        return consecutiveFaults >= maxConsecutiveFaults
     }
 
     fun reset() {
-        consecutiveNulls = 0
+        consecutiveFaults = 0
     }
 }
 
-/** Thrown from listen() when the mic is judged dead; aborts the drill. */
+/**
+ * Kept so a stray failure can still be recognized. Silence, no-match, and a
+ * missed grade must not throw this. A thrown instance must not be the way a
+ * session ends; only Stop does that.
+ */
 class MicDeadException : Exception()

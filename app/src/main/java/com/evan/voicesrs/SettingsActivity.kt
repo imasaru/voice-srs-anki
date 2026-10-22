@@ -90,7 +90,7 @@ class SettingsActivity : AppCompatActivity() {
         val showCardSwitch: MaterialSwitch = findViewById(R.id.showCardSwitch)
         val listenWaitView: MaterialAutoCompleteTextView = findViewById(R.id.listenWaitInput)
         val endSilenceView: MaterialAutoCompleteTextView = findViewById(R.id.endSilenceInput)
-        val relistenSwitch: MaterialSwitch = findViewById(R.id.relistenSwitch)
+        val listenAttemptsView: MaterialAutoCompleteTextView = findViewById(R.id.listenAttemptsInput)
 
         held = Prefs.load(this)
         urlView.setText(held.url)
@@ -130,7 +130,14 @@ class SettingsActivity : AppCompatActivity() {
         ) { label ->
             persist { it.copy(endSilenceMs = ListenWindow.silenceMsFromLabel(label)) }
         }
-        relistenSwitch.isChecked = held.relistenOnce
+        val attemptLabels = (ListenWindow.MIN_ATTEMPTS..ListenWindow.MAX_ATTEMPTS).map { it.toString() }
+        bindChoices(
+            listenAttemptsView,
+            attemptLabels,
+            ListenWindow.clampAttempts(held.listenAttempts).toString()
+        ) { label ->
+            persist { it.copy(listenAttempts = ListenWindow.attemptsFromLabel(label)) }
+        }
         offlineSwitch.isChecked = held.offlineBatch
         batchSizeView.setText(held.offlineBatchSize.toString())
         val goalLabels = listOf(
@@ -213,9 +220,6 @@ class SettingsActivity : AppCompatActivity() {
         }
         showCardSwitch.setOnCheckedChangeListener { _, checked ->
             persist { it.copy(showCard = checked) }
-        }
-        relistenSwitch.setOnCheckedChangeListener { _, checked ->
-            persist { it.copy(relistenOnce = checked) }
         }
         goalModeView.doAfterTextChanged { refreshDrillFields() }
         commitGoalMode = {

@@ -33,10 +33,12 @@ data class GradeContext(
     val spokenAnswer: String,
     /** 0-based index of this card in the current drill. */
     val cardIndex: Int = 0,
-    /** When true, skip the spoken rating guide and the one retry guide. */
+    /** When true, skip spoken rating guides. Missed listens still count toward [listenAttempts]. */
     val speedMode: Boolean = false,
     /** How long each grade listen waits. The drill passes the saved listen wait. */
     val listenTimeoutMs: Long = Grader.LISTEN_TIMEOUT_MS,
+    /** Grade listens before auto-silent. Clamped to 1..5. The same count is used for the answer. */
+    val listenAttempts: Int = ListenWindow.DEFAULT_ATTEMPTS,
     /**
      * Ease already claimed for this card (a rating tap), or null.
      * When non-null the grader returns that ease and does not listen.
@@ -60,6 +62,12 @@ interface VoiceIo {
 /** The learner turned silent on during voice grading. Wait for a chip instead. */
 class SilentHandoff : Exception()
 
+/**
+ * Every listen attempt missed. The drill switches to silent and waits.
+ * This is not a grade and must not advance the card.
+ */
+class ListenGaveUp : Exception()
+
 /** Skip this card. The drill must not send an ease. */
 class SkipRequested : Exception()
 
@@ -81,10 +89,13 @@ class VoiceSelfGrader : Grader {
         if (opening != null) io.speak(opening)
         handedOff()
         tapped()?.let { return it }
-        var reprompted = false
+        var attempts = 0
+        val max = ListenWindow.clampAttempts(ctx.listenAttempts)
         while (true) {
             handedOff()
             tapped()?.let { return it }
+            // Stop pressed while waiting for a grade: end without sending any ease.
+            if (io.stopped()) throw PauseRequested()
             val action = GradeMapper.parse(io.listen(ctx.listenTimeoutMs))
             // A tap during the listen wins over the transcript and over Silent flipping on.
             tapped()?.let { return it }
@@ -100,18 +111,15 @@ class VoiceSelfGrader : Grader {
                 VoiceAction.Skip -> throw SkipRequested()
                 VoiceAction.Pause -> throw PauseRequested()
                 VoiceAction.None -> {
-                    // Stop pressed while waiting for a grade: end without sending any ease.
+                    // Stop during the listen: leave the card ungraded. Do not switch to silent.
                     if (io.stopped()) throw PauseRequested()
-                    if (!reprompted) {
-                        reprompted = true
-                        val again = RatingGuides.reprompt(ctx.speedMode)
-                        if (again != null) io.speak(again)
-                        tapped()?.let { return it }
-                    } else {
-                        tapped()?.let { return it }
-                        // Still nothing: conservative default so the card comes back sooner.
-                        return GradeMapper.toAvailableEase(2, ctx.card.buttons)
-                    }
+                    attempts += 1
+                    tapped()?.let { return it }
+                    if (ListenWindow.gaveUp(attempts, max, lastMissed = true)) throw ListenGaveUp()
+                    val again = RatingGuides.reprompt(ctx.speedMode)
+                    if (again != null) io.speak(again)
+                    handedOff()
+                    tapped()?.let { return it }
                 }
             }
         }

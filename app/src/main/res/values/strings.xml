@@ -40,7 +40,8 @@
     <string name="section_listening">Listening</string>
     <string name="settings_listen_wait">Wait for speech</string>
     <string name="settings_end_silence">End-of-speech silence</string>
-    <string name="settings_relisten">Listen once more after silence</string>
+    <string name="settings_listen_attempts">Listen attempts</string>
+    <string name="settings_listen_attempts_help">How many times to listen before switching to silent.</string>
     <string name="settings_listen_help">How long to wait for you to start speaking. End-of-speech silence is a hint; Google\'s recognizer may ignore it.</string>
     <string name="settings_listen_wait_choice">%1$d seconds</string>
     <string name="settings_end_silence_choice">%1$d ms</string>
