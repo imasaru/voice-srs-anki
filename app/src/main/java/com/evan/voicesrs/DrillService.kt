@@ -334,6 +334,11 @@ class DrillService : Service(), VoiceIo {
     private var clientRetryUsed = false
     /** True after onBeginningOfSpeech for this listen. Silence restarts require this to stay false. */
     @Volatile private var speechBegan = false
+    /**
+     * The recognizer closed after speech, or a hypothesis arrived during an answer listen.
+     * That window is not silence: do not restart it, and count it once a letter misses.
+     */
+    @Volatile private var listenSpeechDetected = false
     private var silenceRestarts = 0
     private var listenDeadlineMs = 0L
     private var listenWaitMs = ListenWindow.DEFAULT_WAIT_SEC * 1000L
@@ -789,7 +794,9 @@ class DrillService : Service(), VoiceIo {
                     when {
                         pendingRestart.get() -> cleared
                         stopRequested.get() -> cleared.copy(status = "Stopped")
-                        it.status in TRANSIENT_STATUS -> cleared.copy(status = "Drill complete")
+                        it.status in TRANSIENT_STATUS ||
+                            it.status.startsWith(SpokenLetter.HEARD_PREFIX) ->
+                            cleared.copy(status = "Drill complete")
                         else -> cleared
                     }
                 }
@@ -1034,10 +1041,47 @@ class DrillService : Service(), VoiceIo {
             if (sessionSilent || showAnswerEarly.get() || stopped()) return null
             val heard = captureListen(timeoutMs)
             if (chatPaused.get()) continue
-            completed += 1
             consumeMicFault()
             if (stopped()) return null
             if (showAnswerEarly.get() || sessionSilent) return null
+            val letters = answerLetters()
+            if (letters != null && !isAnswerCommand(heard)) {
+                val decision = SpokenLetter.decide(
+                    if (heard.isNullOrBlank()) emptyList() else listOf(heard),
+                    emptyList(),
+                    letters,
+                    speechDetected = speechBegan || listenSpeechDetected
+                )
+                val step = SpokenLetter.advance(decision, completed, max)
+                when (decision) {
+                    is SpokenLetter.Decision.Match -> {
+                        if (noteChoice(decision.letter)) return chosenLetter
+                    }
+                    is SpokenLetter.Decision.Unmatched -> {
+                        step.status?.let { showStatus(it) }
+                        completed = step.attempts
+                        Log.i(TAG, "answer unmatched $completed/$max")
+                        if (step.giveUp ||
+                            !ListenWindow.openAnother(completed, max, lastMissed = true, stopped = false)
+                        ) {
+                            giveUpToSilent()
+                            return null
+                        }
+                        if (!relistenAnswer(completed, max, speedMode)) return null
+                        continue
+                    }
+                    SpokenLetter.Decision.Empty -> {
+                        completed += 1
+                        if (!ListenWindow.openAnother(completed, max, lastMissed = true, stopped = false)) {
+                            giveUpToSilent()
+                            return null
+                        }
+                        if (!relistenAnswer(completed, max, speedMode)) return null
+                        continue
+                    }
+                }
+            }
+            completed += 1
             val missed = heard.isNullOrBlank()
             if (!missed) {
                 if (noteChoice(heard)) return chosenLetter
@@ -1047,14 +1091,21 @@ class DrillService : Service(), VoiceIo {
                 giveUpToSilent()
                 return null
             }
-            Log.i(TAG, "relisten answer $completed/$max")
-            if (!speedMode) speak(ListenWindow.ANSWER_RELISTEN_CUE)
-            if (stopped() || sessionSilent || showAnswerEarly.get()) return null
-            if (chatPaused.get()) continue
-            beep()
+            if (!relistenAnswer(completed, max, speedMode)) return null
         }
         giveUpToSilent()
         return null
+    }
+
+    /** Cue and beep before another answer listen. False when the card is leaving this phase. */
+    private fun relistenAnswer(completed: Int, max: Int, speedMode: Boolean): Boolean {
+        Log.i(TAG, "relisten answer $completed/$max")
+        if (!speedMode) speak(ListenWindow.ANSWER_RELISTEN_CUE)
+        if (stopped() || sessionSilent || showAnswerEarly.get()) return false
+        if (chatPaused.get()) return true
+        showStatus("Listening for your answer")
+        beep()
+        return true
     }
 
     private fun captureListen(timeoutMs: Long): String? {
@@ -1483,7 +1534,7 @@ class DrillService : Service(), VoiceIo {
                     if (speechInterrupted) continue
                     showStatus("Listening for your answer")
                     if (ThinkTime.armed(thinkTimeSec, sessionSilent)) {
-                        when (val end = thinkForAnswer(thinkTimeSec, listenWaitMs)) {
+                        when (val end = thinkForAnswer(thinkTimeSec, listenWaitMs, listenAttempts)) {
                             ThinkResult.Reveal -> {
                                 thinkTranscript?.let { transcript = it }
                                 if (transcript.isBlank()) chosenLetter?.let { transcript = it }
@@ -1647,9 +1698,10 @@ class DrillService : Service(), VoiceIo {
     /**
      * App-side think timer. Silence restarts the mic inside the deadline and
      * does not charge Listen attempts or say "I heard nothing".
-     * A spoken answer, "show answer", or the Show answer tap reveals early.
+     * Speech that is not a letter on the card counts as one listen attempt.
+     * A spoken letter, "show answer", or the Show answer tap reveals early.
      */
-    private fun thinkForAnswer(thinkTimeSec: Int, listenWaitMs: Long): ThinkResult {
+    private fun thinkForAnswer(thinkTimeSec: Int, listenWaitMs: Long, listenAttempts: Int): ThinkResult {
         val opened = SystemClock.elapsedRealtime()
         thinkDeadlineMs = if (frozenThinkMs >= 0L) {
             val restored = ChatPause.resumeDeadline(opened, frozenThinkMs)
@@ -1660,6 +1712,8 @@ class DrillService : Service(), VoiceIo {
         }
         quietListen = true
         thinkTranscript = null
+        val maxAttempts = ListenWindow.clampAttempts(listenAttempts)
+        var letterAttempts = 0
         armThinkTicker()
         beep()
         try {
@@ -1684,11 +1738,50 @@ class DrillService : Service(), VoiceIo {
                 if (listenFault) consumeMicFault()
                 when (ThinkTime.classify(heard)) {
                     ThinkTime.Hear.EMPTY -> {
-                        Log.i(TAG, "think silence; mic restart")
+                        val blank = noteBlankAnswer(letterAttempts, maxAttempts)
+                        letterAttempts = blank.attempts
+                        if (blank.giveUp) {
+                            giveUpToSilent()
+                            return ThinkResult.Again
+                        }
                         continue
                     }
                     ThinkTime.Hear.SHOW_ANSWER -> return ThinkResult.Reveal
                     ThinkTime.Hear.ANSWER -> {
+                        val letters = answerLetters()
+                        if (letters != null) {
+                            val decision = SpokenLetter.decide(
+                                listOf(heard),
+                                emptyList(),
+                                letters,
+                                speechDetected = true
+                            )
+                            when (decision) {
+                                is SpokenLetter.Decision.Match -> {
+                                    thinkTranscript = if (noteChoice(decision.letter)) {
+                                        chosenLetter
+                                    } else {
+                                        decision.letter
+                                    }
+                                    return ThinkResult.Reveal
+                                }
+                                is SpokenLetter.Decision.Unmatched -> {
+                                    decision.status?.let { showStatus(it) }
+                                    val step = SpokenLetter.advance(decision, letterAttempts, maxAttempts)
+                                    letterAttempts = step.attempts
+                                    Log.i(TAG, "think unmatched $letterAttempts/$maxAttempts")
+                                    if (step.giveUp) {
+                                        giveUpToSilent()
+                                        return ThinkResult.Again
+                                    }
+                                    continue
+                                }
+                                SpokenLetter.Decision.Empty -> {
+                                    Log.i(TAG, "think silence; mic restart")
+                                    continue
+                                }
+                            }
+                        }
                         thinkTranscript = if (noteChoice(heard)) chosenLetter else heard?.trim().orEmpty()
                         return ThinkResult.Reveal
                     }
@@ -1780,19 +1873,64 @@ class DrillService : Service(), VoiceIo {
         releaseShowAnswer()
     }
 
-    /** A spoken letter during the answer window. Null when it is not a choice. */
+    /** A spoken letter during the answer window. Does not grade. */
     private fun noteChoice(raw: String?): Boolean {
         val choice = letterChoice(raw) ?: return false
         chosenLetter = choice.letter
+        runCatching { DrillUi.update { it.copy(chosenLetter = choice.letter) } }
         return true
     }
 
-    private fun letterChoice(raw: String?): TapAnswer.Choice? {
-        val plain = BubbleModel.fullQuestion(activeQuestionHtml).ifBlank { AnkiText.stripHtml(activeQuestionHtml) }
+    /** Original letters on the unrevealed MCQ. Null once the answer is up, or when it is not an MCQ. */
+    private fun answerLetters(): Set<String>? {
+        if (grading || gradeGate.isRevealed()) return null
+        val plain = BubbleModel.fullQuestion(activeQuestionHtml).ifBlank {
+            AnkiText.stripHtml(activeQuestionHtml)
+        }
         val parsed = QuestionCard.parse(plain)
         if (!parsed.mcq) return null
         val letters = parsed.options.map { it.letter }.toSet()
-        return TapAnswer.onSpoken(raw, letters, correct = null, revealed = gradeGate.isRevealed())
+        return letters.takeIf { it.isNotEmpty() }
+    }
+
+    private fun letterChoice(raw: String?): TapAnswer.Choice? {
+        val letters = answerLetters() ?: return null
+        return TapAnswer.onSpoken(raw, letters, correct = null, revealed = false)
+    }
+
+    /** Repeat, skip, pause, and "show answer" still leave the letter loop. */
+    private fun isAnswerCommand(raw: String?): Boolean {
+        if (raw.isNullOrBlank()) return false
+        if (ThinkTime.isShowAnswer(raw)) return true
+        return when (GradeMapper.parse(raw)) {
+            VoiceAction.Repeat, VoiceAction.Skip, VoiceAction.Pause -> true
+            else -> false
+        }
+    }
+
+    /**
+     * Blank capture while thinking. Speech with no letter counts as one attempt.
+     * Silence keeps the same count and the mic restarts inside the think deadline.
+     */
+    private fun noteBlankAnswer(attempts: Int, max: Int): SpokenLetter.Step {
+        val letters = answerLetters()
+        val decision = if (letters == null) {
+            SpokenLetter.Decision.Empty
+        } else {
+            SpokenLetter.decide(
+                emptyList(),
+                emptyList(),
+                letters,
+                speechDetected = speechBegan || listenSpeechDetected
+            )
+        }
+        val step = SpokenLetter.advance(decision, attempts, max)
+        if (decision is SpokenLetter.Decision.Unmatched) {
+            Log.i(TAG, "think spoke; unmatched ${step.attempts}/$max")
+        } else {
+            Log.i(TAG, "think silence; mic restart")
+        }
+        return step
     }
 
     /** Outline Good or Again. The chip is not selected and the card is not graded. */
@@ -2302,6 +2440,7 @@ class DrillService : Service(), VoiceIo {
             clientRetryUsed = false
             errorGate.set(false)
             speechBegan = false
+            listenSpeechDetected = false
             silenceRestarts = 0
             listenExtrasLogged = false
             listenWaitMs = timeoutMs
@@ -2501,14 +2640,21 @@ class DrillService : Service(), VoiceIo {
         val silenceMs = listenSilenceMs.toLong()
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.US.toString())
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, SpokenLetter.LANGUAGE)
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, SpokenLetter.PREFER_OFFLINE)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, SpokenLetter.MAX_RESULTS)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, silenceMs)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, silenceMs)
         }
         if (!listenExtrasLogged) {
             listenExtrasLogged = true
-            Log.i(TAG, "listen extras wait=$waitMs silence=$silenceMs")
+            Log.i(
+                TAG,
+                "listen extras wait=$waitMs silence=$silenceMs lang=${SpokenLetter.LANGUAGE} " +
+                    "max=${SpokenLetter.MAX_RESULTS} offline=${SpokenLetter.PREFER_OFFLINE}"
+            )
         }
         if (!listenEpochOpen(epoch) || !sessionOpen(session)) {
             if (sessionOpen(session)) {
@@ -2638,6 +2784,20 @@ class DrillService : Service(), VoiceIo {
         Log.i(TAG, "SpeechRecognizer destroyed")
     }
 
+    private fun hypotheses(bundle: Bundle): List<String> {
+        return bundle.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.toList().orEmpty()
+    }
+
+    /** Raw n-best, including blanks, at debug. */
+    private fun logNBest(kind: String, bundle: Bundle) {
+        val raw = bundle.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+        if (raw == null) {
+            Log.d(TAG, "$kind n-best: <none>")
+        } else {
+            Log.d(TAG, "$kind n-best: ${raw.joinToString(" | ")}")
+        }
+    }
+
     // ---------- SpeechRecognizer callbacks (main thread) ----------
 
     private inner class SpeechListener(
@@ -2646,6 +2806,8 @@ class DrillService : Service(), VoiceIo {
         private val epoch: Int,
         private val instance: SpeechRecognizer
     ) : RecognitionListener {
+        private var partials: List<String> = emptyList()
+
         private fun current(): Boolean {
             return !destroyed && gen == recognizerGen && session == listenToken && listenActive &&
                 listenEpochOpen(epoch)
@@ -2672,20 +2834,81 @@ class DrillService : Service(), VoiceIo {
         }
         override fun onRmsChanged(rmsdB: Float) {}
         override fun onBufferReceived(buffer: ByteArray) {}
-        override fun onEndOfSpeech() {}
-        override fun onPartialResults(partialResults: Bundle) {}
+        override fun onEndOfSpeech() {
+            if (closeIfSilent()) return
+            if (!current()) return
+            // The mic closed because speech ended. This is not a silent timeout.
+            listenSpeechDetected = true
+        }
+        override fun onPartialResults(partialResults: Bundle) {
+            if (closeIfSilent()) return
+            if (!current()) return
+            logNBest("partial", partialResults)
+            val raw = hypotheses(partialResults)
+            if (raw.none { it.isNotBlank() }) return
+            partials = raw
+            if (answerLetters() == null) return
+            listenSpeechDetected = true
+            speechBegan = true
+            // A letter in this partial ends the listen now. Other words keep listening.
+            absorbAnswer(rawFinals = emptyList(), allowUnmatched = false)
+        }
         override fun onEvent(eventType: Int, params: Bundle) {}
 
         override fun onResults(results: Bundle) {
             if (closeIfSilent()) return
             if (!current()) return
             if (!errorGate.compareAndSet(false, true)) return
-            val text = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                ?.firstOrNull().orEmpty()
+            logNBest("final", results)
+            val raw = hypotheses(results)
+            if (raw.any { it.isNotBlank() }) listenSpeechDetected = true
+            if (absorbAnswer(raw, allowUnmatched = true)) return
+            val text = raw.firstOrNull().orEmpty()
             Log.i(TAG, "listen ok: RESULT")
             Log.d(TAG, "heard: $text")
             try { recognizer?.setRecognitionListener(null) } catch (_: Exception) {}
             finishListen(text)
+        }
+
+        /**
+         * Letter on this card: finish with that letter so the tap path runs.
+         * Other text, or speech that ended with nothing usable: finish without
+         * a silence restart. [allowUnmatched] is false while the person may
+         * still be talking (a partial "option" is not yet "option b").
+         * @return true when this listen was completed here.
+         */
+        private fun absorbAnswer(rawFinals: List<String>, allowUnmatched: Boolean): Boolean {
+            val letters = answerLetters() ?: return false
+            val decision = SpokenLetter.decide(
+                rawFinals,
+                partials,
+                letters,
+                speechDetected = listenSpeechDetected || speechBegan
+            )
+            if (!allowUnmatched && decision !is SpokenLetter.Decision.Match) return false
+            when (decision) {
+                is SpokenLetter.Decision.Match -> {
+                    Log.i(TAG, "spoken letter ${decision.letter}")
+                    Log.i(TAG, "listen ok: RESULT")
+                    Log.d(TAG, "heard letter: ${decision.letter}")
+                    try { recognizer?.setRecognitionListener(null) } catch (_: Exception) {}
+                    finishListen(decision.letter)
+                }
+                is SpokenLetter.Decision.Unmatched -> {
+                    Log.i(TAG, "listen ok: UNMATCHED")
+                    if (decision.heard.isNotBlank()) {
+                        Log.d(TAG, "heard: ${decision.heard}")
+                        try { recognizer?.setRecognitionListener(null) } catch (_: Exception) {}
+                        finishListen(decision.heard)
+                    } else {
+                        listenSpeechDetected = true
+                        try { recognizer?.setRecognitionListener(null) } catch (_: Exception) {}
+                        finishListen(null)
+                    }
+                }
+                SpokenLetter.Decision.Empty -> return false
+            }
+            return true
         }
 
         override fun onError(error: Int) {
@@ -2705,6 +2928,9 @@ class DrillService : Service(), VoiceIo {
             try { recognizer?.setRecognitionListener(null) } catch (_: Exception) {}
             // A tap already owns this listen. finishListen(null) would drop it.
             if (synchronized(injectLock) { inFlightClaimed }) return
+            // A heard letter ends the window. A no-match after speech does too:
+            // that used to look like silence and reopen the mic in a loop.
+            if (absorbAnswer(emptyList(), allowUnmatched = normalEnd)) return
             if (retryable && !clientRetryUsed && sessionOpen(session) && listenEpochOpen(epoch)) {
                 clientRetryUsed = true
                 Log.i(TAG, "recognizer backoff: $error")
@@ -2721,8 +2947,11 @@ class DrillService : Service(), VoiceIo {
                 return
             }
             val now = SystemClock.elapsedRealtime()
-            if (ListenWindow.shouldRestart(speechBegan, error, now, listenDeadlineMs, silenceRestarts)
-                && sessionOpen(session)) {
+            val spoke = speechBegan || listenSpeechDetected
+            if (!spoke &&
+                ListenWindow.shouldRestart(speechBegan, error, now, listenDeadlineMs, silenceRestarts) &&
+                sessionOpen(session)
+            ) {
                 silenceRestarts += 1
                 val remaining = listenDeadlineMs - now
                 Log.i(TAG, "listen restart: silence n=$silenceRestarts remainingMs=$remaining")

@@ -15,34 +15,14 @@ object TapAnswer {
         val stillTappable: Boolean = false
     )
 
-    private val words = mapOf(
-        "a" to "A", "ay" to "A", "eh" to "A",
-        "b" to "B", "be" to "B", "bee" to "B",
-        "c" to "C", "see" to "C", "sea" to "C", "cee" to "C",
-        "d" to "D", "dee" to "D",
-        "e" to "E", "ee" to "E",
-        "f" to "F", "ef" to "F", "eff" to "F"
-    )
-
-    private val prefixed = Regex(
-        """^(?:answer|option|choice|letter)(?:\s+is)?\s+([a-z]+)$"""
-    )
-
     fun tappable(mcq: Boolean, revealed: Boolean): Boolean = mcq && !revealed
 
-    /** Whole utterance is a letter, "option B", or "bee". Anything else is not a choice. */
-    fun parseSpoken(raw: String?, letters: Set<String>): String? {
-        if (raw.isNullOrBlank() || letters.isEmpty()) return null
-        val allowed = letters.map { it.uppercase() }.toSet()
-        var text = raw.trim().lowercase()
-            .replace(Regex("[.!?,]+$"), "")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-        if (text.startsWith("the ")) text = text.removePrefix("the ").trim()
-        val token = prefixed.matchEntire(text)?.groupValues?.get(1) ?: text
-        val letter = words[token] ?: return null
-        return letter.takeIf { it in allowed }
-    }
+    /**
+     * Whole utterance is a letter on this card. Homophones, NATO words, and
+     * ordinals live in [SpokenLetter]. Ordinals are the original letters
+     * (first = A), including after a shuffle. "the" alone is D. "tea" is not.
+     */
+    fun parseSpoken(raw: String?, letters: Set<String>): String? = SpokenLetter.normalise(raw, letters)
 
     fun onTap(letter: String, correct: String?, revealed: Boolean, mcq: Boolean = true): Choice? {
         if (!tappable(mcq, revealed)) return null
