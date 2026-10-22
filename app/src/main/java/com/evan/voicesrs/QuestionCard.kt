@@ -17,7 +17,8 @@ object QuestionCard {
     fun label(n: Int): String = "QUESTION $n"
 
     fun parse(plain: String): Parsed {
-        val lines = plain.replace("\r\n", "\n").replace('\r', '\n')
+        val (source, slots) = maskPre(plain)
+        val lines = source.replace("\r\n", "\n").replace('\r', '\n')
             .lines()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
@@ -29,18 +30,40 @@ object QuestionCard {
             val match = optionLine.matchEntire(line)
             if (match != null) {
                 started = true
-                options += Option(match.groupValues[1].uppercase(), match.groupValues[2].trim())
+                options += Option(
+                    match.groupValues[1].uppercase(),
+                    restorePre(match.groupValues[2].trim(), slots)
+                )
             } else if (!started) {
-                stem += line
+                stem += restorePre(line, slots)
             } else {
-                trailing += line
+                trailing += restorePre(line, slots)
             }
         }
         if (options.size < 2) {
-            return Parsed(lines.joinToString("\n"), emptyList(), mcq = false)
+            return Parsed(lines.joinToString("\n") { restorePre(it, slots) }, emptyList(), mcq = false)
         }
         val stemText = (stem + trailing).joinToString("\n").trim()
         return Parsed(stemText, options, mcq = true)
+    }
+
+    /** Newlines inside `<pre>` are not option lines. No `<pre>` returns [plain] unchanged. */
+    private fun maskPre(plain: String): Pair<String, List<String>> {
+        if (!plain.contains("<pre", ignoreCase = true)) return plain to emptyList()
+        val slots = ArrayList<String>()
+        val masked = Regex("(?is)<pre\\b[^>]*>.*?</pre>").replace(plain) { m ->
+            val id = slots.size
+            slots += m.value
+            "\uE000$id\uE001"
+        }
+        return masked to slots
+    }
+
+    private fun restorePre(line: String, slots: List<String>): String {
+        if (slots.isEmpty()) return line
+        var out = line
+        for (i in slots.indices) out = out.replace("\uE000$i\uE001", slots[i])
+        return out
     }
 
     fun withCorrect(parsed: Parsed, answerPlain: String, revealed: Boolean): Parsed {
@@ -69,7 +92,8 @@ object QuestionCard {
         }
         val lower = text.lowercase()
         val hits = options.filter { opt ->
-            opt.text.length >= 3 && lower.contains(opt.text.lowercase())
+            val plain = AnkiText.stripHtml(opt.text)
+            plain.length >= 3 && lower.contains(plain.lowercase())
         }
         return if (hits.size == 1) hits[0].letter else null
     }

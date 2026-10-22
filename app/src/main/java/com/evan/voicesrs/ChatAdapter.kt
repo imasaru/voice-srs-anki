@@ -7,7 +7,6 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.core.text.HtmlCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -114,7 +113,7 @@ class ChatAdapter(
                 cardStem.maxLines = Integer.MAX_VALUE
                 cardStem.ellipsize = null
             } else {
-                cardStem.text = BubbleModel.cardText(turn.frontText, expanded)
+                CardFaceBinder.setMarkup(cardStem, BubbleModel.cardText(turn.frontText, expanded))
                 cardStem.maxLines = if (expanded) Integer.MAX_VALUE else BubbleModel.COLLAPSED_LINES
                 cardStem.ellipsize = if (expanded) null else TextUtils.TruncateAt.END
             }
@@ -193,11 +192,11 @@ class ChatAdapter(
                     revealed = row.showBack,
                     answerPlain = row.back
                 )
-                if (!mcq) question.text = html(row.front)
+                if (!mcq) CardFaceBinder.setMarkup(question, row.front)
                 if (row.showBack) {
                     val parts = Citation.splitHtml(row.back)
                     answer.visibility = View.VISIBLE
-                    answer.text = html(parts.body)
+                    CardFaceBinder.setMarkup(answer, parts.body)
                     if (parts.footer.isBlank()) {
                         answerFooter.visibility = View.GONE
                         answerFooter.text = ""
@@ -232,10 +231,6 @@ class ChatAdapter(
             easy.setOnClickListener { DrillService.submitTestGrade("easy") }
         }
 
-        private fun html(value: String): CharSequence {
-            if (!value.contains('<')) return value
-            return HtmlCompat.fromHtml(value, HtmlCompat.FROM_HTML_MODE_COMPACT)
-        }
     }
 
     companion object {

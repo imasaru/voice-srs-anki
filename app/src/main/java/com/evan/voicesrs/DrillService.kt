@@ -168,10 +168,16 @@ class DrillService : Service(), VoiceIo {
         fun setSilentMode(on: Boolean) {
             val svc = active
             if (svc == null) {
-                DrillUi.update { it.copy(silentSession = on) }
+                DrillUi.update {
+                    val next = ListenGate.toggle(
+                        ListenGate.State(it.silentSession, it.silentGeneration),
+                        on
+                    )
+                    it.copy(silentSession = next.silent, silentGeneration = next.epoch)
+                }
                 return
             }
-            svc.applySilent(on)
+            svc.applySilent(on, fromUser = true)
         }
 
         /** Freeze TTS, listening, and the think timer. The card stays where it is. */
@@ -214,6 +220,13 @@ class DrillService : Service(), VoiceIo {
     @Volatile private var destroyed = false
     /** Captured once in [onStartCommand], before the session thread starts. */
     @Volatile private var sessionSilent = false
+    private val gateLock = Any()
+    /** Epoch advances only when Silent flips. A posted start keeps its epoch. */
+    private var listenGate = ListenGate.State(silent = false, epoch = 0)
+    /** Epoch of the listen that was posted. Restarts must use this same epoch. */
+    @Volatile private var listenEpoch = 0
+    /** User Silent-on asked to reveal. Turning Silent off before that lands cancels it. */
+    private val silentReveal = AtomicBoolean(false)
 
     private var sessionThread: Thread? = null
     private val stopRequested = AtomicBoolean(false)
@@ -410,12 +423,22 @@ class DrillService : Service(), VoiceIo {
         // so a settings change during a running drill waits until the next session.
         val starting = synchronized(this) { sessionThread?.isAlive != true }
         if (starting) {
-            sessionSilent = try {
+            val prefsSilent = try {
                 Prefs.load(this).silentMode
             } catch (e: Exception) {
                 Log.w(TAG, "prefs load failed; voice session", e)
                 false
             }
+            val ui = DrillUi.state
+            val epoch = if (ui.silentSession == prefsSilent) {
+                ui.silentGeneration
+            } else {
+                ui.silentGeneration + 1
+            }
+            synchronized(gateLock) {
+                listenGate = ListenGate.State(silent = prefsSilent, epoch = epoch)
+            }
+            sessionSilent = prefsSilent
         }
         try {
             startForegroundWithNotification()
@@ -534,8 +557,15 @@ class DrillService : Service(), VoiceIo {
         running = active
         runCatching {
             DrillUi.update {
-                if (active) it.copy(drillRunning = true, silentSession = sessionSilent)
-                else it.copy(drillRunning = false, progressLine = "", awaitingShowAnswer = false)
+                if (active) {
+                    it.copy(
+                        drillRunning = true,
+                        silentSession = sessionSilent,
+                        silentGeneration = synchronized(gateLock) { listenGate.epoch }
+                    )
+                } else {
+                    it.copy(drillRunning = false, progressLine = "", awaitingShowAnswer = false)
+                }
             }
         }
     }
@@ -724,7 +754,8 @@ class DrillService : Service(), VoiceIo {
         }
         tapGrade = false
         tapTranscript = false
-        val silent = sessionSilent
+        val gate = synchronized(gateLock) { listenGate }
+        val silent = gate.silent
         val pausedNow = chatPaused.get()
         runCatching {
             DrillUi.update {
@@ -739,6 +770,7 @@ class DrillService : Service(), VoiceIo {
                     selectedEase = null,
                     awaitingShowAnswer = true,
                     silentSession = silent,
+                    silentGeneration = gate.epoch,
                     questionOrdinal = cardIndex + 1,
                     thinkSecondsLeft = null,
                     chatPaused = pausedNow
@@ -1331,6 +1363,7 @@ class DrillService : Service(), VoiceIo {
         if (question.isBlank()) return CardStep.Blank
         val started = SystemClock.elapsedRealtime()
         showAnswerEarly.set(false)
+        silentReveal.set(false)
         if (!awaitChatResume()) return CardStep.Paused
         showQuestionUi(questionHtml, cardIndex)
         var repeats = 0
@@ -1350,6 +1383,9 @@ class DrillService : Service(), VoiceIo {
                     if (stopRequested.get()) return CardStep.Paused
                     if (chatPaused.get()) continue
                     if (showAnswerEarly.get() || sessionSilent) continue
+                    // Silent on cut the readout, then Silent off landed before this
+                    // loop noticed. Read the question again instead of listening.
+                    if (speechInterrupted) continue
                     showStatus("Listening for your answer")
                     if (ThinkTime.armed(thinkTimeSec, sessionSilent)) {
                         when (val end = thinkForAnswer(thinkTimeSec, listenWaitMs)) {
@@ -1648,14 +1684,25 @@ class DrillService : Service(), VoiceIo {
     }
 
     private fun onThinkTick() {
-        if (destroyed || chatPaused.get() || thinkDeadlineMs <= 0L) return
+        if (sessionSilent || destroyed || chatPaused.get() || thinkDeadlineMs <= 0L) return
         val sec = ThinkTime.remainingSec(SystemClock.elapsedRealtime(), thinkDeadlineMs)
+        if (sessionSilent) return
         if (sec <= 0) {
             publishCue(false, null)
             return
         }
         publishCue(false, sec)
+        if (sessionSilent) return
         mainHandler.postDelayed(thinkTicker, 250L)
+    }
+
+    /**
+     * Drop the countdown immediately. Does not zero [thinkDeadlineMs]: the think
+     * loop treats a deadline of zero as "time is up" and would reveal that way.
+     */
+    private fun stopThinkClock() {
+        if (::mainHandler.isInitialized) mainHandler.removeCallbacks(thinkTicker)
+        if (!chatPaused.get()) publishCue(false, null)
     }
 
     private fun publishCue(paused: Boolean, think: Int?) {
@@ -1804,36 +1851,62 @@ class DrillService : Service(), VoiceIo {
     }
 
     /**
-     * Mid-drill silent switch. On aborts TTS, earcons, and the microphone
-     * immediately. Off wakes the card that is up so it is read aloud:
-     * the question (then listen) or the answer. Buttons do not change.
+     * Mid-drill silent switch. On aborts TTS, earcons, the microphone, and the
+     * think timer immediately, including a recognizer that is still starting.
+     * A user tap while the question is up reveals the answer so the rating
+     * buttons show and the answer is not read. Giving up after missed listens
+     * does not reveal. Off wakes the card that is up: the question, or the answer.
      */
-    private fun applySilent(on: Boolean) {
+    private fun applySilent(on: Boolean, fromUser: Boolean = false) {
         if (!on && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
             != android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
+            val stayed = synchronized(gateLock) {
+                listenGate = ListenGate.toggle(listenGate, true)
+                listenGate
+            }
             sessionSilent = true
             Log.w(TAG, "silent stays on: microphone permission missing")
-            publishSilentUi(true)
+            publishSilentUi(stayed)
             return
         }
         val was = sessionSilent
-        sessionSilent = on
+        val plan = SilentTap.plan(
+            wantOn = on,
+            wasOn = was,
+            hasQuestion = DrillUi.state.frontHtml.isNotBlank(),
+            answerShown = DrillUi.state.showBack,
+            fromUser = fromUser
+        )
+        val next = synchronized(gateLock) {
+            listenGate = ListenGate.toggle(listenGate, on)
+            listenGate
+        }
+        sessionSilent = next.silent
         val face = AudioGate.resume(
             nowSilent = on,
             cardUp = DrillUi.state.frontHtml.isNotBlank(),
             answerShown = DrillUi.state.showBack
         )
-        Log.i(TAG, "silent live=$on resume=$face")
-        if (on) {
+        Log.i(TAG, "silent live=$on resume=$face reveal=${plan.revealAnswer}")
+        // Publish before cancel so a snapshot taken inside finishListen is already Silent.
+        publishSilentUi(next)
+        if (plan.cancelMic) {
             stopPlaybackNow()
             finishListen(null)
-        } else if (was) {
+        }
+        if (plan.stopThinkTimer) stopThinkClock()
+        if (plan.revealAnswer) {
+            silentReveal.set(true)
+            showAnswerEarly.set(true)
+            showAnswerLatch.get()?.countDown()
+        }
+        if (!on && was) {
+            if (silentReveal.compareAndSet(true, false)) showAnswerEarly.set(false)
             if (Looper.myLooper() == Looper.getMainLooper()) probeRecognizer() else initRecognizerOnMain()
             showAnswerLatch.get()?.countDown()
             releaseSilentGradeWait()
         }
-        publishSilentUi(on)
         try {
             startForegroundWithNotification()
         } catch (e: Exception) {
@@ -1864,10 +1937,17 @@ class DrillService : Service(), VoiceIo {
         }
     }
 
-    /** Silent changes the audio path only. Show answer and the ratings stay as they are. */
-    private fun publishSilentUi(on: Boolean) {
+    /** Silent flag plus the generation a stale snapshot cannot beat. */
+    private fun publishSilentUi(gate: ListenGate.State) {
         runCatching {
-            DrillUi.update { it.copy(silentSession = on) }
+            DrillUi.update {
+                it.copy(
+                    silentSession = gate.silent,
+                    silentGeneration = gate.epoch,
+                    thinkSecondsLeft = if (gate.silent) null else it.thinkSecondsLeft,
+                    ratingMicOpen = if (gate.silent) false else it.ratingMicOpen
+                )
+            }
         }
     }
 
@@ -1968,7 +2048,8 @@ class DrillService : Service(), VoiceIo {
             if (!sleepUnlessCardAdvances(LISTEN_CUE_WAIT_MS)) return null
             try { toneGen?.stopTone() } catch (_: Exception) {}
         }
-        if (stopRequested.get() || destroyed || chatPaused.get()) return null
+        if (stopRequested.get() || destroyed || chatPaused.get() || sessionSilent) return null
+        val epoch = synchronized(gateLock) { ListenGate.postedEpoch(listenGate) } ?: return null
         consumeQueuedGrade()?.let { return it }
         if (!recognitionAvailable) {
             Log.w(TAG, "no recognizer; skipping listen")
@@ -1997,10 +2078,11 @@ class DrillService : Service(), VoiceIo {
             ++listenToken
         }
         val delay = (listenDeadlineMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+        listenEpoch = epoch
         handler.postDelayed({
             if (token == listenToken) finishListen(null)
         }, delay)
-        mainHandler.post { beginListenOnMain(token) }
+        mainHandler.post { beginListenOnMain(token, epoch) }
         try {
             if (!latch.await(delay + LISTEN_LATCH_SLACK_MS, TimeUnit.MILLISECONDS)) {
                 Log.w(TAG, "listen latch timed out")
@@ -2146,10 +2228,17 @@ class DrillService : Service(), VoiceIo {
         return true
     }
 
+    /** True only for the epoch that posted this start, and only while Silent is off. */
+    private fun listenEpochOpen(epoch: Int): Boolean {
+        val gate = synchronized(gateLock) { listenGate }
+        return ListenGate.mayOpenMic(gate, epoch) && !sessionSilent
+    }
+
     /** Main thread. Drops any previous recognizer and starts a new session. */
-    private fun beginListenOnMain(session: Int) {
-        if (sessionSilent || chatPaused.get()) {
-            finishListen(null)
+    private fun beginListenOnMain(session: Int, epoch: Int) {
+        if (!listenEpochOpen(epoch) || chatPaused.get()) {
+            // A stale start must not finish a newer listen that already replaced it.
+            if (sessionOpen(session)) finishListen(null)
             return
         }
         if (!sessionOpen(session)) return
@@ -2158,14 +2247,17 @@ class DrillService : Service(), VoiceIo {
             if (!deliverTestGrade(queued)) pendingGrades.add(queued)
             return
         }
-        if (!sessionOpen(session)) return
+        if (!sessionOpen(session) || !listenEpochOpen(epoch)) {
+            finishListen(null)
+            return
+        }
         if (grading) {
             runCatching {
                 DrillUi.update { it.copy(ratingMicOpen = true, status = "Listening for your grade") }
             }
         }
         errorGate.set(false)
-        if (!createRecognizerOnMain(session)) {
+        if (!createRecognizerOnMain(session, epoch)) {
             finishListen(null)
             return
         }
@@ -2182,27 +2274,52 @@ class DrillService : Service(), VoiceIo {
             listenExtrasLogged = true
             Log.i(TAG, "listen extras wait=$waitMs silence=$silenceMs")
         }
+        if (!listenEpochOpen(epoch) || !sessionOpen(session)) {
+            if (sessionOpen(session)) {
+                destroyRecognizerOnMain()
+                finishListen(null)
+            }
+            return
+        }
+        val started = recognizer
         try {
-            recognizer?.startListening(intent)
+            started?.startListening(intent)
             Log.i(TAG, "startListening")
+            // startListening can pump the looper, so the Silent tap may already have run.
+            if (!listenEpochOpen(epoch)) {
+                abandonRecognizer(started)
+                if (synchronized(injectLock) { listenActive && session == listenToken }) {
+                    finishListen(null)
+                }
+            }
         } catch (e: Exception) {
             Log.w(TAG, "startListening failed", e)
             finishListen(null)
         }
     }
 
-    /** Posted from onError. Same token, no cue. A queued tap in the gap wins over the new mic. */
+    /** Cancel one instance. A newer listen's recognizer is left alone. */
+    private fun abandonRecognizer(instance: SpeechRecognizer?) {
+        if (instance == null) return
+        try { instance.setRecognitionListener(null) } catch (_: Exception) {}
+        try { instance.cancel() } catch (_: Exception) {}
+        try { instance.destroy() } catch (_: Exception) {}
+        if (recognizer === instance) recognizer = null
+    }
+
+    /** Posted from onError. Same token and epoch, no cue. A queued tap in the gap wins. */
     private fun restartSilenceListen(session: Int) {
+        val epoch = listenEpoch
         mainHandler.post {
-            if (!sessionOpen(session)) return@post
+            if (!listenEpochOpen(epoch) || !sessionOpen(session)) return@post
             val left = listenDeadlineMs - SystemClock.elapsedRealtime()
             if (left < ListenWindow.MIN_REMAINING_MS) {
                 finishListen(null)
                 return@post
             }
             destroyRecognizerOnMain()
-            if (!sessionOpen(session)) return@post
-            beginListenOnMain(session)
+            if (!listenEpochOpen(epoch) || !sessionOpen(session)) return@post
+            beginListenOnMain(session, epoch)
         }
     }
 
@@ -2245,8 +2362,8 @@ class DrillService : Service(), VoiceIo {
     }
 
     /** Main thread. Fresh instance; the previous one is destroyed first. */
-    private fun createRecognizerOnMain(session: Int): Boolean {
-        if (sessionSilent || !SilentPolicy.of(sessionSilent).createRecognizer) return false
+    private fun createRecognizerOnMain(session: Int, epoch: Int): Boolean {
+        if (!listenEpochOpen(epoch) || !SilentPolicy.of(sessionSilent).createRecognizer) return false
         destroyRecognizerOnMain()
         if (destroyed || !listenActive || session != listenToken) return false
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
@@ -2257,7 +2374,7 @@ class DrillService : Service(), VoiceIo {
         return try {
             val gen = recognizerGen
             val created = SpeechRecognizer.createSpeechRecognizer(this)
-            created.setRecognitionListener(SpeechListener(session, gen))
+            created.setRecognitionListener(SpeechListener(session, gen, epoch, created))
             recognizer = created
             Log.i(TAG, "recognizer created")
             Log.i(TAG, "SpeechRecognizer created for listen session")
@@ -2288,18 +2405,31 @@ class DrillService : Service(), VoiceIo {
 
     private inner class SpeechListener(
         private val session: Int,
-        private val gen: Int
+        private val gen: Int,
+        private val epoch: Int,
+        private val instance: SpeechRecognizer
     ) : RecognitionListener {
         private fun current(): Boolean {
-            return !destroyed && gen == recognizerGen && session == listenToken && listenActive
+            return !destroyed && gen == recognizerGen && session == listenToken && listenActive &&
+                listenEpochOpen(epoch)
+        }
+
+        /** Silent won. Cancel this instance even if a later listen owns the field. */
+        private fun closeIfSilent(): Boolean {
+            if (listenEpochOpen(epoch)) return false
+            abandonRecognizer(instance)
+            if (synchronized(injectLock) { listenActive && session == listenToken }) finishListen(null)
+            return true
         }
 
         override fun onReadyForSpeech(params: Bundle) {
+            if (closeIfSilent()) return
             // The cue already finished before startListening. Do not play it here.
             if (!current()) return
             Log.i(TAG, "listen ready")
         }
         override fun onBeginningOfSpeech() {
+            if (closeIfSilent()) return
             if (!current()) return
             speechBegan = true
         }
@@ -2310,6 +2440,7 @@ class DrillService : Service(), VoiceIo {
         override fun onEvent(eventType: Int, params: Bundle) {}
 
         override fun onResults(results: Bundle) {
+            if (closeIfSilent()) return
             if (!current()) return
             if (!errorGate.compareAndSet(false, true)) return
             val text = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -2321,6 +2452,7 @@ class DrillService : Service(), VoiceIo {
         }
 
         override fun onError(error: Int) {
+            if (closeIfSilent()) return
             if (gen != recognizerGen || session != listenToken) return
             if (!listenActive) return
             if (!errorGate.compareAndSet(false, true)) {
@@ -2336,16 +2468,17 @@ class DrillService : Service(), VoiceIo {
             try { recognizer?.setRecognitionListener(null) } catch (_: Exception) {}
             // A tap already owns this listen. finishListen(null) would drop it.
             if (synchronized(injectLock) { inFlightClaimed }) return
-            if (retryable && !clientRetryUsed && sessionOpen(session)) {
+            if (retryable && !clientRetryUsed && sessionOpen(session) && listenEpochOpen(epoch)) {
                 clientRetryUsed = true
                 Log.i(TAG, "recognizer backoff: $error")
+                val retryEpoch = epoch
                 mainHandler.post {
-                    if (!sessionOpen(session)) return@post
+                    if (!listenEpochOpen(retryEpoch) || !sessionOpen(session)) return@post
                     destroyRecognizerOnMain()
                     mainHandler.postDelayed({
-                        if (!sessionOpen(session)) return@postDelayed
+                        if (!listenEpochOpen(retryEpoch) || !sessionOpen(session)) return@postDelayed
                         Log.i(TAG, "recreate recognizer after backoff")
-                        beginListenOnMain(session)
+                        beginListenOnMain(session, retryEpoch)
                     }, CLIENT_BACKOFF_MS)
                 }
                 return

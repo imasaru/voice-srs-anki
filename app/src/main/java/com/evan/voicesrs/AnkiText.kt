@@ -11,6 +11,9 @@ package com.evan.voicesrs
  * explanation is read once. `.src` and Source / License / URL lines are never
  * spoken. [displayHtml] still draws `.screen-only` and hides `.summary`.
  * Cards with neither class match [stripHtml] / [toDisplayHtml].
+ * [toDisplayHtml] keeps `<code>` and `<pre>` (entities decoded) so the card
+ * face can draw chips. [stripHtml] and [spokenText] still drop those tags
+ * and do not add pauses or punctuation.
  */
 object AnkiText {
     private val scriptStyle = Regex("<(script|style)[^>]*>.*?</\\1>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
@@ -53,6 +56,20 @@ object AnkiText {
         s = decodeEntities(s)
         s = whitespace.replace(s, " ")
         return s.trim()
+    }
+
+    /**
+     * One display line. Same as [stripHtml] when there is no `<code>` or `<pre>`.
+     * Those spans are kept, with entities decoded, so a card face can style them.
+     */
+    fun displayPlain(html: String): String {
+        val (shielded, slots) = protectCode(html)
+        if (slots.isEmpty()) return stripHtml(html)
+        var s = lineBreak.replace(shielded, "\n")
+        s = tag.replace(s, " ")
+        s = decodeEntities(s)
+        s = whitespace.replace(s, " ").trim()
+        return restoreSlots(s, slots)
     }
 
     /**
@@ -124,8 +141,8 @@ object AnkiText {
     }
 
     /**
-     * Sanitized HTML for on-screen cards. Keeps line breaks and basic emphasis.
-     * Drops images, [sound:…] tags, media, scripts, and styles.
+     * Sanitized HTML for on-screen cards. Keeps line breaks, basic emphasis,
+     * `<code>`, and `<pre>`. Drops images, [sound:…] tags, media, scripts, and styles.
      * Safe to pass to HtmlCompat. Spoken TTS uses [spokenText].
      */
     fun toDisplayHtml(html: String): String {
@@ -133,6 +150,8 @@ object AnkiText {
         s = scriptStyle.replace(s, "")
         s = soundMarker.replace(s, "")
         s = mediaTag.replace(s, "")
+        val (shielded, slots) = protectCode(s)
+        s = shielded
         s = Regex("(?i)<br\\s*/?>").replace(s, "\u0001BR\u0001")
         s = Regex("(?i)</(?:div|p|li|tr|h[1-6])>").replace(s, "\u0001BR\u0001")
         s = Regex("(?i)<(?:div|p|li|tr|h[1-6])(?:\\s[^>]*)?>").replace(s, "\u0001BR\u0001")
@@ -161,7 +180,7 @@ object AnkiText {
         s = s.trim()
         s = Regex("^(?:<br>\\s*)+").replace(s, "")
         s = Regex("(?:\\s*<br>)+$").replace(s, "")
-        return s.trim()
+        return restoreSlots(s.trim(), slots)
     }
 
     /**
@@ -180,6 +199,56 @@ object AnkiText {
             cleaned = removeElements(cleaned) { hasClass(it, "summary") }
         }
         return toDisplayHtml(cleaned)
+    }
+
+    private data class CodeSlot(val markup: String)
+
+    /**
+     * Pull `<pre>` then `<code>` out before the tag strip. The placeholder has
+     * no whitespace, so the later collapse cannot touch the code text.
+     * No match returns [html] unchanged, so cards without code stay byte-identical.
+     */
+    private fun protectCode(html: String): Pair<String, List<CodeSlot>> {
+        if (!Regex("(?i)<\\s*(pre|code)\\b").containsMatchIn(html)) return html to emptyList()
+        val slots = ArrayList<CodeSlot>()
+        fun token(markup: String): String {
+            val id = slots.size
+            slots += CodeSlot(markup)
+            return "\uE000$id\uE001"
+        }
+        var s = Regex("(?is)<pre\\b[^>]*>(.*?)</pre>").replace(html) { m ->
+            val inner = blockInner(m.groupValues[1])
+            if (inner.isEmpty()) "" else token("<pre>$inner</pre>")
+        }
+        s = Regex("(?is)<code\\b[^>]*>(.*?)</code>").replace(s) { m ->
+            val inner = inlineInner(m.groupValues[1])
+            if (inner.isEmpty()) "" else token("<code>$inner</code>")
+        }
+        return s to slots
+    }
+
+    private fun restoreSlots(html: String, slots: List<CodeSlot>): String {
+        if (slots.isEmpty()) return html
+        var s = html
+        for (i in slots.indices) s = s.replace("\uE000$i\uE001", slots[i].markup)
+        return s
+    }
+
+    private fun inlineInner(raw: String): String {
+        val stripped = Regex("(?is)<[^>]+>").replace(raw, "")
+        return escapeHtml(decodeEntities(stripped).replace(Regex("\\s+"), " ").trim())
+    }
+
+    private fun blockInner(raw: String): String {
+        var s = Regex("(?is)<br\\s*/?>").replace(raw, "\n")
+        s = Regex("(?is)</?code\\b[^>]*>").replace(s, "")
+        s = Regex("(?is)<[^>]+>").replace(s, "")
+        s = decodeEntities(s).replace("\r\n", "\n").replace('\r', '\n').trim('\n')
+        return escapeHtml(s)
+    }
+
+    private fun escapeHtml(s: String): String {
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     }
 
     private fun decodeEntities(s: String): String {

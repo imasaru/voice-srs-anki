@@ -2,7 +2,8 @@ package com.evan.voicesrs
 
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.text.SpannableString
+import android.text.Editable
+import android.text.Html
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.BackgroundColorSpan
@@ -15,6 +16,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.text.HtmlCompat
 /**
  * Binds a question card, the answer/rating pills, and an explanation's sections.
  * The rules live in [QuestionCard] and [SectionFormat].
@@ -42,13 +44,13 @@ object CardFaceBinder {
             label.visibility = View.VISIBLE
             label.text = QuestionCard.label(number.coerceAtLeast(1))
         }
-        stem.text = parsed.stem
+        setMarkup(stem, parsed.stem)
         options.visibility = View.VISIBLE
         options.removeAllViews()
         val density = options.resources.displayMetrics.density
         for (option in parsed.options) {
             val row = TextView(options.context)
-            row.text = QuestionCard.optionRow(option)
+            setMarkup(row, QuestionCard.optionRow(option))
             row.typeface = Typeface.MONOSPACE
             row.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             row.setTextColor(
@@ -157,33 +159,67 @@ object CardFaceBinder {
         }
     }
 
+    /**
+     * Card face text. Plain strings are set as-is. HTML keeps bold and breaks,
+     * and `<code>` / `<pre>` become the chip and code-block styles.
+     */
+    fun setMarkup(view: TextView, markup: String) {
+        if (markup.isEmpty()) {
+            view.text = ""
+            return
+        }
+        if (!markup.contains('<') && !markup.contains('&')) {
+            view.text = markup
+            return
+        }
+        view.text = HtmlCompat.fromHtml(
+            CodeMarkup.prepareForHtml(markup),
+            HtmlCompat.FROM_HTML_MODE_COMPACT,
+            null,
+            ChipTagHandler(view)
+        )
+    }
+
+    private class ChipMark(val block: Boolean)
+
+    private class ChipTagHandler(private val view: TextView) : Html.TagHandler {
+        override fun handleTag(opening: Boolean, tag: String, output: Editable, xmlReader: org.xml.sax.XMLReader) {
+            val block = when (tag.lowercase()) {
+                "vsrspre" -> true
+                "vsrscode" -> false
+                else -> return
+            }
+            if (opening) {
+                output.setSpan(ChipMark(block), output.length, output.length, Spanned.SPAN_MARK_MARK)
+                return
+            }
+            val marks = output.getSpans(0, output.length, ChipMark::class.java)
+            val mark = marks.lastOrNull { output.getSpanFlags(it) and Spanned.SPAN_MARK_MARK != 0 } ?: return
+            val start = output.getSpanStart(mark)
+            output.removeSpan(mark)
+            val end = output.length
+            if (start < 0 || start >= end) return
+            val bg = view.context.getColor(if (mark.block) R.color.code_block else R.color.code_chip)
+            val fg = view.context.getColor(if (mark.block) R.color.code_block_text else R.color.code_chip_text)
+            output.setSpan(BackgroundColorSpan(bg), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            output.setSpan(ForegroundColorSpan(fg), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            output.setSpan(TypefaceSpan("monospace"), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+    }
+
     private fun applyRuns(view: TextView, runs: List<SectionFormat.Run>, heading: Boolean) {
-        val sb = StringBuilder()
-        val codes = ArrayList<Pair<Int, Int>>()
-        for (run in runs) {
-            val start = sb.length
-            sb.append(run.text)
-            if (run.code) codes += start to sb.length
-        }
-        val styled = SpannableString(sb.toString())
-        val chip = view.context.getColor(R.color.code_chip)
-        val chipText = view.context.getColor(R.color.code_chip_text)
-        for ((start, end) in codes) {
-            if (start >= end) continue
-            styled.setSpan(BackgroundColorSpan(chip), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            styled.setSpan(ForegroundColorSpan(chipText), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            styled.setSpan(TypefaceSpan("monospace"), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        }
-        if (heading && styled.isNotEmpty()) {
-            styled.setSpan(StyleSpan(Typeface.BOLD), 0, styled.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            styled.setSpan(
+        val sb = SpannableStringBuilder()
+        appendRuns(sb, runs, view)
+        if (heading && sb.isNotEmpty()) {
+            sb.setSpan(StyleSpan(Typeface.BOLD), 0, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            sb.setSpan(
                 ForegroundColorSpan(view.context.getColor(R.color.section_heading)),
                 0,
-                styled.length,
+                sb.length,
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
             )
         }
-        view.text = styled
+        view.text = sb
     }
 
     /** One text view: headings, chips, a code block, and a grey footer. */
@@ -252,16 +288,26 @@ object CardFaceBinder {
     }
 
     private fun appendRuns(sb: SpannableStringBuilder, runs: List<SectionFormat.Run>, view: TextView) {
-        val chip = view.context.getColor(R.color.code_chip)
-        val chipText = view.context.getColor(R.color.code_chip_text)
         for (run in runs) {
-            val start = sb.length
-            sb.append(run.text)
-            if (run.code && sb.length > start) {
-                sb.setSpan(BackgroundColorSpan(chip), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                sb.setSpan(ForegroundColorSpan(chipText), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                sb.setSpan(TypefaceSpan("monospace"), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            if (run.code) {
+                paintRun(sb, run.text, CodeMarkup.Kind.CODE, view)
+            } else if (CodeMarkup.hasCode(run.text)) {
+                for (piece in CodeMarkup.runs(run.text)) paintRun(sb, piece.text, piece.kind, view)
+            } else {
+                sb.append(run.text)
             }
         }
+    }
+
+    private fun paintRun(sb: SpannableStringBuilder, text: String, kind: CodeMarkup.Kind, view: TextView) {
+        val start = sb.length
+        sb.append(text)
+        if (kind == CodeMarkup.Kind.TEXT || sb.length <= start) return
+        val block = kind == CodeMarkup.Kind.PRE
+        val bg = view.context.getColor(if (block) R.color.code_block else R.color.code_chip)
+        val fg = view.context.getColor(if (block) R.color.code_block_text else R.color.code_chip_text)
+        sb.setSpan(BackgroundColorSpan(bg), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        sb.setSpan(ForegroundColorSpan(fg), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        sb.setSpan(TypefaceSpan("monospace"), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
 }

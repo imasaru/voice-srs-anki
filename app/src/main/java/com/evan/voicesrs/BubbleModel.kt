@@ -48,17 +48,29 @@ object BubbleModel {
             .orEmpty()
     }
 
-    /** Full question, tags removed, one visual line per block. */
+    /**
+     * Full question, one visual line per block. `<code>` and `<pre>` stay so the
+     * card face can draw chips. Every other tag is removed. A string that is
+     * already in that shape is returned unchanged, so a second pass does not
+     * collapse its lines.
+     */
     fun fullQuestion(html: String): String {
         if (html.isBlank()) return ""
         if (!html.contains('<')) {
             return html.split('\n').map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
         }
+        if (displayFaceOnly(html)) return html.trim()
         val display = AnkiText.displayHtml(html)
         return display.split(Regex("(?i)<br\\s*/?>"))
-            .map { AnkiText.stripHtml(it) }
+            .map { AnkiText.displayPlain(it) }
             .filter { it.isNotEmpty() }
             .joinToString("\n")
+    }
+
+    /** True when the only tags left are `<code>` and `<pre>`. */
+    private fun displayFaceOnly(html: String): Boolean {
+        val stripped = Regex("(?is)</?\\s*(code|pre)\\b[^>]*>").replace(html, "")
+        return !stripped.contains('<')
     }
 
     /** Past question bubbles keep two lines until the learner taps to expand. */
@@ -72,11 +84,31 @@ object BubbleModel {
 
     fun previewLines(full: String, maxLines: Int): String {
         if (maxLines <= 0) return ""
-        return full.lineSequence()
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .take(maxLines)
-            .joinToString("\n")
+        if (!full.contains("<pre", ignoreCase = true)) {
+            return full.lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .take(maxLines)
+                .joinToString("\n")
+        }
+        val out = ArrayList<String>()
+        var counted = 0
+        var inPre = false
+        for (line in full.lineSequence()) {
+            val closes = line.contains("</pre>", ignoreCase = true)
+            if (!inPre) {
+                if (counted >= maxLines) break
+                val trimmed = line.trim()
+                if (trimmed.isEmpty()) continue
+                out += trimmed
+                counted++
+                if (trimmed.contains("<pre", ignoreCase = true) && !closes) inPre = true
+            } else {
+                out += line.trimEnd()
+                if (closes) inPre = false
+            }
+        }
+        return out.joinToString("\n")
     }
 
     /**

@@ -28,7 +28,6 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.core.text.HtmlCompat
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.chip.Chip
@@ -67,7 +66,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var stopButton: Button
     private var showAnswerButton: Button? = null
     private var silentSwitch: com.google.android.material.materialswitch.MaterialSwitch? = null
-    private var silentBinding = false
+    /** Last switch position the user or a fresh service snapshot committed to. */
+    private var switchModel = SwitchBoard.Model(on = false, generation = 0)
     /** Microphone permission request is so a running drill can leave silent mode. */
     private var pendingVoice = false
 
@@ -103,9 +103,8 @@ class MainActivity : AppCompatActivity() {
         if (pendingVoice) {
             pendingVoice = false
             if (grants[Manifest.permission.RECORD_AUDIO] == true) {
-                silentBinding = true
-                silentSwitch?.isChecked = false
-                silentBinding = false
+                switchModel = SwitchBoard.userTap(switchModel, false)
+                paintSwitch(switchModel.on)
                 persistSilent(false)
             }
             return@registerForActivityResult
@@ -148,9 +147,7 @@ class MainActivity : AppCompatActivity() {
         showAnswerButton = findViewById(R.id.showAnswerButton)
         showAnswerButton?.setOnClickListener { DrillService.submitShowAnswer() }
         silentSwitch = findViewById(R.id.drillSilentSwitch)
-        silentSwitch?.setOnCheckedChangeListener { _, checked ->
-            if (!silentBinding) onSilentSwitch(checked)
-        }
+        silentSwitch?.setOnCheckedChangeListener { _, checked -> onSilentSwitch(checked) }
         findViewById<Button>(R.id.retryButton).setOnClickListener { retryDrill() }
         syncButton.setOnClickListener { syncPending() }
         chipAgain?.setOnClickListener { if (ratingOpen()) DrillService.submitTestGrade("again") }
@@ -421,7 +418,7 @@ class MainActivity : AppCompatActivity() {
                 }
             } else if (renderedFront != state.frontHtml) {
                 renderedFront = state.frontHtml
-                frontView.text = HtmlCompat.fromHtml(state.frontHtml, HtmlCompat.FROM_HTML_MODE_COMPACT)
+                CardFaceBinder.setMarkup(frontView, state.frontHtml)
             }
             val showBack = state.showBack && state.backHtml.isNotBlank()
             val backVis = if (showBack) View.VISIBLE else View.GONE
@@ -432,7 +429,7 @@ class MainActivity : AppCompatActivity() {
             backView?.visibility = backVis
             if (showBack && renderedBack != state.backHtml && backView != null) {
                 renderedBack = state.backHtml
-                backView.text = HtmlCompat.fromHtml(state.backHtml, HtmlCompat.FROM_HTML_MODE_COMPACT)
+                CardFaceBinder.setMarkup(backView, state.backHtml)
             }
             if (state.heard.isBlank()) {
                 heardText?.visibility = View.GONE
@@ -474,7 +471,16 @@ class MainActivity : AppCompatActivity() {
             errorCard.visibility = View.GONE
         }
         val drilling = state.drillRunning || DrillService.running
-        val silentOn = if (drilling) state.silentSession else cfg.silentMode
+        if (drilling) {
+            switchModel = SwitchBoard.reconcile(
+                switchModel,
+                SwitchBoard.Paint(state.silentSession, state.silentGeneration)
+            )
+        } else {
+            switchModel = SwitchBoard.Model(cfg.silentMode, switchModel.generation)
+        }
+        paintSwitch(switchModel.on)
+        val silentOn = switchModel.on
         val hasQuestion = drilling && state.frontHtml.isNotBlank()
         val controls = AnswerControls.of(
             hasQuestion = hasQuestion,
@@ -497,24 +503,19 @@ class MainActivity : AppCompatActivity() {
             startButton.visibility = if (drilling) View.GONE else View.VISIBLE
         }
         stopButton.isEnabled = state.drillRunning
-        if (silentSwitch?.isChecked != silentOn) {
-            silentBinding = true
-            silentSwitch?.isChecked = silentOn
-            silentBinding = false
-        }
         showAnswerButton?.visibility = if (controls.showAnswer) View.VISIBLE else View.GONE
-        renderCue(state, drilling)
+        renderCue(state, drilling, silentOn)
     }
 
     /** Countdown while thinking. The pause row replaces it and stays until Resume or a rating. */
-    private fun renderCue(state: DrillUiState, drilling: Boolean) {
+    private fun renderCue(state: DrillUiState, drilling: Boolean, silentOn: Boolean) {
         val pauseRow = findViewById<View>(R.id.chatPauseRow)
         val countdown = findViewById<TextView>(R.id.thinkCountdown)
         val seconds = state.thinkSecondsLeft
         if (drilling && state.chatPaused) {
             pauseRow?.visibility = View.VISIBLE
             countdown?.visibility = View.GONE
-        } else if (drilling && seconds != null && seconds > 0 && !state.showBack) {
+        } else if (drilling && !silentOn && seconds != null && seconds > 0 && !state.showBack) {
             pauseRow?.visibility = View.GONE
             countdown?.visibility = View.VISIBLE
             countdown?.text = ThinkTime.countdownText(seconds)
@@ -587,13 +588,24 @@ class MainActivity : AppCompatActivity() {
             PackageManager.PERMISSION_GRANTED
         if (!checked && drilling && !mic) {
             pendingVoice = true
-            silentBinding = true
-            silentSwitch?.isChecked = true
-            silentBinding = false
+            paintSwitch(true)
             permissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
             return
         }
+        // Commit the tap before any snapshot render can run, including one
+        // nested inside setSilentMode on this same thread.
+        switchModel = SwitchBoard.userTap(switchModel, checked)
+        paintSwitch(switchModel.on)
         persistSilent(checked)
+    }
+
+    /** Programmatic paints detach the listener so they cannot undo a tap. */
+    private fun paintSwitch(on: Boolean) {
+        val sw = silentSwitch ?: return
+        if (sw.isChecked == on) return
+        sw.setOnCheckedChangeListener(null)
+        sw.isChecked = on
+        sw.setOnCheckedChangeListener { _, checked -> onSilentSwitch(checked) }
     }
 
     private fun persistSilent(checked: Boolean) {

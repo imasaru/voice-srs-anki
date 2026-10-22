@@ -123,7 +123,12 @@ class ThreadSheet : BottomSheetDialogFragment() {
             revealed = true,
             answerPlain = turn.backText
         )
-        if (!mcq) question.text = BubbleModel.fullQuestion(turn.frontText).ifBlank { turn.frontText }
+        if (!mcq) {
+            CardFaceBinder.setMarkup(
+                question,
+                BubbleModel.fullQuestion(turn.frontText).ifBlank { turn.frontText }
+            )
+        }
         CardFaceBinder.bindPills(
             root.findViewById(R.id.threadSpokenPill),
             root.findViewById(R.id.threadRatingPill),

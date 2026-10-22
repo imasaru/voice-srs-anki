@@ -26,6 +26,11 @@ data class DrillUiState(
     val drillRunning: Boolean = false,
     /** Silent flag captured when this session started. Idle UI uses the pref instead. */
     val silentSession: Boolean = false,
+    /**
+     * Bumps every time Silent actually flips. A snapshot captured before a tap
+     * has an older generation and must not move the switch.
+     */
+    val silentGeneration: Int = 0,
     /** Silent question is on screen and the drill is waiting for Show answer. */
     val awaitingShowAnswer: Boolean = false,
     /** Ease (1-4) of the grade chosen for the current card by tap or voice; null clears the chips. */
