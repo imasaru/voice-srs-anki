@@ -1,8 +1,11 @@
 package com.evan.voicesrs
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 class ChatAskLabelTest {
     @Test
@@ -27,8 +30,41 @@ class ChatAskLabelTest {
     }
 
     @Test
-    fun `hint is the card hint while a card is up and a general hint otherwise`() {
-        assertEquals("Ask the AI about this card…", ChatAskLabel.hint(true))
-        assertEquals("Ask the AI a general question…", ChatAskLabel.hint(false))
+    fun `hint returns the card resource id while a card is up and the general id otherwise`() {
+        assertEquals(R.string.chat_ask_hint, ChatAskLabel.hint(true))
+        assertEquals(R.string.chat_hint_general, ChatAskLabel.hint(false))
+    }
+
+    @Test
+    fun `the card and general hints live in the strings resource with the expected texts`() {
+        val xml = stringsXml()
+        assertNotNull("strings.xml not found", xml)
+        val text = xml?.readText() ?: return
+        assertTrue(
+            "card hint missing from strings.xml",
+            text.contains("""name="chat_ask_hint">Ask the AI about this card…""")
+        )
+        assertTrue(
+            "general hint missing from strings.xml",
+            text.contains("""name="chat_hint_general">Ask the AI a general question…""")
+        )
+    }
+
+    private fun stringsXml(): File? {
+        val candidates = listOf(
+            "src/main/res/values/strings.xml",
+            "app/src/main/res/values/strings.xml"
+        )
+        for (c in candidates) {
+            val f = File(c)
+            if (f.exists()) return f
+        }
+        var dir = File(System.getProperty("user.dir")).absoluteFile
+        while (dir != null) {
+            val found = File(dir, "src/main/res/values/strings.xml")
+            if (found.exists()) return found
+            dir = dir.parentFile
+        }
+        return null
     }
 }

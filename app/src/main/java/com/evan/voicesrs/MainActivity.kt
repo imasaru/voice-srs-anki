@@ -86,6 +86,8 @@ class MainActivity : AppCompatActivity() {
     private var lastDrillRunning = false
     private var chatPane: ChatPane? = null
     private var chatDictation: ChatDictation? = null
+    private var chatInputView: EditText? = null
+    private var appliedHintRes = 0
 
     private val reviewListener: (List<ReviewTurn>) -> Unit = {
         runOnUiThread {
@@ -170,6 +172,7 @@ class MainActivity : AppCompatActivity() {
         showCrashIfAny()
         bindDeckTitle(Prefs.load(this).deck)
         wireChatComposer()
+        chatInputView = findViewById(R.id.chatInput)
         val chatList = findViewById<RecyclerView>(R.id.chatList)
         val chatUnread = findViewById<TextView>(R.id.chatUnread)
         if (chatList != null && chatUnread != null) {
@@ -591,10 +594,10 @@ class MainActivity : AppCompatActivity() {
                 askAbout.text = askLine
             }
         }
-        val chatInput = findViewById<EditText>(R.id.chatInput)
-        if (chatInput != null) {
-            val next = ChatAskLabel.hint(hasQuestion)
-            if (chatInput.hint?.toString() != next) chatInput.hint = next
+        val hintRes = ChatAskLabel.hint(hasQuestion)
+        if (chatInputView != null && appliedHintRes != hintRes) {
+            chatInputView?.hint = getString(hintRes)
+            appliedHintRes = hintRes
         }
         val controls = AnswerControls.of(
             hasQuestion = hasQuestion,
