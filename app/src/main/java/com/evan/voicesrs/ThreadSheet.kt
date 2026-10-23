@@ -3,10 +3,12 @@ package com.evan.voicesrs
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.graphics.Rect
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.FrameLayout
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
@@ -14,6 +16,8 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -44,6 +48,22 @@ class ThreadSheet : BottomSheetDialogFragment() {
         list = view.findViewById(R.id.threadList)
         list?.layoutManager = LinearLayoutManager(view.context).apply { stackFromEnd = true }
         list?.adapter = adapter
+        // Clear the taller of the keyboard / nav bar so the input row stays visible.
+        // Capture the layout's original bottom padding as the base before the listener runs.
+        val root = view
+        val baseBottom = root.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            val navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            root.setPadding(
+                root.paddingLeft,
+                root.paddingTop,
+                root.paddingRight,
+                ImeInsets.bottomPadding(baseBottom, imeBottom, navBottom)
+            )
+            insets
+        }
+        ViewCompat.requestApplyInsets(root)
         val input = view.findViewById<EditText>(R.id.threadInput)
         val send = view.findViewById<Button>(R.id.threadSend)
         val submit = {
@@ -63,7 +83,11 @@ class ThreadSheet : BottomSheetDialogFragment() {
             }
         }
         input.setOnFocusChangeListener { _, hasFocus ->
-            if (hasFocus) DrillService.pauseForChat(ChatPause.Trigger.FOCUS_INPUT)
+            if (hasFocus) {
+                DrillService.pauseForChat(ChatPause.Trigger.FOCUS_INPUT)
+                // Bring the input on screen above the keyboard.
+                input.post { input.requestRectangleOnScreen(Rect()) }
+            }
         }
         input.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -116,6 +140,9 @@ class ThreadSheet : BottomSheetDialogFragment() {
 
     override fun onStart() {
         super.onStart()
+        // BottomSheetDialog ignores the activity manifest soft-input mode, so force
+        // the dialog window to resize for the keyboard here.
+        dialog?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         val sheet = dialog as? BottomSheetDialog ?: return
         sheet.behavior.state = BottomSheetBehavior.STATE_EXPANDED
         sheet.behavior.skipCollapsed = true
