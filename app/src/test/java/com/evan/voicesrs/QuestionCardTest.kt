@@ -128,6 +128,20 @@ class QuestionCardTest {
     }
 
     @Test
+    fun `Mock Exam 1 Q43 Correct field B is green when the stem starts with A company`() {
+        val parsed = QuestionCard.parse(q043)
+        assertEquals(listOf("A", "B", "C", "D"), parsed.options.map { it.letter })
+        assertEquals("B", QuestionCard.correctLetter("B", parsed.options))
+        assertEquals("B", QuestionCard.highlightSource("B", q043Back))
+        assertEquals("B", QuestionCard.correctLetter(q043Back, parsed.options))
+        val shown = QuestionCard.present(parsed, "B", revealed = true, chosen = "A")
+        assertEquals("B", shown.options.single { it.correct }.letter)
+        assertTrue(shown.options.single { it.correct }.text.startsWith("Delta Sharing"))
+        assertTrue(shown.options[0].chosen)
+        assertFalse(shown.options[0].correct)
+    }
+
+    @Test
     fun `scramble keeps green on the original Correct letter not the displayed slot`() {
         val parsed = QuestionCard.parse(q20)
         val session = sessionThatMoves(parsed.options)
@@ -175,6 +189,20 @@ class QuestionCardTest {
             $q021
             Answer B: PIVOT
             PIVOT rotates row values into columns. UNPIVOT does the reverse.
+        """.trimIndent()
+
+        private val q043 = """
+            A company wants to share a Delta table with an external partner organization that uses a different cloud provider, without copying the underlying data. Which Databricks feature enables this?
+            A. External Location with cross-account IAM role
+            B. Delta Sharing — an open protocol for sharing live data across organizations
+            C. Unity Catalog data lineage export
+            D. DBFS mount with public access enabled
+        """.trimIndent()
+
+        private val q043Back = """
+            $q043
+            Answer B: Delta Sharing — an open protocol for sharing live data across organizations
+            Delta Sharing is an open, REST-based protocol for sharing live Delta Lake data without copying it. External Locations manage storage access within one organization.
         """.trimIndent()
 
         private val q025 = """
