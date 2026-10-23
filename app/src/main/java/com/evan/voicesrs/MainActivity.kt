@@ -73,6 +73,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var stopButton: Button
     private var showAnswerButton: Button? = null
     private var silentSwitch: com.google.android.material.materialswitch.MaterialSwitch? = null
+    private var timerMinus: Button? = null
+    private var timerValue: TextView? = null
+    private var timerPlus: Button? = null
+    private var timerSwitch: com.google.android.material.materialswitch.MaterialSwitch? = null
     /** Last switch position the user or a fresh service snapshot committed to. */
     private var switchModel = SwitchBoard.Model(on = false, generation = 0)
     /** Microphone permission request is so a running drill can leave silent mode. */
@@ -164,6 +168,13 @@ class MainActivity : AppCompatActivity() {
         showAnswerButton?.setOnClickListener { DrillService.submitShowAnswer() }
         silentSwitch = findViewById(R.id.drillSilentSwitch)
         silentSwitch?.setOnCheckedChangeListener { _, checked -> onSilentSwitch(checked) }
+        timerMinus = findViewById(R.id.timerMinus)
+        timerValue = findViewById(R.id.timerValue)
+        timerPlus = findViewById(R.id.timerPlus)
+        timerSwitch = findViewById(R.id.timerSwitch)
+        timerMinus?.setOnClickListener { onTimerStep(-TimerRowModel.STEP_MINUTES) }
+        timerPlus?.setOnClickListener { onTimerStep(TimerRowModel.STEP_MINUTES) }
+        timerSwitch?.setOnCheckedChangeListener { _, checked -> onTimerSwitch(checked) }
         findViewById<Button>(R.id.retryButton).setOnClickListener { retryDrill() }
         syncChip.setOnClickListener { syncPending() }
         chipAgain?.setOnClickListener { if (ratingOpen()) DrillService.submitTestGrade("again") }
@@ -197,6 +208,7 @@ class MainActivity : AppCompatActivity() {
             ).also { it.attach() }
         }
         applyAiChrome()
+        refreshTimerRow()
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -287,6 +299,7 @@ class MainActivity : AppCompatActivity() {
         }
         refreshCounts()
         render(DrillUi.state)
+        refreshTimerRow()
     }
 
     override fun onPause() {
@@ -778,6 +791,45 @@ class MainActivity : AppCompatActivity() {
                 if (!isDestroyed) render(DrillUi.state)
             }
         }.start()
+    }
+
+    private fun onTimerStep(delta: Int) {
+        val cfg = try {
+            Prefs.load(this)
+        } catch (_: Exception) {
+            return
+        }
+        Prefs.save(this, TimerRowModel.step(cfg, delta))
+        refreshTimerRow()
+    }
+
+    private fun onTimerSwitch(checked: Boolean) {
+        val cfg = try {
+            Prefs.load(this)
+        } catch (_: Exception) {
+            return
+        }
+        Prefs.save(this, TimerRowModel.setEnabled(cfg, checked))
+        refreshTimerRow()
+    }
+
+    private fun refreshTimerRow() {
+        val value = timerValue ?: return
+        val cfg = try {
+            Prefs.load(this)
+        } catch (_: Exception) {
+            return
+        }
+        value.text = TimerRowModel.label(cfg)
+        paintTimerSwitch(TimerRowModel.enabled(cfg))
+    }
+
+    private fun paintTimerSwitch(on: Boolean) {
+        val sw = timerSwitch ?: return
+        if (sw.isChecked == on) return
+        sw.setOnCheckedChangeListener(null)
+        sw.isChecked = on
+        sw.setOnCheckedChangeListener { _, checked -> onTimerSwitch(checked) }
     }
 
     private fun onSilentSwitch(checked: Boolean) {

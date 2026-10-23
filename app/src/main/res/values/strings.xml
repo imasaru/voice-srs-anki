@@ -173,4 +173,8 @@
     <string name="settings_ai_clear">Clear AI cache</string>
     <string name="settings_ai_cleared">AI cache cleared.</string>
     <string name="settings_ai_clear_failed">Could not clear the AI cache.</string>
+    <string name="timer_title">Timer</string>
+    <string name="timer_fewer">Fewer minutes</string>
+    <string name="timer_more">More minutes</string>
+    <string name="timer_switch">Timer on</string>
 </resources>
