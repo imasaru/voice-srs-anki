@@ -85,8 +85,9 @@ class ThreadSheet : BottomSheetDialogFragment() {
         input.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
                 DrillService.pauseForChat(ChatPause.Trigger.FOCUS_INPUT)
-                // Bring the input on screen above the keyboard.
-                input.post { input.requestRectangleOnScreen(Rect()) }
+                // Bring the input on screen above the keyboard using its own bounds.
+                val r = ImeInsets.inputRect(input.width, input.height)
+                input.post { input.requestRectangleOnScreen(Rect(r[0], r[1], r[2], r[3]), true) }
             }
         }
         input.addTextChangedListener(object : TextWatcher {

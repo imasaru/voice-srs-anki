@@ -2,6 +2,7 @@ package com.evan.voicesrs
 
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -29,5 +30,28 @@ class ImeInsetsTest {
         val text = src.readText()
         assertTrue("missing WindowInsetsCompat.Type.ime()", text.contains("WindowInsetsCompat.Type.ime()"))
         assertTrue("missing SOFT_INPUT_ADJUST_RESIZE", text.contains("SOFT_INPUT_ADJUST_RESIZE"))
+    }
+
+    @Test
+    fun `inputRect builds left top right bottom from view size`() {
+        val rect = ImeInsets.inputRect(width = 300, height = 120)
+        assertEquals(4, rect.size)
+        assertEquals(0, rect[0])
+        assertEquals(0, rect[1])
+        assertEquals(300, rect[2])
+        assertEquals(120, rect[3])
+    }
+
+    @Test
+    fun `ThreadSheet uses input bounds not empty rect`() {
+        val src = File("src/main/java/com/evan/voicesrs/ThreadSheet.kt")
+        assertTrue("source file missing: ${src.absolutePath}", src.isFile)
+        val text = src.readText()
+        assertFalse(
+            "should not pass an empty Rect() to requestRectangleOnScreen",
+            text.contains("requestRectangleOnScreen(Rect())")
+        )
+        assertTrue("should use input.width", text.contains("input.width"))
+        assertTrue("should use input.height", text.contains("input.height"))
     }
 }
