@@ -52,8 +52,10 @@ object PromptBuilder {
     data class ChatMsg(val role: String, val content: String)
 
     /**
-     * Multi-turn thread. Context is the card, the spoken answer, and the
-     * explanation. Earlier exchanges are the last four finished follow-ups.
+     * Multi-turn thread. The card is the first user message. The spoken
+     * answer and explanation are their own user/assistant turns. Earlier
+     * exchanges are the last four finished follow-ups. History is never
+     * labelled "Learner said:".
      */
     fun followUpMessages(
         front: String,
@@ -64,17 +66,12 @@ object PromptBuilder {
         question: String,
         label: String = ""
     ): List<ChatMsg> {
-        val context = buildString {
-            append(userMessage(front, back, label))
-            append("\nLearner said: ")
-            append(transcript.trim())
-            if (explanation.isNotBlank()) {
-                append("\nExplanation: ")
-                append(explanation.trim())
-            }
-        }
         val messages = ArrayList<ChatMsg>()
-        messages += ChatMsg("user", context)
+        messages += ChatMsg("user", userMessage(front, back, label))
+        val said = transcript.trim()
+        if (said.isNotEmpty()) messages += ChatMsg("user", said)
+        val expl = explanation.trim()
+        if (expl.isNotEmpty()) messages += ChatMsg("assistant", expl)
         val done = prior.mapNotNull { follow ->
             val ready = follow.state as? ExplState.Ready ?: return@mapNotNull null
             if (follow.q.isBlank() || ready.text.isBlank()) null

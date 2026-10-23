@@ -59,4 +59,32 @@ class PromptBuilderTest {
         assertTrue(revealed.first().content.contains("Card back: $secret"))
         assertEquals(PromptBuilder.SYSTEM + PromptBuilder.FOLLOW_UP_EXTRA, PromptBuilder.followUpSystem())
     }
+
+    @Test
+    fun `follow-up history is role based and never labels a Learner turn`() {
+        val prior = listOf(
+            FollowUp("why not A?", ExplState.Ready("A is the trap.", cached = false))
+        )
+        val messages = PromptBuilder.followUpMessages(
+            "Front",
+            "Back",
+            "B",
+            "Why B is right.",
+            prior,
+            "nice llama analogy?"
+        )
+        val blob = messages.joinToString("\n") { "${it.role}:${it.content}" }
+        assertFalse(blob.contains("Learner said:"))
+        assertFalse(blob.contains("Learner:"))
+        assertEquals(
+            listOf("user", "user", "assistant", "user", "assistant", "user"),
+            messages.map { it.role }
+        )
+        assertEquals("B", messages[1].content)
+        assertEquals("Why B is right.", messages[2].content)
+        assertEquals("why not A?", messages[3].content)
+        assertEquals("A is the trap.", messages[4].content)
+        assertEquals("nice llama analogy?", messages[5].content)
+        assertTrue(messages[0].content.contains("Card front: Front"))
+    }
 }

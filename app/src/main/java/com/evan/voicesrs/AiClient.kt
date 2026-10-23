@@ -183,6 +183,7 @@ class AiClient {
     ): String {
         val started = System.currentTimeMillis()
         val conn = open(baseUrl, apiKey, "POST", "/chat/completions")
+        val sink: (String) -> Unit = { onDelta(SelfTalk.clip(it)) }
         try {
             conn.doOutput = true
             conn.useCaches = false
@@ -194,12 +195,7 @@ class AiClient {
             // Send the body in one known-length write. Chunked/Expect: 100-continue
             // deadlocks a naive reverse proxy (the emulator relay) until read timeout.
             conn.setRequestProperty("Expect", "")
-            val body = JSONObject()
-                .put("model", model)
-                .put("temperature", AiTimeouts.TEMPERATURE)
-                .put("max_tokens", maxTokens)
-                .put("stream", stream)
-                .put("messages", messages)
+            val body = AiRequest.completionBody(model, messages, maxTokens, stream)
             val bytes = body.toString().toByteArray(Charsets.UTF_8)
             conn.setFixedLengthStreamingMode(bytes.size)
             conn.outputStream.use { it.write(bytes) }
@@ -211,12 +207,13 @@ class AiClient {
             val eventStream = type.contains("event-stream")
             val jsonType = type.contains("json")
             val text = if (eventStream || (stream && !jsonType)) {
-                readSse(conn, started, cancelled, onThinking, onDelta)
+                readSse(conn, started, cancelled, onThinking, sink)
             } else {
                 finishBody(readBody(conn, started, cancelled))
             }
-            onDelta(text)
-            return text
+            val clipped = SelfTalk.clip(text)
+            sink(clipped)
+            return clipped
         } finally {
             conn.disconnect()
         }
