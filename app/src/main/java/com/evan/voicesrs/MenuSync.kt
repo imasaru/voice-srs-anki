@@ -9,6 +9,9 @@ object MenuSync {
      * Whether the sync menu item should be shown. Visible whenever there is
      * work to sync; a sync in flight keeps it visible (disabled, not hidden) so
      * a stuck sync stays reachable. Only the pending count drives visibility.
+     *
+     * @param syncing intentionally unused (kept in the signature for tests);
+     *   visibility is driven solely by [pending].
      */
     fun visible(pending: Int, syncing: Boolean): Boolean = pending > 0
 

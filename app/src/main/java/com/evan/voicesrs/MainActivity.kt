@@ -562,7 +562,7 @@ class MainActivity : AppCompatActivity() {
                 progressText.text = progressLine
             }
         }
-        if (renderedPendingSync != state.pendingSync) {
+        if (MenuSync.shouldInvalidate(renderedPendingSync, state.pendingSync)) {
             renderedPendingSync = state.pendingSync
             invalidateOptionsMenu()
         }
