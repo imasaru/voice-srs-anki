@@ -31,6 +31,7 @@
     <color name="option_correct_text">#0B3D1F</color>
     <color name="option_correct_stroke">#1B7F4A</color>
     <color name="section_heading">#6750A4</color>
+    <color name="reading_highlight">#A4F4C4</color>
     <color name="code_chip">#E8E0F0</color>
     <color name="code_chip_text">#1C1B1F</color>
     <color name="code_block">#1C1B1F</color>

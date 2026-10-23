@@ -31,6 +31,8 @@ data class AnkiConfig(
     val thinkTimeSec: Int = ThinkTime.DEFAULT_SEC,
     /** Show the card front and back on the main screen. */
     val showCard: Boolean = true,
+    /** Highlight the sentence currently being read. Settings-only; no highlight logic yet. */
+    val highlightSentence: Boolean = HighlightSentence.SETTING_DEFAULT,
     /** Mix MCQ rows. Letters stay on their original text. On by default. */
     val shuffleOptions: Boolean = true,
     /** Tap-only review. Read once at session start. The microphone stays closed. */
@@ -80,6 +82,7 @@ object Prefs {
     private const val KEY_LISTEN_ATTEMPTS = "listen_attempts"
     private const val KEY_THINK_TIME_SEC = "think_time_sec"
     private const val KEY_SHOW_CARD = "show_card"
+    private const val KEY_HIGHLIGHT_SENTENCE = "highlight_sentence"
     private const val KEY_SHUFFLE = "shuffle_options"
     private const val KEY_SILENT = "silent_mode"
     private const val KEY_OFFLINE = "offline_batch"
@@ -151,7 +154,7 @@ object Prefs {
             }
             if (plainDirty) plainEditor.apply()
         }
-        return readPlain(plain).copy(
+        return read(plain).copy(
             apiKey = decision.apiKey,
             neuralToken = decision.neuralToken,
             needsApiKey = decision.promptForApiKey,
@@ -160,9 +163,10 @@ object Prefs {
         )
     }
 
-    fun save(ctx: Context, cfg: AnkiConfig) {
-        val plain = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-        plain.edit()
+    fun read(p: SharedPreferences): AnkiConfig = readPlain(p)
+
+    fun write(p: SharedPreferences, cfg: AnkiConfig) {
+        p.edit()
             .putString(KEY_URL, cfg.url)
             .putString(KEY_DECK, cfg.deck)
             .putFloat(KEY_TTS_RATE, TtsRate.clamp(cfg.ttsRate))
@@ -177,6 +181,7 @@ object Prefs {
             .putInt(KEY_THINK_TIME_SEC, ThinkTime.normalize(cfg.thinkTimeSec))
             .remove(KEY_RELISTEN_ONCE)
             .putBoolean(KEY_SHOW_CARD, cfg.showCard)
+            .putBoolean(KEY_HIGHLIGHT_SENTENCE, cfg.highlightSentence)
             .putBoolean(KEY_SHUFFLE, cfg.shuffleOptions)
             .putBoolean(KEY_SILENT, cfg.silentMode)
             .putBoolean(KEY_OFFLINE, cfg.offlineBatch)
@@ -195,6 +200,11 @@ object Prefs {
             .remove(KEY_API_KEY)
             .remove(KEY_NEURAL_TOKEN)
             .apply()
+    }
+
+    fun save(ctx: Context, cfg: AnkiConfig) {
+        val plain = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        write(plain, cfg)
         val secrets = openSecrets(ctx)
         if (secrets == null) {
             Log.e(TAG, "encrypted prefs unavailable; secrets not written")
@@ -242,6 +252,7 @@ object Prefs {
                 p.getInt(KEY_THINK_TIME_SEC, ThinkTime.DEFAULT_SEC)
             ),
             showCard = p.getBoolean(KEY_SHOW_CARD, true),
+            highlightSentence = p.getBoolean(KEY_HIGHLIGHT_SENTENCE, HighlightSentence.SETTING_DEFAULT),
             shuffleOptions = p.getBoolean(KEY_SHUFFLE, true),
             silentMode = p.getBoolean(KEY_SILENT, false),
             offlineBatch = p.getBoolean(KEY_OFFLINE, false),

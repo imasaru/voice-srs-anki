@@ -108,6 +108,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val playbackListener: (PlaybackControl.Snapshot) -> Unit = {
+        runOnUiThread {
+            if (!isDestroyed) paintPlayback(it)
+        }
+    }
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
@@ -171,6 +177,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.settingsButton).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
+        findViewById<Button>(R.id.playbackPauseButton)?.setOnClickListener {
+            PlaybackSpeaker.togglePause(this)
+        }
         showCrashIfAny()
         bindDeckTitle(Prefs.load(this).deck)
         wireChatComposer()
@@ -233,6 +242,7 @@ class MainActivity : AppCompatActivity() {
         lastDrillRunning = DrillService.running
         DrillUi.addListener(uiListener)
         ReviewLog.addListener(reviewListener)
+        PlaybackUi.addListener(playbackListener)
         invalidateOptionsMenu()
         if (!DrillService.running) {
             if (DrillUi.state.drillRunning || DrillUi.state.progressLine.isNotEmpty()) {
@@ -287,6 +297,7 @@ class MainActivity : AppCompatActivity() {
     override fun onStop() {
         DrillUi.removeListener(uiListener)
         ReviewLog.removeListener(reviewListener)
+        PlaybackUi.removeListener(playbackListener)
         super.onStop()
     }
 
@@ -297,6 +308,7 @@ class MainActivity : AppCompatActivity() {
         stopResumePulse(findViewById(R.id.chatResumeButton))
         chatPane?.detach()
         chatPane = null
+        PlaybackSpeaker.stop()
         super.onDestroy()
     }
 
@@ -642,6 +654,25 @@ class MainActivity : AppCompatActivity() {
         stopButton.isEnabled = state.drillRunning
         showAnswerButton?.visibility = if (controls.showAnswer) View.VISIBLE else View.GONE
         renderCue(state, drilling, silentOn)
+        paintPlayback(PlaybackUi.state)
+    }
+
+    private fun paintPlayback(snap: PlaybackControl.Snapshot) {
+        val pause = findViewById<Button>(R.id.playbackPauseButton) ?: return
+        pause.visibility = if (PlaybackControl.pauseVisible()) View.VISIBLE else View.GONE
+        pause.isEnabled = PlaybackControl.pauseEnabled(snap)
+        pause.text = if (snap.state == PlaybackControl.State.PAUSED) {
+            getString(R.string.playback_resume)
+        } else {
+            getString(R.string.playback_pause)
+        }
+        val status = findViewById<TextView>(R.id.playbackStatus)
+        status?.text = when (snap.state) {
+            PlaybackControl.State.LOADING -> getString(R.string.playback_loading)
+            PlaybackControl.State.READING -> getString(R.string.playback_reading)
+            PlaybackControl.State.PAUSED -> getString(R.string.playback_resume)
+            PlaybackControl.State.IDLE -> ""
+        }
     }
 
     /** Countdown while thinking. The pause row replaces it and stays until Resume or a rating. */

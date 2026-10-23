@@ -27,7 +27,10 @@ class ChatPane(
     private val adapter = ChatAdapter(
         onExplExpanded = { id -> sample(id) },
         onRetry = { id -> ExplainQueue.retry(list.context, id) },
-        onThread = { id -> openThread(id) }
+        onThread = { id -> openThread(id) },
+        onSpeakSection = { turnId, index, text ->
+            PlaybackSpeaker.play(list.context, turnId, index, text)
+        }
     )
     private val tracker = ReadReceiptTracker(now = { SystemClock.elapsedRealtime() })
     private val follow = ChatFollow()
@@ -60,6 +63,10 @@ class ChatPane(
     }
 
     private val generalListener: () -> Unit = {
+        list.post { if (attached) render() }
+    }
+
+    private val playbackListener: (PlaybackControl.Snapshot) -> Unit = {
         list.post { if (attached) render() }
     }
 
@@ -109,6 +116,7 @@ class ChatPane(
         DrillUi.addListener(uiListener)
         LiveThread.addListener(liveListener)
         GeneralChat.addListener(generalListener)
+        PlaybackUi.addListener(playbackListener)
         list.addOnLayoutChangeListener(anchorLayout)
         nextPill?.setOnClickListener {
             applyFollow(follow.onPill(followView), scrollNow = true)
@@ -138,6 +146,7 @@ class ChatPane(
         DrillUi.removeListener(uiListener)
         LiveThread.removeListener(liveListener)
         GeneralChat.removeListener(generalListener)
+        PlaybackUi.removeListener(playbackListener)
         list.removeOnLayoutChangeListener(anchorLayout)
         DrillService.reportChatScreen(attached = false, ordinal = followView.liveOrdinal, ready = false)
     }

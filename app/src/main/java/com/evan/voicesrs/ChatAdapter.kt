@@ -21,7 +21,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 class ChatAdapter(
     private val onExplExpanded: (Long) -> Unit,
     private val onRetry: (Long) -> Unit,
-    private val onThread: (Long) -> Unit
+    private val onThread: (Long) -> Unit,
+    private val onSpeakSection: (Long, Int, String) -> Unit = { _, _, _ -> }
 ) : ListAdapter<ChatRow, RecyclerView.ViewHolder>(DIFF) {
 
     private val cardOpen = HashSet<Long>()
@@ -185,7 +186,21 @@ class ChatAdapter(
                     status.visibility = View.GONE
                 }
                 if (shown.body.isNotBlank() || shown.footer.isNotBlank()) {
-                    CardFaceBinder.fillSections(blocks, footer, shown.body, shown.footer)
+                    val highlightOn = try {
+                        Prefs.load(itemView.context).highlightSentence
+                    } catch (_: Exception) {
+                        HighlightSentence.SETTING_DEFAULT
+                    }
+                    CardFaceBinder.fillSections(
+                        blocks,
+                        footer,
+                        shown.body,
+                        shown.footer,
+                        turnId = turn.turnId,
+                        playback = PlaybackUi.state,
+                        highlightOn = highlightOn,
+                        onSpeak = { index, text -> onSpeakSection(turn.turnId, index, text) }
+                    )
                 } else {
                     blocks.visibility = View.GONE
                     blocks.removeAllViews()

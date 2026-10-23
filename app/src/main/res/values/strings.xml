@@ -69,6 +69,7 @@
     <string name="test_voice_failed">Could not play that sample.</string>
     <string name="settings_speed_mode">Speed mode (skip voice guides)</string>
     <string name="settings_show_card">Show card on screen</string>
+    <string name="settings_highlight_sentence">Highlight sentence while reading</string>
     <string name="settings_silent_mode">Silent mode</string>
     <string name="settings_silent_mode_help">Never uses the microphone, so you can review during a phone call. Tap to show the answer and to rate.</string>
     <string name="silent_indicator">Silent</string>
@@ -147,6 +148,11 @@
     <string name="settings_shuffle_help">Mix up the order of multiple-choice options.</string>
     <string name="chat_paused">Paused, asking AI</string>
     <string name="chat_resume">Resume</string>
+    <string name="playback_pause">Pause</string>
+    <string name="playback_resume">Resume reading</string>
+    <string name="playback_read_section">Read this section</string>
+    <string name="playback_loading">Loading…</string>
+    <string name="playback_reading">Reading</string>
     <string name="answer_rating_label">YOUR ANSWER · RATING</string>
     <string name="section_ai">AI explanations</string>
     <string name="settings_ai_enable">Explain cards</string>

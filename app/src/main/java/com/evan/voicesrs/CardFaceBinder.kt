@@ -14,6 +14,7 @@ import android.text.style.TypefaceSpan
 import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
@@ -145,7 +146,16 @@ object CardFaceBinder {
     }
 
     /** Section blocks for the explanation. The footer view is the grey note. */
-    fun fillSections(host: LinearLayout, footerView: TextView, body: String, extraFooter: String) {
+    fun fillSections(
+        host: LinearLayout,
+        footerView: TextView,
+        body: String,
+        extraFooter: String,
+        turnId: Long = 0L,
+        playback: PlaybackControl.Snapshot = PlaybackControl.Snapshot(),
+        highlightOn: Boolean = HighlightSentence.SETTING_DEFAULT,
+        onSpeak: ((Int, String) -> Unit)? = null
+    ) {
         host.removeAllViews()
         val doc = if (body.isBlank()) {
             SectionFormat.Doc(emptyList(), "", "")
@@ -182,13 +192,46 @@ object CardFaceBinder {
                     view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
                 }
             }
+            val index = shown
+            val row = LinearLayout(host.context)
+            row.orientation = LinearLayout.HORIZONTAL
+            row.gravity = android.view.Gravity.TOP
+            if (PlaybackControl.highlight(playback, turnId, index, highlightOn)) {
+                row.setBackgroundColor(host.context.getColor(R.color.reading_highlight))
+            }
+            if (onSpeak != null) {
+                val speak = Button(host.context, null, android.R.attr.borderlessButtonStyle)
+                val section = PlaybackControl.sectionState(playback, turnId, index)
+                speak.text = when (section) {
+                    PlaybackControl.State.LOADING -> "…"
+                    PlaybackControl.State.READING -> "■"
+                    else -> "▶"
+                }
+                speak.contentDescription = host.context.getString(R.string.playback_read_section)
+                speak.minHeight = (40 * density).toInt()
+                speak.minWidth = (40 * density).toInt()
+                speak.setOnClickListener { onSpeak.invoke(index, block.text) }
+                row.addView(
+                    speak,
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                )
+            }
+            view.layoutParams = LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1f
+            )
+            row.addView(view)
             val lp = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
             lp.topMargin = if (shown == 0) 0 else (6 * density).toInt()
-            view.layoutParams = lp
-            host.addView(view)
+            row.layoutParams = lp
+            host.addView(row)
             shown++
         }
         host.visibility = if (shown == 0) View.GONE else View.VISIBLE

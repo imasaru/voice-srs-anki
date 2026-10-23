@@ -89,6 +89,7 @@ class SettingsActivity : AppCompatActivity() {
         val testVoiceStatus: TextView = findViewById(R.id.testVoiceStatus)
         val speedSwitch: MaterialSwitch = findViewById(R.id.speedModeSwitch)
         val showCardSwitch: MaterialSwitch = findViewById(R.id.showCardSwitch)
+        val highlightSentenceSwitch: MaterialSwitch = findViewById(R.id.highlightSentenceSwitch)
         val shuffleSwitch: MaterialSwitch = findViewById(R.id.shuffleOptionsSwitch)
         val detectCodeSwitch: MaterialSwitch = findViewById(R.id.detectCodeSwitch)
         val explainAgain: Chip = findViewById(R.id.autoExplainAgain)
@@ -118,6 +119,7 @@ class SettingsActivity : AppCompatActivity() {
         )
         speedSwitch.isChecked = held.speedMode
         showCardSwitch.isChecked = held.showCard
+        highlightSentenceSwitch.isChecked = held.highlightSentence
         shuffleSwitch.isChecked = held.shuffleOptions
         detectCodeSwitch.isChecked = held.detectCode
         explainAgain.isChecked = 1 in held.autoExplainEases
@@ -242,6 +244,9 @@ class SettingsActivity : AppCompatActivity() {
         }
         showCardSwitch.setOnCheckedChangeListener { _, checked ->
             persist { it.copy(showCard = checked) }
+        }
+        highlightSentenceSwitch.setOnCheckedChangeListener { _, checked ->
+            persist { it.copy(highlightSentence = checked) }
         }
         shuffleSwitch.setOnCheckedChangeListener { _, checked ->
             persist { it.copy(shuffleOptions = checked) }
