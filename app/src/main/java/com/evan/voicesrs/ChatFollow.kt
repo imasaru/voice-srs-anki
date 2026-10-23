@@ -33,15 +33,16 @@ class ChatFollow {
         val autoAdvance: Boolean = false
     )
 
-    /** A new question bubble. At the bottom, follow it. Scrolled up, hold it. */
+    /** A new question bubble. Always pin it to the top, even if the user was scrolled up. */
     fun onQuestion(view: View, ordinal: Int): Decision {
         if (ordinal <= 0) return decide(view.copy(liveOrdinal = 0, holdingOrdinal = 0), Scroll.NONE, false)
-        val fresh = view.copy(liveOrdinal = ordinal, liveVisible = false)
-        return if (view.atBottom) {
-            decide(fresh.copy(holdingOrdinal = 0), Scroll.TO_LIVE, moved = true)
-        } else {
-            decide(fresh.copy(holdingOrdinal = ordinal), Scroll.NONE, moved = false)
-        }
+        val fresh = view.copy(
+            liveOrdinal = ordinal,
+            liveVisible = false,
+            holdingOrdinal = 0,
+            atBottom = true
+        )
+        return decide(fresh, Scroll.TO_LIVE, moved = true)
     }
 
     /** Reaching the bottom releases a hold. Leaving the bottom does not grab a card already released. */

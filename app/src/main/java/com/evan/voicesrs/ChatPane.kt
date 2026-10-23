@@ -215,8 +215,7 @@ class ChatPane(
             if (preserve && first >= 0) {
                 lm?.scrollToPositionWithOffset(first, top)
             } else if (decision.scroll == ChatFollow.Scroll.TO_LIVE) {
-                val last = adapter.itemCount - 1
-                if (last >= 0) list.smoothScrollToPosition(last)
+                pinLiveToTop()
             }
             if (list.childCount > 0) anchored = true
             list.post { publishVisibility() }
@@ -240,8 +239,7 @@ class ChatPane(
         followView = decision.view
         nextPill?.visibility = if (decision.showPill) View.VISIBLE else View.GONE
         if (scrollNow && decision.scroll == ChatFollow.Scroll.TO_LIVE) {
-            val last = adapter.itemCount - 1
-            if (last >= 0) list.smoothScrollToPosition(last)
+            pinLiveToTop()
         }
         DrillService.reportChatScreen(
             attached = attached,
@@ -258,6 +256,18 @@ class ChatPane(
         if (range <= extent + 1) return true
         val slop = (ChatFollow.BOTTOM_SLOP_DP * list.resources.displayMetrics.density).toInt()
         return range - (offset + extent) <= slop
+    }
+
+    private fun pinLiveToTop() {
+        val last = adapter.itemCount - 1
+        if (last < 0) return
+        val lm = list.layoutManager as? LinearLayoutManager ?: return
+        lm.scrollToPositionWithOffset(last, 0)
+        list.post {
+            val top = liveQuestionTop() ?: return@post
+            val delta = ScrollAnchor.pinTopDelta(top, list.paddingTop)
+            if (delta != 0) list.scrollBy(0, delta)
+        }
     }
 
     private fun liveQuestionTop(): Int? {

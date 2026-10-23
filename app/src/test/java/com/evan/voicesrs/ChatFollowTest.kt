@@ -25,24 +25,21 @@ class ChatFollowTest {
     }
 
     @Test
-    fun `scrolled up holds the next question`() {
+    fun `advance always pins the next question even if scrolled up`() {
         val asked = follow.onQuestion(ChatFollow.View(atBottom = false), 4)
-        assertEquals(ChatFollow.Scroll.NONE, asked.scroll)
-        assertFalse(asked.movedScroll)
-        assertTrue(asked.showPill)
-        assertEquals(4, asked.view.holdingOrdinal)
-        val seen = follow.onVisible(asked.view, true)
-        assertTrue(seen.showPill)
-        assertFalse(seen.mayBegin)
-        assertFalse(seen.maySpeak)
-        assertFalse(seen.mayStartTiming)
+        assertEquals(ChatFollow.Scroll.TO_LIVE, asked.scroll)
+        assertTrue(asked.movedScroll)
+        assertFalse(asked.showPill)
+        assertEquals(0, asked.view.holdingOrdinal)
+        val seen = follow.onVisible(asked.view.copy(liveVisible = true), true)
+        assertTrue(seen.mayBegin)
         assertFalse(seen.autoAdvance)
     }
 
     @Test
     fun `pill tap then visibility starts reading`() {
-        val held = follow.onQuestion(ChatFollow.View(atBottom = false), 4)
-        val pill = follow.onPill(held.view)
+        val held = ChatFollow.View(atBottom = false, liveOrdinal = 4, holdingOrdinal = 4)
+        val pill = follow.onPill(held)
         assertEquals(ChatFollow.Scroll.TO_LIVE, pill.scroll)
         assertEquals(0, pill.view.holdingOrdinal)
         assertTrue(pill.view.atBottom)
@@ -57,8 +54,8 @@ class ChatFollowTest {
 
     @Test
     fun `scrolling back to the bottom releases the hold`() {
-        val held = follow.onQuestion(ChatFollow.View(atBottom = false), 7)
-        val away = follow.onScroll(held.view, false)
+        val held = ChatFollow.View(atBottom = false, liveOrdinal = 7, holdingOrdinal = 7)
+        val away = follow.onScroll(held, false)
         assertEquals(7, away.view.holdingOrdinal)
         assertEquals(ChatFollow.Scroll.NONE, away.scroll)
         val back = follow.onScroll(away.view, true)
@@ -76,8 +73,8 @@ class ChatFollowTest {
             follow.onQuestion(ChatFollow.View(atBottom = true), 1).view,
             true
         )
-        val held = follow.onQuestion(ChatFollow.View(atBottom = false), 2)
-        for (view in listOf(live.view, held.view)) {
+        val held = ChatFollow.View(atBottom = false, liveOrdinal = 2, holdingOrdinal = 2)
+        for (view in listOf(live.view, held)) {
             val expl = follow.onExplanation(view)
             assertEquals(ChatFollow.Scroll.NONE, expl.scroll)
             assertFalse(expl.movedScroll)
@@ -103,8 +100,8 @@ class ChatFollowTest {
         assertFalse(paused.autoAdvance)
         assertEquals(ChatFollow.Scroll.NONE, paused.scroll)
 
-        val held = follow.onQuestion(ChatFollow.View(atBottom = false), 5)
-        val heldPause = follow.onPause(held.view, true)
+        val held = ChatFollow.View(atBottom = false, liveOrdinal = 5, holdingOrdinal = 5)
+        val heldPause = follow.onPause(held, true)
         assertEquals(5, heldPause.view.holdingOrdinal)
         assertTrue(heldPause.showPill)
         assertFalse(heldPause.mayBegin)
@@ -126,10 +123,10 @@ class ChatFollowTest {
             follow.onQuestion(ChatFollow.View(atBottom = false, silent = true), 3).view,
             true
         )
-        assertFalse(held.mayBegin)
+        assertTrue(held.mayBegin)
         assertFalse(held.maySpeak)
         assertFalse(held.mayStartTiming)
-        assertTrue(held.showPill)
+        assertFalse(held.showPill)
         assertFalse(held.autoAdvance)
     }
 

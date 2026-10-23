@@ -21,6 +21,12 @@ object ScrollAnchor {
         return afterTop - beforeTop
     }
 
+    /**
+     * Pixels to scroll so the question's top sits at [viewportTop].
+     * The same formula covers a short card and a tall one.
+     */
+    fun pinTopDelta(questionTop: Int, viewportTop: Int = 0): Int = questionTop - viewportTop
+
     /** A final, non-streaming update always paints. Tokens share a 100 ms bucket. */
     fun paintNow(nowMs: Long, lastPaintMs: Long, streamingOnly: Boolean): Boolean {
         if (!streamingOnly) return true

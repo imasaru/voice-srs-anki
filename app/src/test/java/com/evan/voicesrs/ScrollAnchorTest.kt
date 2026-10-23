@@ -22,6 +22,15 @@ class ScrollAnchorTest {
     }
 
     @Test
+    fun `advance pins the question top for short and tall cards`() {
+        assertEquals(0, ScrollAnchor.pinTopDelta(questionTop = 0, viewportTop = 0))
+        assertEquals(48, ScrollAnchor.pinTopDelta(questionTop = 48, viewportTop = 0))
+        assertEquals(48, ScrollAnchor.pinTopDelta(questionTop = 48, viewportTop = 0))
+        assertEquals(800, ScrollAnchor.pinTopDelta(questionTop = 800, viewportTop = 0))
+        assertEquals(0, ScrollAnchor.pinTopDelta(questionTop = 12, viewportTop = 12))
+    }
+
+    @Test
     fun `streaming paints coalesce to about 100 milliseconds`() {
         assertEquals(100L, ScrollAnchor.COALESCE_MS)
         assertTrue(ScrollAnchor.paintNow(nowMs = 0L, lastPaintMs = -1L, streamingOnly = true))
