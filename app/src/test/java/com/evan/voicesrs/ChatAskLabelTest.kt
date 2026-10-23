@@ -25,4 +25,10 @@ class ChatAskLabelTest {
         assertEquals("General question · Leaf", ChatAskLabel.general("Leaf"))
         assertEquals("General question", ChatAskLabel.general(""))
     }
+
+    @Test
+    fun `hint is the card hint while a card is up and a general hint otherwise`() {
+        assertEquals("Ask the AI about this card…", ChatAskLabel.hint(true))
+        assertEquals("Ask the AI a general question…", ChatAskLabel.hint(false))
+    }
 }

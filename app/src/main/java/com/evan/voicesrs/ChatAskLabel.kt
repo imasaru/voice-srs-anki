@@ -6,6 +6,13 @@ package com.evan.voicesrs
  * With no card up, [general] names the deck, or just says it is general.
  */
 object ChatAskLabel {
+    const val HINT_CARD = "Ask the AI about this card…"
+    const val HINT_GENERAL = "Ask the AI a general question…"
+
+    /** Hint for the Ask-the-AI composer. Card hint while a card is up, general hint otherwise. */
+    fun hint(hasQuestion: Boolean): String =
+        if (hasQuestion) HINT_CARD else HINT_GENERAL
+
     fun line(label: String, deckName: String): String? {
         val name = label.trim()
         val deck = deckName.trim()

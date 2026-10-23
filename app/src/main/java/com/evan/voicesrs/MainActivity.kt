@@ -591,6 +591,11 @@ class MainActivity : AppCompatActivity() {
                 askAbout.text = askLine
             }
         }
+        val chatInput = findViewById<EditText>(R.id.chatInput)
+        if (chatInput != null) {
+            val next = ChatAskLabel.hint(hasQuestion)
+            if (chatInput.hint?.toString() != next) chatInput.hint = next
+        }
         val controls = AnswerControls.of(
             hasQuestion = hasQuestion,
             answerShown = state.showBack,
