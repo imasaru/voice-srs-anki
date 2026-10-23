@@ -135,6 +135,11 @@
     <string name="silent_switch_sub">No voice: questions and answers are text only</string>
     <string name="chat_new_divider">● New</string>
     <string name="thread_reply">💬 Reply in thread</string>
+    <string name="bookmark_action">Bookmark</string>
+    <string name="bookmark_saved">Bookmarked.</string>
+    <string name="bookmarks_title">Bookmarks</string>
+    <string name="bookmarks_empty">No bookmarks yet.</string>
+    <string name="bookmark_delete">Delete</string>
     <string name="thread_title">Thread</string>
     <string name="thread_hint">Ask about this card</string>
     <string name="thread_send">Send</string>

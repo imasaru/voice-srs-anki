@@ -30,6 +30,28 @@ class ChatPane(
         onThread = { id -> openThread(id) },
         onSpeakSection = { turnId, index, text ->
             PlaybackSpeaker.play(list.context, turnId, index, text)
+        },
+        onBookmark = { turn ->
+            val quote = when (val expl = turn.explanation) {
+                is ExplState.Ready -> expl.text
+                else -> turn.frontText
+            }
+            BookmarkStore.add(
+                list.context.filesDir,
+                Bookmark(
+                    id = 0L,
+                    at = System.currentTimeMillis(),
+                    turnId = turn.turnId,
+                    cardId = turn.cardId,
+                    label = turn.questionLabel,
+                    quote = quote.trim()
+                )
+            )
+            android.widget.Toast.makeText(
+                list.context,
+                list.context.getString(R.string.bookmark_saved),
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
         }
     )
     private val tracker = ReadReceiptTracker(now = { SystemClock.elapsedRealtime() })

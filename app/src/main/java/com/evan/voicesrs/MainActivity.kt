@@ -245,6 +245,12 @@ class MainActivity : AppCompatActivity() {
                 }
                 return true
             }
+            R.id.action_bookmarks -> {
+                if (supportFragmentManager.findFragmentByTag("bookmarks") == null) {
+                    BookmarksSheet().show(supportFragmentManager, "bookmarks")
+                }
+                return true
+            }
         }
         return super.onOptionsItemSelected(item)
     }

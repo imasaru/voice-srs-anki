@@ -22,7 +22,8 @@ class ChatAdapter(
     private val onExplExpanded: (Long) -> Unit,
     private val onRetry: (Long) -> Unit,
     private val onThread: (Long) -> Unit,
-    private val onSpeakSection: (Long, Int, String) -> Unit = { _, _, _ -> }
+    private val onSpeakSection: (Long, Int, String) -> Unit = { _, _, _ -> },
+    private val onBookmark: (ReviewTurn) -> Unit = {}
 ) : ListAdapter<ChatRow, RecyclerView.ViewHolder>(DIFF) {
 
     private val cardOpen = HashSet<Long>()
@@ -109,6 +110,7 @@ class ChatAdapter(
         private val retry: Button = view.findViewById(R.id.explRetry)
         private val explain: Button = view.findViewById(R.id.explAsk)
         private val thread: TextView = view.findViewById(R.id.threadLink)
+        private val bookmark: TextView = view.findViewById(R.id.bookmarkLink)
 
         fun bind(turn: ReviewTurn) {
             val expanded = turn.turnId in cardOpen
@@ -121,6 +123,7 @@ class ChatAdapter(
             ai.setOnClickListener { toggleExpl(turn.turnId) }
             retry.setOnClickListener { onRetry(turn.turnId) }
             thread.setOnClickListener { onThread(turn.turnId) }
+            bookmark.setOnClickListener { onBookmark(turn) }
             val session = DrillUi.state.sessionStartedMs
             val shuffle = shuffleOn(itemView)
             val parsed = QuestionCard.parse(
