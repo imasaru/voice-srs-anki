@@ -130,7 +130,8 @@ object LiveThread {
                     messages = PromptBuilder.hintMessages(shot.front, shot.prior, q, label)
                     system = PromptBuilder.hintSystem()
                 }
-                val text = AiClient().completeChat(
+                val client = AiClient()
+                val text = client.completeChat(
                     baseUrl = cfg.aiBaseUrl,
                     apiKey = cfg.aiApiKey,
                     model = cfg.aiModel,
@@ -147,7 +148,21 @@ object LiveThread {
                         }
                     }
                 }
-                val shown = BubbleModel.visibleExplanation(text, shot.front, shot.back)
+                var shown = BubbleModel.visibleExplanation(text, shot.front, shot.back)
+                if (!shot.screen.revealed) {
+                    val secrets = AnswerLeak.secrets(shot.front, DrillUi.state.correctField)
+                    shown = AnswerLeak.guard(shown, secrets) {
+                        val rewrite = client.completeChat(
+                            baseUrl = cfg.aiBaseUrl,
+                            apiKey = cfg.aiApiKey,
+                            model = cfg.aiModel,
+                            system = system,
+                            messages = messages + PromptBuilder.ChatMsg("user", AnswerLeak.REWRITE),
+                            cancelled = { false }
+                        )
+                        BubbleModel.visibleExplanation(rewrite, shot.front, shot.back)
+                    }
+                }
                 if (shown.isBlank()) {
                     mark(shot.screen, shot.index, ExplState.Error(AiMessages.NO_TEXT, retryable = true))
                 } else {
