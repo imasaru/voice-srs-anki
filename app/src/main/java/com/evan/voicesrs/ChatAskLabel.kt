@@ -1,11 +1,18 @@
 package com.evan.voicesrs
 
+import androidx.annotation.StringRes
+
 /**
  * The grey line above the Ask the AI field.
  * [line] uses the same QUESTION / CARD label as the bubble.
  * With no card up, [general] names the deck, or just says it is general.
  */
 object ChatAskLabel {
+    /** Hint resource for the Ask-the-AI composer. Card hint while a card is up, general hint otherwise. */
+    @StringRes
+    fun hint(hasQuestion: Boolean): Int =
+        if (hasQuestion) R.string.chat_ask_hint else R.string.chat_hint_general
+
     fun line(label: String, deckName: String): String? {
         val name = label.trim()
         val deck = deckName.trim()
