@@ -82,17 +82,19 @@ object QuestionCard {
     }
 
     /**
-     * Letter the answer names, if it names one of [options].
-     * A leading `B` or `B.` wins. Otherwise a single option whose text is contained.
+     * Letter the note's Correct field (or the card back) names, if it names
+     * one of [options]. A bare `B` / `B.` / `B)` wins. Then `Answer B` /
+     * `Correct: B`. Then a single option whose text is contained. A leading
+     * `A` that starts a sentence ("A Spark DataFrame…") is not a letter.
      */
     fun correctLetter(answerPlain: String, options: List<Option>): String? {
         if (options.isEmpty()) return null
         val text = answerPlain.trim()
         if (text.isEmpty()) return null
         val letters = options.map { it.letter }.toSet()
-        val lead = Regex("""^([A-F])\b""").find(text.uppercase())
-        if (lead != null && lead.groupValues[1] in letters) return lead.groupValues[1]
-        val named = Regex("""(?i)\b(?:answer|option|choice)\s*(?:is|:)?\s*([A-F])\b""").find(text)
+        val bare = Regex("""^([A-F])[.)]?\s*$""").find(text.uppercase())
+        if (bare != null && bare.groupValues[1] in letters) return bare.groupValues[1]
+        val named = Regex("""(?i)\b(?:answer|option|choice|correct)\s*(?:is|:)?\s*([A-F])\b""").find(text)
         if (named != null) {
             val letter = named.groupValues[1].uppercase()
             if (letter in letters) return letter
@@ -102,7 +104,23 @@ object QuestionCard {
             val plain = AnkiText.stripHtml(opt.text)
             plain.length >= 3 && lower.contains(plain.lowercase())
         }
-        return if (hits.size == 1) hits[0].letter else null
+        if (hits.size == 1) return hits[0].letter
+        val lead = Regex("""(?s)^([A-F])[.)]\s*(.*)""").find(text.uppercase()) ?: return null
+        val letter = lead.groupValues[1]
+        if (letter !in letters) return null
+        val rest = lead.groupValues[2].trim()
+        if (rest.isEmpty()) return letter
+        val opt = options.first { it.letter == letter }
+        val plain = AnkiText.stripHtml(opt.text).trim()
+        if (plain.isNotEmpty() && rest.lowercase().startsWith(plain.lowercase())) return letter
+        return null
+    }
+
+    /** Prefer the Correct field; fall back to the card back. */
+    fun highlightSource(correctField: String, back: String): String {
+        val field = correctField.trim()
+        if (field.isNotEmpty()) return field
+        return back.trim()
     }
 
     /**

@@ -53,6 +53,9 @@ class LocalQueueTest {
         assertEquals(null, LocalQueueJson.decodeBatch(zero).single().noteId)
         val cards = listOf(OfflineCard(9L, "Q", "A", listOf(1, 3), 42L))
         assertEquals(cards, LocalQueueJson.decodeBatch(LocalQueueJson.encodeBatch(cards)))
+        val withCorrect = listOf(OfflineCard(9L, "Q", "A", listOf(1, 3), 42L, "B"))
+        assertEquals(withCorrect, LocalQueueJson.decodeBatch(LocalQueueJson.encodeBatch(withCorrect)))
+        assertEquals("", LocalQueueJson.decodeBatch(old).single().correct)
     }
 
     @Test

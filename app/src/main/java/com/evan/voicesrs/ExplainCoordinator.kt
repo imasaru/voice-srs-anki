@@ -32,14 +32,15 @@ class ExplainSession private constructor(
             info?.front ?: frontHtml,
             info?.back ?: backHtml,
             transcript,
-            ease
+            ease,
+            info?.correct.orEmpty().ifBlank { DrillUi.state.correctField }
         )
         seen += cardId
     }
 
     fun recordOffline(card: OfflineCard, transcript: String, ease: Int) {
         notes[card.cardId] = card
-        record(card.cardId, card.noteId, card.front, card.back, transcript, ease)
+        record(card.cardId, card.noteId, card.front, card.back, transcript, ease, card.correct)
         seen += card.cardId
     }
 
@@ -93,7 +94,8 @@ class ExplainSession private constructor(
         front: String,
         back: String,
         transcript: String,
-        ease: Int
+        ease: Int,
+        correct: String = ""
     ) {
         val hash = ContentHash.of(PromptBuilder.PROMPT_VERSION, front, back)
         val noteKey = noteId ?: cardId
@@ -112,7 +114,8 @@ class ExplainSession private constructor(
             cachedText = cached,
             aiEnabled = cfg.aiEnabled,
             autoExplain = auto,
-            questionLabel = label
+            questionLabel = label,
+            correctField = correct
         ) ?: return
         attachThread(turn)
         mergeLiveAsks(turn)

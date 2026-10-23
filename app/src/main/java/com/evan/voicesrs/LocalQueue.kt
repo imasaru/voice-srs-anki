@@ -10,7 +10,9 @@ data class OfflineCard(
     val back: String,
     val buttons: List<Int> = listOf(1, 2, 3, 4),
     /** Null on batches written before note ids were stored. */
-    val noteId: Long? = null
+    val noteId: Long? = null,
+    /** Note Correct field. Blank when missing or on batches written before it was stored. */
+    val correct: String = ""
 )
 
 data class PendingGrade(
@@ -84,6 +86,7 @@ object LocalQueueJson {
                 put("back", card.back)
                 put("buttons", buttons)
                 if (card.noteId != null) put("noteId", card.noteId)
+                if (card.correct.isNotBlank()) put("correct", card.correct)
             })
         }
         return JSONObject().put("cards", arr).toString()
@@ -118,7 +121,14 @@ object LocalQueueJson {
             } else {
                 null
             }
-            out += OfflineCard(id, o.optString("front", ""), o.optString("back", ""), parsed, noteId)
+            out += OfflineCard(
+                id,
+                o.optString("front", ""),
+                o.optString("back", ""),
+                parsed,
+                noteId,
+                o.optString("correct", "")
+            )
         }
         return out
     }

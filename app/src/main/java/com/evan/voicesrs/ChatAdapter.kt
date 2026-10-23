@@ -148,7 +148,8 @@ class ChatAdapter(
                 shuffle = shuffle,
                 chosenLetter = chosen,
                 onOption = if (canCorrect) { letter -> offerGradeChange(turn, letter, parsed) } else null,
-                pastEditable = canCorrect
+                pastEditable = canCorrect,
+                correctField = turn.correctField
             )
             if (turn.questionLabel.isNotBlank()) {
                 questionLabel.visibility = View.VISIBLE
@@ -202,7 +203,10 @@ class ChatAdapter(
         private fun offerGradeChange(turn: ReviewTurn, letter: String, parsed: QuestionCard.Parsed) {
             val live = DrillUi.state
             val currentCard = live.drillRunning && live.cardId == turn.cardId && live.frontHtml.isNotBlank()
-            val correct = QuestionCard.correctLetter(turn.backText, parsed.options)
+            val correct = QuestionCard.correctLetter(
+                QuestionCard.highlightSource(turn.correctField, turn.backText),
+                parsed.options
+            )
             val preview = PastGrade.preview(
                 letter,
                 correct,
@@ -312,7 +316,8 @@ class ChatAdapter(
                     sessionStartMs = DrillUi.state.sessionStartedMs,
                     shuffle = shuffleOn(itemView),
                     chosenLetter = row.chosenLetter,
-                    onOption = if (row.showBack) null else { letter -> DrillService.submitLetter(letter) }
+                    onOption = if (row.showBack) null else { letter -> DrillService.submitLetter(letter) },
+                    correctField = row.correctField
                 )
                 if (!mcq) {
                     val stem = QuestionLabel.of(row.front, row.questionOrdinal).stem

@@ -87,4 +87,118 @@ class QuestionCardTest {
         val (letter, _) = QuestionCard.quotedAnswer("b")
         assertEquals("\"B\"", letter)
     }
+
+    @Test
+    fun `Mock Exam 1 Q20 green is B union not A join even when the back repeats the stem`() {
+        val parsed = QuestionCard.parse(q20)
+        assertEquals(listOf("A", "B", "C", "D"), parsed.options.map { it.letter })
+        assertEquals("df1.join(how=full)", parsed.options[0].text)
+        assertEquals("df1.union(df2)", parsed.options[1].text)
+        assertEquals("B", QuestionCard.correctLetter("B", parsed.options))
+        assertEquals("B", QuestionCard.correctLetter("B. df1.union(df2)", parsed.options))
+        assertEquals("B", QuestionCard.highlightSource("B", q20Back))
+        assertEquals(q20Back.trim(), QuestionCard.highlightSource("", q20Back))
+        assertEquals("B", QuestionCard.correctLetter(q20Back, parsed.options))
+        val shown = QuestionCard.withCorrect(parsed, q20Back, revealed = true)
+        assertEquals("B", shown.options.single { it.correct }.letter)
+        assertEquals("df1.union(df2)", shown.options.single { it.correct }.text)
+        assertFalse(shown.options[0].correct)
+    }
+
+    @Test
+    fun `Q021 Correct field B is green when the stem starts with A PIVOT`() {
+        val parsed = QuestionCard.parse(q021)
+        assertEquals("B", QuestionCard.correctLetter("B", parsed.options))
+        assertEquals("B", QuestionCard.correctLetter(q021Back, parsed.options))
+        val shown = QuestionCard.present(parsed, q021Back, revealed = true, chosen = "A")
+        assertEquals("B", shown.options.single { it.correct }.letter)
+        assertEquals("PIVOT", shown.options.single { it.correct }.text)
+        assertTrue(shown.options[0].chosen)
+        assertFalse(shown.options[0].correct)
+    }
+
+    @Test
+    fun `Q025 Correct field C is green when the explanation starts with A common trap`() {
+        val parsed = QuestionCard.parse(q025)
+        assertEquals("C", QuestionCard.correctLetter("C", parsed.options))
+        assertEquals("C", QuestionCard.correctLetter(q025Back, parsed.options))
+        val shown = QuestionCard.withCorrect(parsed, q025Back, revealed = true)
+        assertEquals("C", shown.options.single { it.correct }.letter)
+        assertEquals("OPTIMIZE", shown.options.single { it.correct }.text)
+    }
+
+    @Test
+    fun `scramble keeps green on the original Correct letter not the displayed slot`() {
+        val parsed = QuestionCard.parse(q20)
+        val session = sessionThatMoves(parsed.options)
+        val shuffled = parsed.copy(
+            options = OptionShuffle.order(parsed.options, cardId = 20L, sessionStartMs = session, enabled = true)
+        )
+        assertTrue(shuffled.options.map { it.letter } != listOf("A", "B", "C", "D"))
+        val shown = QuestionCard.present(shuffled, "B", revealed = true, chosen = null)
+        val green = shown.options.single { it.correct }
+        assertEquals("B", green.letter)
+        assertEquals("df1.union(df2)", green.text)
+        assertTrue(shown.options.indexOf(green) != 1 || shuffled.options[1].letter == "B")
+        val fromBack = QuestionCard.present(shuffled, q20Back, revealed = true, chosen = null)
+        assertEquals("B", fromBack.options.single { it.correct }.letter)
+        assertEquals("df1.union(df2)", fromBack.options.single { it.correct }.text)
+        if (fromBack.options[0].letter != "B") {
+            assertFalse(fromBack.options[0].correct)
+        }
+    }
+
+    companion object {
+        private val q20 = """
+            A Spark DataFrame df1 has rows that also appear in df2. Which call keeps every row from both without a join key?
+            A. df1.join(how=full)
+            B. df1.union(df2)
+            C. df1.intersect(df2)
+            D. df1.except(df2)
+        """.trimIndent()
+
+        private val q20Back = """
+            $q20
+            Answer B: df1.union(df2)
+            join(how=full) needs a key and pads missing matches. union stacks rows from both DataFrames.
+        """.trimIndent()
+
+        private val q021 = """
+            A PIVOT query in Databricks SQL rotates which values into columns?
+            A. UNPIVOT
+            B. PIVOT
+            C. STACK
+            D. MELT
+        """.trimIndent()
+
+        private val q021Back = """
+            $q021
+            Answer B: PIVOT
+            PIVOT rotates row values into columns. UNPIVOT does the reverse.
+        """.trimIndent()
+
+        private val q025 = """
+            A Delta table has many small files. Which command rewrites them into larger files?
+            A. VACUUM
+            B. DESCRIBE HISTORY
+            C. OPTIMIZE
+            D. RESTORE
+        """.trimIndent()
+
+        private val q025Back = """
+            A common trap is to VACUUM first.
+            Answer C: OPTIMIZE
+            OPTIMIZE compacts small files. VACUUM removes unreferenced files after a retention period.
+        """.trimIndent()
+
+        private fun sessionThatMoves(options: List<QuestionCard.Option>): Long {
+            var session = 1L
+            while (session < 200L) {
+                val letters = OptionShuffle.order(options, 20L, session, enabled = true).map { it.letter }
+                if (letters != options.map { it.letter }) return session
+                session++
+            }
+            throw AssertionError("expected some session seed to shuffle the options")
+        }
+    }
 }

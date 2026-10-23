@@ -825,6 +825,7 @@ class DrillService : Service(), VoiceIo {
                         chosenLetter = null,
                         suggestedEase = null,
                         questionLabel = "",
+                        correctField = "",
                         chatShowResume = false,
                         chatResumePulse = false,
                         heard = ""
@@ -855,7 +856,13 @@ class DrillService : Service(), VoiceIo {
         runCatching { DrillUi.update { it.copy(engineLabel = label) } }
     }
 
-    private fun showQuestionUi(questionHtml: String, cardIndex: Int, cardId: Long, noteId: Long?) = synchronized(gradeGate) {
+    private fun showQuestionUi(
+        questionHtml: String,
+        cardIndex: Int,
+        cardId: Long,
+        noteId: Long?,
+        correct: String = ""
+    ) = synchronized(gradeGate) {
         synchronized(injectLock) {
             pendingGrades.clear()
             gradeGate.newCard()
@@ -891,7 +898,8 @@ class DrillService : Service(), VoiceIo {
                     suggestedEase = null,
                     thinkSecondsLeft = null,
                     chatPaused = pausedNow,
-                    questionLabel = QuestionLabel.of(questionHtml, ordinal).label
+                    questionLabel = QuestionLabel.of(questionHtml, ordinal).label,
+                    correctField = correct
                 )
             }
         }
@@ -1326,7 +1334,8 @@ class DrillService : Service(), VoiceIo {
                 cfg.listenAttempts,
                 ThinkTime.normalize(cfg.thinkTimeSec),
                 card.cardId,
-                null
+                null,
+                card.correct
             ) {
                 anki.guiShowAnswer()
                 val shown = anki.guiCurrentCard()
@@ -1473,7 +1482,8 @@ class DrillService : Service(), VoiceIo {
                 cfg.listenAttempts,
                 ThinkTime.normalize(cfg.thinkTimeSec),
                 card.cardId,
-                card.noteId
+                card.noteId,
+                card.correct
             ) {
                 Revealed.Answer(card.front, card.back, card.buttons)
             }
@@ -1538,6 +1548,7 @@ class DrillService : Service(), VoiceIo {
         thinkTimeSec: Int,
         cardId: Long,
         noteId: Long?,
+        correct: String = "",
         reveal: () -> Revealed
     ): CardStep {
         activeQuestionHtml = questionHtml
@@ -1548,7 +1559,7 @@ class DrillService : Service(), VoiceIo {
         silentReveal.set(false)
         chosenLetter = null
         if (!awaitChatResume()) return CardStep.Paused
-        showQuestionUi(questionHtml, cardIndex, cardId, noteId)
+        showQuestionUi(questionHtml, cardIndex, cardId, noteId, correct)
         if (!awaitOnScreen(cardIndex + 1)) return CardStep.Paused
         var repeats = 0
         var transcript = ""
@@ -1989,7 +2000,10 @@ class DrillService : Service(), VoiceIo {
         val letter = chosenLetter ?: return
         val plain = BubbleModel.fullQuestion(DrillUi.state.frontHtml).ifBlank { DrillUi.state.frontHtml }
         val parsed = QuestionCard.parse(plain)
-        val answer = AnkiText.stripHtml(DrillUi.state.backHtml)
+        val answer = QuestionCard.highlightSource(
+            DrillUi.state.correctField,
+            AnkiText.stripHtml(DrillUi.state.backHtml)
+        )
         val correct = QuestionCard.correctLetter(answer, parsed.options)
         val ease = TapAnswer.suggestedEase(letter, correct)
         runCatching { DrillUi.update { it.copy(chosenLetter = letter, suggestedEase = ease) } }

@@ -36,10 +36,14 @@ object CardFaceBinder {
         shuffle: Boolean = true,
         chosenLetter: String? = null,
         onOption: ((String) -> Unit)? = null,
-        pastEditable: Boolean = false
+        pastEditable: Boolean = false,
+        correctField: String = ""
     ): Boolean {
         val face = QuestionLabel.of(source, number.coerceAtLeast(1))
-        val answer = AnkiText.stripHtml(answerPlain).ifBlank { answerPlain.trim() }
+        val answer = QuestionCard.highlightSource(
+            AnkiText.stripHtml(correctField).ifBlank { correctField.trim() },
+            AnkiText.stripHtml(answerPlain).ifBlank { answerPlain.trim() }
+        )
         val parsedRaw = QuestionCard.parse(face.stem)
         val ordered = parsedRaw.copy(
             options = OptionShuffle.order(parsedRaw.options, cardId, sessionStartMs, shuffle && parsedRaw.mcq)

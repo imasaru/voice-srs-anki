@@ -184,7 +184,8 @@ class ThreadSheet : BottomSheetDialogFragment() {
             answerPlain = turn.backText,
             cardId = turn.cardId,
             sessionStartMs = DrillUi.state.sessionStartedMs,
-            shuffle = shuffle
+            shuffle = shuffle,
+            correctField = turn.correctField
         )
         if (!mcq) {
             val stem = QuestionLabel.of(turn.frontText, index + 1).stem

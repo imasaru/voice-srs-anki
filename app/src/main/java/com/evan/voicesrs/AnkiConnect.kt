@@ -15,7 +15,9 @@ data class AnkiCard(
     val deckName: String,
     /** Ease values the reviewer currently offers (usually [1,2,3,4]; new/learning cards may offer fewer). */
     val buttons: List<Int>,
-    val cardId: Long = 0
+    val cardId: Long = 0,
+    /** Note Correct field. Blank when the model has no such field. */
+    val correct: String = ""
 )
 
 /**
@@ -118,7 +120,8 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) {
             answerHtml = o.optString("answer", ""),
             deckName = o.optString("deckName", ""),
             buttons = parseButtons(o.optJSONArray("buttons")),
-            cardId = o.optLong("cardId", 0L)
+            cardId = o.optLong("cardId", 0L),
+            correct = AnkiFields.correct(o.optJSONObject("fields"))
         )
     }
 
@@ -158,7 +161,8 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) {
                 front = o.optString("question", ""),
                 back = o.optString("answer", ""),
                 buttons = listOf(1, 2, 3, 4),
-                noteId = noteIdOf(o)
+                noteId = noteIdOf(o),
+                correct = AnkiFields.correct(o.optJSONObject("fields"))
             )
         }
         return out

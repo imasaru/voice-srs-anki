@@ -51,6 +51,8 @@ data class DrillUiState(
     val suggestedEase: Int? = null,
     /** QUESTION N or CARD N for the live card. */
     val questionLabel: String = "",
+    /** Note Correct field for the live card. Blank when the model has no such field. */
+    val correctField: String = "",
     /** Resume is shown while paused; pulsed after a question was sent. */
     val chatShowResume: Boolean = false,
     val chatResumePulse: Boolean = false

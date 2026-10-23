@@ -19,7 +19,9 @@ data class ReviewTurn(
     val followUps: List<FollowUp> = emptyList(),
     val unread: Boolean = false,
     /** QUESTION N or CARD N. Empty on turns recorded before v0.1.19. */
-    val questionLabel: String = ""
+    val questionLabel: String = "",
+    /** Note Correct field. Empty on turns recorded before v0.1.20. */
+    val correctField: String = ""
 )
 
 sealed interface ExplState {
@@ -84,7 +86,8 @@ object ReviewLog {
         cachedText: String?,
         aiEnabled: Boolean,
         autoExplain: Boolean = true,
-        questionLabel: String = ""
+        questionLabel: String = "",
+        correctField: String = ""
     ): ReviewTurn? {
         if (ease == null) return null
         val explanation = when {
@@ -105,7 +108,8 @@ object ReviewLog {
                 ease = ease,
                 explanation = explanation,
                 unread = false,
-                questionLabel = questionLabel
+                questionLabel = questionLabel,
+                correctField = correctField
             )
             turns = turns + created
             created
