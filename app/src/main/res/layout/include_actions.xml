@@ -24,16 +24,6 @@
         android:text="@string/app_stop" />
 
     <Button
-        android:id="@+id/syncButton"
-        style="@style/Widget.Material3.Button.TonalButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:minHeight="52dp"
-        android:text="@string/app_sync"
-        android:visibility="gone" />
-
-    <Button
         android:id="@+id/settingsButton"
         style="@style/Widget.Material3.Button.OutlinedButton"
         android:layout_width="match_parent"

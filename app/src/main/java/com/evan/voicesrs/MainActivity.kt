@@ -65,9 +65,10 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var edgeHealthy: Boolean? = null
     private var edgeProbeGeneration = 0
     private lateinit var syncChip: Chip
+    /** Last pending-sync count applied by [render]; drives menu invalidation. */
+    private var renderedPendingSync = -1
     private lateinit var errorCard: MaterialCardView
     private lateinit var errorText: TextView
-    private lateinit var syncButton: Button
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
     private var showAnswerButton: Button? = null
@@ -76,6 +77,8 @@ class MainActivity : AppCompatActivity() {
     private var switchModel = SwitchBoard.Model(on = false, generation = 0)
     /** Microphone permission request is so a running drill can leave silent mode. */
     private var pendingVoice = false
+    /** A sync is in flight; disables the sync menu action to avoid double taps. */
+    private var syncing = false
 
     private var pendingStatus = ""
     /** Permission request in flight was for a silent start, so RECORD_AUDIO is not required. */
@@ -149,7 +152,6 @@ class MainActivity : AppCompatActivity() {
         syncChip = findViewById(R.id.syncChip)
         errorCard = findViewById(R.id.errorCard)
         errorText = findViewById(R.id.errorText)
-        syncButton = findViewById(R.id.syncButton)
         startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
         showAnswerButton = findViewById(R.id.showAnswerButton)
@@ -157,7 +159,7 @@ class MainActivity : AppCompatActivity() {
         silentSwitch = findViewById(R.id.drillSilentSwitch)
         silentSwitch?.setOnCheckedChangeListener { _, checked -> onSilentSwitch(checked) }
         findViewById<Button>(R.id.retryButton).setOnClickListener { retryDrill() }
-        syncButton.setOnClickListener { syncPending() }
+        syncChip.setOnClickListener { syncPending() }
         chipAgain?.setOnClickListener { if (ratingOpen()) DrillService.submitTestGrade("again") }
         chipHard?.setOnClickListener { if (ratingOpen()) DrillService.submitTestGrade("hard") }
         chipGood?.setOnClickListener { if (ratingOpen()) DrillService.submitTestGrade("good") }
@@ -194,23 +196,36 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        val item = menu.findItem(R.id.action_history) ?: return super.onPrepareOptionsMenu(menu)
-        item.isVisible = findViewById<View>(R.id.chatList) == null
-        val unread = ReviewLog.unreadCount()
-        item.title = if (unread > 0) {
-            getString(R.string.action_history_count, unread)
-        } else {
-            getString(R.string.action_history)
+        menu.findItem(R.id.action_sync)?.apply {
+            isVisible = MenuSync.visible(DrillUi.state.pendingSync, syncing)
+            isEnabled = !syncing
+        }
+        menu.findItem(R.id.action_history)?.apply {
+            isVisible = findViewById<View>(R.id.chatList) == null
+            val unread = ReviewLog.unreadCount()
+            title = if (unread > 0) {
+                getString(R.string.action_history_count, unread)
+            } else {
+                getString(R.string.action_history)
+            }
         }
         return super.onPrepareOptionsMenu(menu)
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId != R.id.action_history) return super.onOptionsItemSelected(item)
-        if (supportFragmentManager.findFragmentByTag("history") == null) {
-            HistorySheet().show(supportFragmentManager, "history")
+        when (item.itemId) {
+            R.id.action_sync -> {
+                syncPending()
+                return true
+            }
+            R.id.action_history -> {
+                if (supportFragmentManager.findFragmentByTag("history") == null) {
+                    HistorySheet().show(supportFragmentManager, "history")
+                }
+                return true
+            }
         }
-        return true
+        return super.onOptionsItemSelected(item)
     }
 
     override fun onStart() {
@@ -436,12 +451,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun syncPending() {
+        if (syncing) return
         val before = GradeSync.pendingCount(filesDir)
         if (before == 0) {
             Toast.makeText(this, getString(R.string.sync_none), Toast.LENGTH_SHORT).show()
             return
         }
-        syncButton.isEnabled = false
+        syncing = true
         val cfg = Prefs.load(this)
         Thread {
             val left = try {
@@ -452,7 +468,8 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
                 DrillUi.update { it.copy(pendingSync = left) }
-                syncButton.isEnabled = true
+                syncing = false
+                invalidateOptionsMenu()
                 val message = if (left == 0) {
                     getString(R.string.sync_done)
                 } else {
@@ -548,13 +565,15 @@ class MainActivity : AppCompatActivity() {
                 progressText.text = progressLine
             }
         }
+        if (MenuSync.shouldInvalidate(renderedPendingSync, state.pendingSync)) {
+            renderedPendingSync = state.pendingSync
+            invalidateOptionsMenu()
+        }
         if (state.pendingSync > 0) {
             syncChip.visibility = View.VISIBLE
             syncChip.text = getString(R.string.pending_sync, state.pendingSync)
-            syncButton.visibility = View.VISIBLE
         } else {
             syncChip.visibility = View.GONE
-            syncButton.visibility = View.GONE
         }
         if (state.showError && state.errorMessage.isNotBlank()) {
             errorCard.visibility = View.VISIBLE

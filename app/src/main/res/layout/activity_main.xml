@@ -277,17 +277,6 @@
                 android:textSize="13sp" />
 
             <Button
-                android:id="@+id/syncButton"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:minHeight="40dp"
-                android:text="@string/app_sync"
-                android:textSize="13sp"
-                android:visibility="gone" />
-
-            <Button
                 android:id="@+id/settingsButton"
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="0dp"
