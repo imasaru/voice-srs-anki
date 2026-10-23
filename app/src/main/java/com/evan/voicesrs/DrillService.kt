@@ -1105,7 +1105,7 @@ class DrillService : Service(), VoiceIo {
                         if (noteChoice(decision.letter)) return chosenLetter
                     }
                     is SpokenLetter.Decision.Unmatched -> {
-                        step.status?.let { showStatus(it) }
+                        runCatching { DrillUi.update { it.copy(heard = decision.heard) } }
                         completed = step.attempts
                         Log.i(TAG, "answer unmatched $completed/$max")
                         if (step.giveUp ||
@@ -1835,7 +1835,7 @@ class DrillService : Service(), VoiceIo {
                                     return ThinkResult.Reveal
                                 }
                                 is SpokenLetter.Decision.Unmatched -> {
-                                    decision.status?.let { showStatus(it) }
+                                    runCatching { DrillUi.update { it.copy(heard = decision.heard) } }
                                     val step = SpokenLetter.advance(decision, letterAttempts, maxAttempts)
                                     letterAttempts = step.attempts
                                     Log.i(TAG, "think unmatched $letterAttempts/$maxAttempts")
@@ -2513,7 +2513,7 @@ class DrillService : Service(), VoiceIo {
     private fun postStatusNotice(text: String) {
         if (text.isBlank()) return
         if (DrillNotice.route(text) != DrillNotice.Sink.STATUS) return
-        runCatching { DrillUi.update { it.copy(status = text, heard = "") } }
+        runCatching { DrillUi.update { it.copy(status = text) } }
     }
 
     private fun postMicWarning(error: Int?, unavailable: Boolean, speakIt: Boolean) {
@@ -2529,13 +2529,10 @@ class DrillService : Service(), VoiceIo {
         val fault = consumeMicFault()
         if (sessionSilent || stopRequested.get() || fault) return result
         listenHealth.recordHeard(result)
+        runCatching { DrillUi.update { it.copy(heard = result.orEmpty()) } }
         val speed = try { Prefs.load(this).speedMode } catch (_: Exception) { false }
-        if (verboseHearBack && !speed) {
-            val line = if (result.isNullOrBlank()) "I heard nothing." else "I heard: $result"
-            postStatusNotice(line)
-            speak(line)
-        } else if (speed) {
-            runCatching { DrillUi.update { it.copy(heard = "") } }
+        if (verboseHearBack && !speed && !result.isNullOrBlank()) {
+            speak("I heard: $result")
         }
         return result
     }

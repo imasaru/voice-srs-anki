@@ -360,8 +360,14 @@ class ChatAdapter(
                     answerFooter.text = ""
                 }
             }
-            heard.visibility = View.GONE
-            heard.text = ""
+            val heardLine = InfoCard.heardLine(row.heard)
+            if (row.heard.isBlank()) {
+                heard.visibility = View.GONE
+                heard.text = ""
+            } else {
+                heard.visibility = View.VISIBLE
+                heard.text = heardLine
+            }
             showAnswer.visibility = if (row.showAnswer) View.VISIBLE else View.GONE
             showAnswer.setOnClickListener { DrillService.submitShowAnswer() }
             chips.visibility = if (row.rating) View.VISIBLE else View.GONE

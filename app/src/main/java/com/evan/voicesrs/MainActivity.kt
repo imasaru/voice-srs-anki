@@ -534,7 +534,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun render(state: DrillUiState) {
         val cfg = Prefs.load(this)
-        crossfadeStatus(state.status.ifBlank { getString(R.string.state_ready) })
+        val drillingNow = state.drillRunning || DrillService.running
+        crossfadeStatus(
+            InfoCard.compose(state.heard, state.status, drillingNow)
+                .ifBlank { getString(R.string.state_ready) }
+        )
         val frontView = cardFront
         val backView = cardBack
         val card = currentCard
