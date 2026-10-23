@@ -48,6 +48,7 @@
     <string name="settings_listen_wait_choice">%1$d seconds</string>
     <string name="settings_end_silence_choice">%1$d ms</string>
     <string name="settings_refresh_decks">Refresh</string>
+    <string name="settings_refresh_decks_desc">Refresh decks</string>
     <string name="settings_decks_loading">Loading decks…</string>
     <string name="settings_decks_failed">Couldn\'t load decks. Type a name.</string>
     <string name="settings_engine">TTS engine</string>

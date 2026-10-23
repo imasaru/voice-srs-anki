@@ -302,13 +302,23 @@
                                 android:textAppearance="?attr/textAppearanceBodyLarge" />
                         </com.google.android.material.textfield.TextInputLayout>
 
-                        <Button
+                        <com.google.android.material.button.MaterialButton
                             android:id="@+id/refreshDecksButton"
-                            style="@style/Widget.Material3.Button.TonalButton"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:text="@string/settings_refresh_decks" />
+                            style="@style/Widget.Material3.Button.IconButton"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:layout_marginStart="4dp"
+                            android:contentDescription="@string/settings_refresh_decks_desc"
+                            app:icon="@drawable/ic_refresh"
+                            app:iconGravity="textStart"
+                            app:iconPadding="0dp"
+                            app:iconSize="24dp"
+                            app:iconTint="?attr/colorOnSurfaceVariant"
+                            android:insetLeft="0dp"
+                            android:insetRight="0dp"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:padding="12dp" />
                     </LinearLayout>
 
                     <TextView
@@ -764,7 +774,13 @@
                             app:icon="@drawable/ic_refresh"
                             app:iconGravity="textStart"
                             app:iconPadding="0dp"
-                            app:iconTint="?attr/colorOnSurfaceVariant" />
+                            app:iconSize="24dp"
+                            app:iconTint="?attr/colorOnSurfaceVariant"
+                            android:insetLeft="0dp"
+                            android:insetRight="0dp"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:padding="12dp" />
                     </LinearLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
