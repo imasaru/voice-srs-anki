@@ -8,6 +8,8 @@ import org.json.JSONObject
  */
 object AnkiFields {
     const val CORRECT = "Correct"
+    const val MEMO_FRONT = "MemoFront"
+    const val MEMO_BACK = "MemoBack"
 
     fun value(fields: JSONObject?, name: String): String {
         if (fields == null || name.isBlank() || !fields.has(name)) return ""

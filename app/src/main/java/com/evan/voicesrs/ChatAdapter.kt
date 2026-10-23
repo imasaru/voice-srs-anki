@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
@@ -310,6 +311,9 @@ class ChatAdapter(
         private val hard: Chip = view.findViewById(R.id.chatChipHard)
         private val good: Chip = view.findViewById(R.id.chatChipGood)
         private val easy: Chip = view.findViewById(R.id.chatChipEasy)
+        private val memoHint: TextView = view.findViewById(R.id.liveMemoHint)
+        private val memoFront: EditText = view.findViewById(R.id.liveMemoFront)
+        private val memoBack: EditText = view.findViewById(R.id.liveMemoBack)
 
         fun bind(row: ChatRow.Live) {
             if (!row.revealText) {
@@ -363,6 +367,7 @@ class ChatAdapter(
                     answerFooter.text = ""
                 }
             }
+            bindMemos(row)
             val heardLine = InfoCard.heardLine(row.heard)
             if (row.heard.isBlank()) {
                 heard.visibility = View.GONE
@@ -383,6 +388,30 @@ class ChatAdapter(
             good.setOnClickListener { DrillService.submitTestGrade("good") }
             easy.setOnClickListener { DrillService.submitTestGrade("easy") }
             bindFollows(row.followUps)
+        }
+
+        private fun bindMemos(row: ChatRow.Live) {
+            if (!row.memoAvailable) {
+                memoFront.visibility = View.GONE
+                memoBack.visibility = View.GONE
+                memoHint.visibility = if (row.memoHint) View.VISIBLE else View.GONE
+                memoHint.text = if (row.memoHint) CardMemo.MISSING_HINT else ""
+                return
+            }
+            memoHint.visibility = View.GONE
+            memoFront.visibility = View.VISIBLE
+            if (memoFront.text.toString() != row.memoFront) memoFront.setText(row.memoFront)
+            val showBack = CardMemo.showsBack(row.showBack)
+            memoBack.visibility = if (showBack) View.VISIBLE else View.GONE
+            if (showBack && memoBack.text.toString() != row.memoBack) memoBack.setText(row.memoBack)
+            val commit = {
+                val front = memoFront.text.toString()
+                val back = memoBack.text.toString()
+                DrillUi.update { it.copy(memoFront = front, memoBack = back) }
+                MemoSaver.save(itemView.context, row.noteId, row.cardId, front, back)
+            }
+            memoFront.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) commit() }
+            memoBack.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) commit() }
         }
 
         private fun bindFollows(items: List<FollowUp>) {

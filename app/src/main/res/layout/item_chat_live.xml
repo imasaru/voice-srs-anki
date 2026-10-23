@@ -44,6 +44,40 @@
             android:visibility="gone" />
 
         <TextView
+            android:id="@+id/liveMemoHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/memo_missing_hint"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone" />
+
+        <EditText
+            android:id="@+id/liveMemoFront"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="top"
+            android:hint="@string/memo_front_hint"
+            android:inputType="textMultiLine"
+            android:minHeight="48dp"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:visibility="gone" />
+
+        <EditText
+            android:id="@+id/liveMemoBack"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="top"
+            android:hint="@string/memo_back_hint"
+            android:inputType="textMultiLine"
+            android:minHeight="48dp"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:visibility="gone" />
+
+        <TextView
             android:id="@+id/liveAnswer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

@@ -12,7 +12,11 @@ data class OfflineCard(
     /** Null on batches written before note ids were stored. */
     val noteId: Long? = null,
     /** Note Correct field. Blank when missing or on batches written before it was stored. */
-    val correct: String = ""
+    val correct: String = "",
+    val memoFront: String = "",
+    val memoBack: String = "",
+    val memoAvailable: Boolean = false,
+    val memoHint: Boolean = false
 )
 
 data class PendingGrade(
@@ -87,6 +91,10 @@ object LocalQueueJson {
                 put("buttons", buttons)
                 if (card.noteId != null) put("noteId", card.noteId)
                 if (card.correct.isNotBlank()) put("correct", card.correct)
+                if (card.memoFront.isNotBlank()) put("memoFront", card.memoFront)
+                if (card.memoBack.isNotBlank()) put("memoBack", card.memoBack)
+                put("memoAvailable", card.memoAvailable)
+                put("memoHint", card.memoHint)
             })
         }
         return JSONObject().put("cards", arr).toString()
@@ -127,7 +135,11 @@ object LocalQueueJson {
                 o.optString("back", ""),
                 parsed,
                 noteId,
-                o.optString("correct", "")
+                o.optString("correct", ""),
+                o.optString("memoFront", ""),
+                o.optString("memoBack", ""),
+                o.optBoolean("memoAvailable", false),
+                o.optBoolean("memoHint", false)
             )
         }
         return out

@@ -140,6 +140,9 @@
     <string name="bookmarks_title">Bookmarks</string>
     <string name="bookmarks_empty">No bookmarks yet.</string>
     <string name="bookmark_delete">Delete</string>
+    <string name="memo_front_hint">Memo (front)</string>
+    <string name="memo_back_hint">Memo (back, after reveal)</string>
+    <string name="memo_missing_hint">This note type has no MemoFront/MemoBack fields.</string>
     <string name="thread_title">Thread</string>
     <string name="thread_hint">Ask about this card</string>
     <string name="thread_send">Send</string>

@@ -32,7 +32,12 @@ sealed class ChatRow {
         val suggestedEase: Int? = null,
         val followUps: List<FollowUp> = emptyList(),
         val questionLabel: String = "",
-        val correctField: String = ""
+        val correctField: String = "",
+        val noteId: Long? = null,
+        val memoFront: String = "",
+        val memoBack: String = "",
+        val memoAvailable: Boolean = false,
+        val memoHint: Boolean = false
     ) : ChatRow() {
         override val key: String = "live"
     }
@@ -92,7 +97,12 @@ object ChatFeed {
             suggestedEase = if (buttons && controls.rating) state.suggestedEase else null,
             followUps = liveFollowUps,
             questionLabel = state.questionLabel,
-            correctField = state.correctField
+            correctField = state.correctField,
+            noteId = state.noteId,
+            memoFront = state.memoFront,
+            memoBack = state.memoBack,
+            memoAvailable = state.memoAvailable,
+            memoHint = state.memoHint
         )
         return out
     }

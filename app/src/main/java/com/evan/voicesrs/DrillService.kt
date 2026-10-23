@@ -826,6 +826,11 @@ class DrillService : Service(), VoiceIo {
                         suggestedEase = null,
                         questionLabel = "",
                         correctField = "",
+                        noteId = null,
+                        memoFront = "",
+                        memoBack = "",
+                        memoAvailable = false,
+                        memoHint = false,
                         chatShowResume = false,
                         chatResumePulse = false,
                         heard = ""
@@ -861,7 +866,11 @@ class DrillService : Service(), VoiceIo {
         cardIndex: Int,
         cardId: Long,
         noteId: Long?,
-        correct: String = ""
+        correct: String = "",
+        memoFront: String = "",
+        memoBack: String = "",
+        memoAvailable: Boolean = false,
+        memoHint: Boolean = false
     ) = synchronized(gradeGate) {
         synchronized(injectLock) {
             pendingGrades.clear()
@@ -899,7 +908,12 @@ class DrillService : Service(), VoiceIo {
                     thinkSecondsLeft = null,
                     chatPaused = pausedNow,
                     questionLabel = QuestionLabel.of(questionHtml, ordinal).label,
-                    correctField = correct
+                    correctField = correct,
+                    noteId = noteId,
+                    memoFront = memoFront,
+                    memoBack = memoBack,
+                    memoAvailable = memoAvailable,
+                    memoHint = memoHint
                 )
             }
         }
@@ -1349,8 +1363,12 @@ class DrillService : Service(), VoiceIo {
                 cfg.listenAttempts,
                 ThinkTime.normalize(cfg.thinkTimeSec),
                 card.cardId,
-                null,
-                card.correct
+                card.noteId,
+                card.correct,
+                card.memoFront,
+                card.memoBack,
+                card.memoAvailable,
+                card.memoHint
             ) {
                 anki.guiShowAnswer()
                 val shown = anki.guiCurrentCard()
@@ -1499,7 +1517,11 @@ class DrillService : Service(), VoiceIo {
                 ThinkTime.normalize(cfg.thinkTimeSec),
                 card.cardId,
                 card.noteId,
-                card.correct
+                card.correct,
+                card.memoFront,
+                card.memoBack,
+                card.memoAvailable,
+                card.memoHint
             ) {
                 Revealed.Answer(card.front, card.back, card.buttons)
             }
@@ -1566,6 +1588,10 @@ class DrillService : Service(), VoiceIo {
         cardId: Long,
         noteId: Long?,
         correct: String = "",
+        memoFront: String = "",
+        memoBack: String = "",
+        memoAvailable: Boolean = false,
+        memoHint: Boolean = false,
         reveal: () -> Revealed
     ): CardStep {
         activeQuestionHtml = questionHtml
@@ -1576,7 +1602,17 @@ class DrillService : Service(), VoiceIo {
         silentReveal.set(false)
         chosenLetter = null
         if (!awaitChatResume()) return CardStep.Paused
-        showQuestionUi(questionHtml, cardIndex, cardId, noteId, correct)
+        showQuestionUi(
+            questionHtml,
+            cardIndex,
+            cardId,
+            noteId,
+            correct,
+            memoFront,
+            memoBack,
+            memoAvailable,
+            memoHint
+        )
         if (!awaitOnScreen(cardIndex + 1)) return CardStep.Paused
         var repeats = 0
         var transcript = ""

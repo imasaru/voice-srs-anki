@@ -53,6 +53,11 @@ data class DrillUiState(
     val questionLabel: String = "",
     /** Note Correct field for the live card. Blank when the model has no such field. */
     val correctField: String = "",
+    val noteId: Long? = null,
+    val memoFront: String = "",
+    val memoBack: String = "",
+    val memoAvailable: Boolean = false,
+    val memoHint: Boolean = false,
     /** Resume is shown while paused; pulsed after a question was sent. */
     val chatShowResume: Boolean = false,
     val chatResumePulse: Boolean = false

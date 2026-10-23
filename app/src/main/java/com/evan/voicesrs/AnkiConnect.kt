@@ -17,7 +17,12 @@ data class AnkiCard(
     val buttons: List<Int>,
     val cardId: Long = 0,
     /** Note Correct field. Blank when the model has no such field. */
-    val correct: String = ""
+    val correct: String = "",
+    val noteId: Long? = null,
+    val memoFront: String = "",
+    val memoBack: String = "",
+    val memoAvailable: Boolean = false,
+    val memoHint: Boolean = false
 )
 
 /**
@@ -115,13 +120,20 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) {
         } ?: return null
         if (r == JSONObject.NULL || r == false) return null
         val o = r as JSONObject
+        val fields = o.optJSONObject("fields")
+        val memos = CardMemo.of(fields)
         return AnkiCard(
             questionHtml = o.optString("question", ""),
             answerHtml = o.optString("answer", ""),
             deckName = o.optString("deckName", ""),
             buttons = parseButtons(o.optJSONArray("buttons")),
             cardId = o.optLong("cardId", 0L),
-            correct = AnkiFields.correct(o.optJSONObject("fields"))
+            correct = AnkiFields.correct(fields),
+            noteId = noteIdOf(o),
+            memoFront = memos.front,
+            memoBack = memos.back,
+            memoAvailable = memos.available,
+            memoHint = memos.showHint
         )
     }
 
@@ -156,13 +168,19 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) {
             val o = r.optJSONObject(i) ?: continue
             val id = o.optLong("cardId", 0L)
             if (id == 0L) continue
+            val fields = o.optJSONObject("fields")
+            val memos = CardMemo.of(fields)
             out += OfflineCard(
                 cardId = id,
                 front = o.optString("question", ""),
                 back = o.optString("answer", ""),
                 buttons = listOf(1, 2, 3, 4),
                 noteId = noteIdOf(o),
-                correct = AnkiFields.correct(o.optJSONObject("fields"))
+                correct = AnkiFields.correct(fields),
+                memoFront = memos.front,
+                memoBack = memos.back,
+                memoAvailable = memos.available,
+                memoHint = memos.showHint
             )
         }
         return out
@@ -197,6 +215,25 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) {
             if (id != 0L) ids += id
         }
         return ids
+    }
+
+    fun cardsToNotes(ids: List<Long>): List<Long> {
+        if (ids.isEmpty()) return emptyList()
+        val r = post("cardsToNotes", mapOf("cards" to ids)) as? JSONArray ?: return emptyList()
+        val out = ArrayList<Long>(r.length())
+        for (i in 0 until r.length()) {
+            val id = r.optLong(i, 0L)
+            if (id != 0L) out += id
+        }
+        return out
+    }
+
+    fun updateNoteFields(noteId: Long, fields: Map<String, String>) {
+        if (noteId == 0L || fields.isEmpty()) return
+        val fieldObj = JSONObject()
+        for ((name, value) in fields) fieldObj.put(name, value)
+        val note = JSONObject().put("id", noteId).put("fields", fieldObj)
+        post("updateNoteFields", mapOf("note" to note))
     }
 
     /** Number of cards due now in the named deck. */
