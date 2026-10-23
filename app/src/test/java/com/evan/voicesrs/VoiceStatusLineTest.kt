@@ -43,5 +43,9 @@ class VoiceStatusLineTest {
             VoiceStatusLine.headerLine("Done 4 · Left 16 · Streak 3 · ~8 min", voice)
         )
         assertEquals(voice, VoiceStatusLine.headerLine("", voice))
+        assertEquals(
+            "Done 4 · Left 16 · Goal 20 cards · $voice",
+            VoiceStatusLine.headerLine("Done 4 · Left 16 · Streak 3", voice, "Goal 20 cards")
+        )
     }
 }

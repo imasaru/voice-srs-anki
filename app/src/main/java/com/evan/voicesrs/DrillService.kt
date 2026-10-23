@@ -1246,6 +1246,21 @@ class DrillService : Service(), VoiceIo {
         }
     }
 
+    private fun afterGradePause(cfg: AnkiConfig) {
+        val wait = HandsFree.waitAfterGrade(cfg.handsFree, cfg.handsFreeReady)
+        val ms = HandsFree.waitMs(wait)
+        if (ms <= 0L || stopRequested.get()) return
+        HandsFree.spokenFor(wait)?.let { speak(it) }
+        val until = SystemClock.elapsedRealtime() + ms
+        while (!stopRequested.get() && SystemClock.elapsedRealtime() < until) {
+            if (chatPaused.get()) {
+                if (!awaitChatResume()) return
+                continue
+            }
+            SystemClock.sleep(200)
+        }
+    }
+
     private fun finishGoal(progress: SessionProgress, startedElapsed: Long) {
         val summary = progress.spokenSummary(SystemClock.elapsedRealtime() - startedElapsed)
         Log.i(TAG, "goal reached")
@@ -1420,6 +1435,7 @@ class DrillService : Service(), VoiceIo {
                         publish(progress, store)
                         Log.i(TAG, "graded ease=${step.ease}")
                         runCatching { explainSession?.prefetchOnline(anki) }
+                        afterGradePause(cfg)
                     }
                 }
             }
@@ -1512,6 +1528,7 @@ class DrillService : Service(), VoiceIo {
                     publish(progress, store)
                     Log.i(TAG, "queued ease=${step.ease}")
                     runCatching { explainSession?.prefetchOffline(cards, index) }
+                    afterGradePause(cfg)
                 }
             }
         }

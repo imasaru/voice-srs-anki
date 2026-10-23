@@ -72,4 +72,16 @@ class SessionProgressTest {
         assertEquals(line, SessionProgress.visibleLine(true, line))
         assertEquals("", SessionProgress.visibleLine(true, ""))
     }
+
+    @Test
+    fun `goal label shows cards or minutes and is blank when off`() {
+        assertEquals("", SessionProgress.goalLabel(GoalModes.OFF, 20, 10))
+        assertEquals("Goal 20 cards", SessionProgress.goalLabel(GoalModes.CARDS, 20, 10))
+        assertEquals("Goal 10 min", SessionProgress.goalLabel(GoalModes.MINUTES, 20, 10))
+        assertEquals(
+            "Done 1 · Left 11 · Streak 1 · Goal 20 cards",
+            SessionProgress.withGoal("Done 1 · Left 11 · Streak 1", "Goal 20 cards")
+        )
+        assertEquals("Goal 20 cards", SessionProgress.withGoal("", "Goal 20 cards"))
+    }
 }

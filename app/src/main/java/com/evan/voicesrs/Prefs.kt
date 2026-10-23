@@ -37,6 +37,10 @@ data class AnkiConfig(
     val shuffleOptions: Boolean = true,
     /** Tap-only review. Read once at session start. The microphone stays closed. */
     val silentMode: Boolean = false,
+    /** After a grade, go to the next card without waiting. */
+    val handsFree: Boolean = HandsFree.SETTING_DEFAULT,
+    /** Speak "Ready?" before the next card when hands-free is on. */
+    val handsFreeReady: Boolean = HandsFree.READY_DEFAULT,
     /** Fetch a batch and grade locally. Off by default. */
     val offlineBatch: Boolean = false,
     val offlineBatchSize: Int = 20,
@@ -85,6 +89,8 @@ object Prefs {
     private const val KEY_HIGHLIGHT_SENTENCE = "highlight_sentence"
     private const val KEY_SHUFFLE = "shuffle_options"
     private const val KEY_SILENT = "silent_mode"
+    private const val KEY_HANDS_FREE = "hands_free"
+    private const val KEY_HANDS_FREE_READY = "hands_free_ready"
     private const val KEY_OFFLINE = "offline_batch"
     private const val KEY_BATCH_SIZE = "offline_batch_size"
     private const val KEY_GOAL_MODE = "goal_mode"
@@ -184,6 +190,8 @@ object Prefs {
             .putBoolean(KEY_HIGHLIGHT_SENTENCE, cfg.highlightSentence)
             .putBoolean(KEY_SHUFFLE, cfg.shuffleOptions)
             .putBoolean(KEY_SILENT, cfg.silentMode)
+            .putBoolean(KEY_HANDS_FREE, cfg.handsFree)
+            .putBoolean(KEY_HANDS_FREE_READY, cfg.handsFreeReady)
             .putBoolean(KEY_OFFLINE, cfg.offlineBatch)
             .putInt(KEY_BATCH_SIZE, cfg.offlineBatchSize.coerceIn(DrillSettings.MIN_BATCH, DrillSettings.MAX_BATCH))
             .putString(KEY_GOAL_MODE, GoalModes.normalize(cfg.goalMode))
@@ -255,6 +263,8 @@ object Prefs {
             highlightSentence = p.getBoolean(KEY_HIGHLIGHT_SENTENCE, HighlightSentence.SETTING_DEFAULT),
             shuffleOptions = p.getBoolean(KEY_SHUFFLE, true),
             silentMode = p.getBoolean(KEY_SILENT, false),
+            handsFree = p.getBoolean(KEY_HANDS_FREE, HandsFree.SETTING_DEFAULT),
+            handsFreeReady = p.getBoolean(KEY_HANDS_FREE_READY, HandsFree.READY_DEFAULT),
             offlineBatch = p.getBoolean(KEY_OFFLINE, false),
             offlineBatchSize = p.getInt(KEY_BATCH_SIZE, DEFAULT_BATCH_SIZE)
                 .coerceIn(DrillSettings.MIN_BATCH, DrillSettings.MAX_BATCH),

@@ -81,5 +81,18 @@ class SessionProgress(val dueAtStart: Int) {
          */
         fun visibleLine(running: Boolean, line: String): String =
             if (running) line else ""
+
+        fun goalLabel(mode: String, goalCards: Int, goalMinutes: Int): String {
+            return when (GoalModes.normalize(mode)) {
+                GoalModes.CARDS -> "Goal $goalCards cards"
+                GoalModes.MINUTES -> "Goal $goalMinutes min"
+                else -> ""
+            }
+        }
+
+        fun withGoal(line: String, goal: String): String {
+            val parts = listOf(line.trim(), goal.trim()).filter { it.isNotEmpty() }
+            return parts.joinToString(" · ")
+        }
     }
 }

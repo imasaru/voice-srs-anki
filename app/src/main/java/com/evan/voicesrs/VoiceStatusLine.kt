@@ -56,9 +56,9 @@ object VoiceStatusLine {
         return listOfNotNull(done, left).joinToString(" · ")
     }
 
-    /** Narrow header: counts, when a drill is running, then the voice line. */
-    fun headerLine(progressLine: String, voiceLine: String): String {
-        return listOf(compactCounts(progressLine), voiceLine.trim())
+    /** Narrow header: counts, session goal, then the voice line. */
+    fun headerLine(progressLine: String, voiceLine: String, goalLine: String = ""): String {
+        return listOf(compactCounts(progressLine), goalLine.trim(), voiceLine.trim())
             .filter { it.isNotBlank() }
             .joinToString(" · ")
     }

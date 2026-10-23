@@ -159,6 +159,29 @@
                         android:text="@string/settings_goal_help"
                         android:textAppearance="?attr/textAppearanceBodySmall" />
 
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/handsFreeSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:minHeight="48dp"
+                        android:text="@string/settings_hands_free"
+                        android:textAppearance="?attr/textAppearanceBodyLarge" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_hands_free_help"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/handsFreeReadySwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="48dp"
+                        android:text="@string/settings_hands_free_ready"
+                        android:textAppearance="?attr/textAppearanceBodyLarge" />
+
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"

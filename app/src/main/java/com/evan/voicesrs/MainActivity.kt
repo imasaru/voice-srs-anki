@@ -576,18 +576,20 @@ class MainActivity : AppCompatActivity() {
         }
         val progressLine = SessionProgress.visibleLine(DrillService.running, state.progressLine)
         val voice = currentVoiceLine(cfg, state)
+        val goal = SessionProgress.goalLabel(cfg.goalMode, cfg.goalCards, cfg.goalMinutes)
         val meta = headerMeta
         if (meta != null) {
-            meta.text = VoiceStatusLine.headerLine(progressLine, voice)
+            meta.text = VoiceStatusLine.headerLine(progressLine, voice, goal)
             progressText.visibility = View.GONE
         } else {
             voiceLineView?.text = voice
             voiceLineView?.visibility = View.VISIBLE
-            if (progressLine.isBlank()) {
+            val shown = SessionProgress.withGoal(progressLine, goal)
+            if (shown.isBlank()) {
                 progressText.visibility = View.GONE
             } else {
                 progressText.visibility = View.VISIBLE
-                progressText.text = progressLine
+                progressText.text = shown
             }
         }
         if (MenuSync.shouldInvalidate(renderedPendingSync, state.pendingSync)) {

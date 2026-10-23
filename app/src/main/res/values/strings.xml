@@ -88,6 +88,9 @@
     <string name="settings_goal_minutes">Minutes</string>
     <string name="settings_goal_amount">Goal amount</string>
     <string name="settings_goal_help">Off by default. Cards: stop after this many grades. Minutes: stop after this many minutes. Voice SRS then speaks a summary.</string>
+    <string name="settings_hands_free">Hands-free auto-advance</string>
+    <string name="settings_hands_free_help">After a grade, go to the next card. Turn off to wait until you say next.</string>
+    <string name="settings_hands_free_ready">Say Ready? before the next card</string>
     <string name="state_ready">Ready</string>
     <string name="card_idle">The card will appear here when the drill starts.</string>
     <string name="card_front_label">Question</string>
