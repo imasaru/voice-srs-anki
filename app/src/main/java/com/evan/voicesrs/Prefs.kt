@@ -62,7 +62,9 @@ data class AnkiConfig(
     /** Ease values (1–4) that generate an explanation after a grade. */
     val autoExplainEases: Set<Int> = AutoExplain.DEFAULT,
     /** Wrap detected code on card faces. Display only. */
-    val detectCode: Boolean = true
+    val detectCode: Boolean = true,
+    /** Deck for AI-generated Basic notes. */
+    val generatedDeck: String = MakeCard.DEFAULT_DECK
 )
 
 /** SharedPreferences-backed settings. The API key and neural token live in encrypted prefs. */
@@ -105,6 +107,7 @@ object Prefs {
     private const val KEY_AUTO_EXPLAIN_EASES = "auto_explain_eases"
     private const val KEY_AUTO_EXPLAIN = "auto_explain"
     private const val KEY_DETECT_CODE = "detect_code"
+    private const val KEY_GENERATED_DECK = "generated_deck"
 
     const val DEFAULT_URL = "http://192.0.2.10:8765"
     const val DEFAULT_DECK = "VoiceSRS-Test"
@@ -204,6 +207,7 @@ object Prefs {
             .putBoolean(KEY_AI_BATCH, cfg.aiBatch)
             .putString(KEY_AUTO_EXPLAIN_EASES, AutoExplain.encode(cfg.autoExplainEases))
             .putBoolean(KEY_DETECT_CODE, cfg.detectCode)
+            .putString(KEY_GENERATED_DECK, cfg.generatedDeck.ifBlank { MakeCard.DEFAULT_DECK })
             .remove(KEY_AUTO_EXPLAIN)
             .remove(KEY_API_KEY)
             .remove(KEY_NEURAL_TOKEN)
@@ -280,7 +284,9 @@ object Prefs {
                 stored = if (p.contains(KEY_AUTO_EXPLAIN_EASES)) p.getString(KEY_AUTO_EXPLAIN_EASES, null) else null,
                 legacy = if (p.contains(KEY_AUTO_EXPLAIN)) p.getBoolean(KEY_AUTO_EXPLAIN, true) else null
             ),
-            detectCode = p.getBoolean(KEY_DETECT_CODE, CodeDetect.SETTING_DEFAULT)
+            detectCode = p.getBoolean(KEY_DETECT_CODE, CodeDetect.SETTING_DEFAULT),
+            generatedDeck = p.getString(KEY_GENERATED_DECK, MakeCard.DEFAULT_DECK).orEmpty()
+                .ifBlank { MakeCard.DEFAULT_DECK }
         )
     }
 

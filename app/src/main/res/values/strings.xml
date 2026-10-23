@@ -167,6 +167,15 @@
     <string name="answer_rating_label">YOUR ANSWER · RATING</string>
     <string name="section_ai">AI explanations</string>
     <string name="settings_ai_enable">Explain cards</string>
+    <string name="settings_generated_deck">Generated cards deck</string>
+    <string name="make_card">Make a card</string>
+    <string name="make_card_add">Add</string>
+    <string name="make_card_cancel">Cancel</string>
+    <string name="make_card_front">Front</string>
+    <string name="make_card_back">Back</string>
+    <string name="make_card_added">Card added.</string>
+    <string name="make_card_failed">Could not add the card.</string>
+    <string name="make_card_drafting">Drafting…</string>
     <string name="settings_ai_url">Model server URL</string>
     <string name="settings_ai_model">Model</string>
     <string name="settings_ai_model_refresh">Refresh models</string>

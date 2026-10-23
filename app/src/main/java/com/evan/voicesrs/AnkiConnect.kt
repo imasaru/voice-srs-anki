@@ -228,6 +228,25 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) {
         return out
     }
 
+    fun addNote(
+        deckName: String,
+        modelName: String,
+        fields: Map<String, String>,
+        tags: List<String>
+    ): Long {
+        val fieldObj = JSONObject()
+        for ((name, value) in fields) fieldObj.put(name, value)
+        val tagArr = JSONArray()
+        for (tag in tags) tagArr.put(tag)
+        val note = JSONObject()
+            .put("deckName", deckName)
+            .put("modelName", modelName)
+            .put("fields", fieldObj)
+            .put("tags", tagArr)
+        val r = post("addNote", mapOf("note" to note))
+        return (r as? Number)?.toLong() ?: 0L
+    }
+
     fun updateNoteFields(noteId: Long, fields: Map<String, String>) {
         if (noteId == 0L || fields.isEmpty()) return
         val fieldObj = JSONObject()

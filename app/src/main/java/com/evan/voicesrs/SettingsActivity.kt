@@ -529,6 +529,7 @@ class SettingsActivity : AppCompatActivity() {
         track(neuralUrlView) { commitNeuralUrl() }
         track(neuralTokenView) { commitNeuralToken() }
         val aiEnabledSwitch: MaterialSwitch = findViewById(R.id.aiEnabledSwitch)
+        val generatedDeckInput: TextInputEditText = findViewById(R.id.generatedDeckInput)
         val aiBaseUrlLayout: TextInputLayout = findViewById(R.id.aiBaseUrlLayout)
         val aiBaseUrlInput: TextInputEditText = findViewById(R.id.aiBaseUrlInput)
         val aiModelInput: MaterialAutoCompleteTextView = findViewById(R.id.aiModelInput)
@@ -539,6 +540,7 @@ class SettingsActivity : AppCompatActivity() {
         val aiBatchSwitch: MaterialSwitch = findViewById(R.id.aiBatchSwitch)
         val aiTestResult: TextView = findViewById(R.id.aiTestResult)
         aiEnabledSwitch.isChecked = held.aiEnabled
+        generatedDeckInput.setText(held.generatedDeck.ifBlank { MakeCard.DEFAULT_DECK })
         aiBaseUrlInput.setText(held.aiBaseUrl.ifBlank { Prefs.DEFAULT_AI_URL })
         aiModelInput.setText(held.aiModel.ifBlank { Prefs.DEFAULT_AI_MODEL })
         aiKeyInput.setText("")
@@ -550,6 +552,13 @@ class SettingsActivity : AppCompatActivity() {
         aiEnabledSwitch.setOnCheckedChangeListener { _, checked ->
             persist { it.copy(aiEnabled = checked) }
         }
+        fun commitGeneratedDeck() {
+            val deck = generatedDeckInput.text?.toString()?.trim().orEmpty()
+                .ifBlank { MakeCard.DEFAULT_DECK }
+            if (generatedDeckInput.text?.toString() != deck) generatedDeckInput.setText(deck)
+            persist { it.copy(generatedDeck = deck) }
+        }
+        track(generatedDeckInput) { commitGeneratedDeck() }
         aiBatchSwitch.setOnCheckedChangeListener { _, checked ->
             persist { it.copy(aiBatch = checked) }
         }

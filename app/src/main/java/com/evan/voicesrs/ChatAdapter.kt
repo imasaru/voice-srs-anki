@@ -112,6 +112,7 @@ class ChatAdapter(
         private val explain: Button = view.findViewById(R.id.explAsk)
         private val thread: TextView = view.findViewById(R.id.threadLink)
         private val bookmark: TextView = view.findViewById(R.id.bookmarkLink)
+        private val makeCard: Chip = view.findViewById(R.id.makeCardChip)
 
         fun bind(turn: ReviewTurn) {
             val expanded = turn.turnId in cardOpen
@@ -125,6 +126,8 @@ class ChatAdapter(
             retry.setOnClickListener { onRetry(turn.turnId) }
             thread.setOnClickListener { onThread(turn.turnId) }
             bookmark.setOnClickListener { onBookmark(turn) }
+            makeCard.setOnClickListener { MakeCardFlow.start(itemView.context, turn) }
+            makeCard.visibility = if (turn.explanation is ExplState.Ready) View.VISIBLE else View.GONE
             val session = DrillUi.state.sessionStartedMs
             val shuffle = shuffleOn(itemView)
             val parsed = QuestionCard.parse(

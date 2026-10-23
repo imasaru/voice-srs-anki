@@ -753,6 +753,23 @@
                         android:textAppearance="?attr/textAppearanceBodyLarge" />
 
                     <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/generatedDeckLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:hint="@string/settings_generated_deck">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/generatedDeckInput"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:imeOptions="actionDone"
+                            android:inputType="text"
+                            android:maxLines="1"
+                            android:textAppearance="?attr/textAppearanceBodyLarge" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/aiBaseUrlLayout"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
