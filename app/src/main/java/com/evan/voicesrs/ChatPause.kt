@@ -37,9 +37,6 @@ object ChatPause {
     /** Wait this long, then resume, when the pause ends without a question. */
     const val AUTO_RESUME_MS = 1_000L
 
-    /** Soft accent pink for the Resume pulse after a question was sent. */
-    const val RESUME_PULSE = "#f5b8c8"
-
     enum class Disengage {
         QUESTION_SENT,
         DICTATION_FAILED,
@@ -54,8 +51,7 @@ object ChatPause {
         /** The card stays paused until the timer fires, or until Resume or a rating. */
         val stayPausedUntilTimer: Boolean,
         val showResume: Boolean,
-        val pulse: Boolean,
-        val pulseColor: String
+        val pulse: Boolean
     )
 
     /**
@@ -70,8 +66,7 @@ object ChatPause {
                 delayMs = 0L,
                 stayPausedUntilTimer = true,
                 showResume = true,
-                pulse = true,
-                pulseColor = RESUME_PULSE
+                pulse = true
             )
         }
         return ResumePlan(
@@ -79,8 +74,7 @@ object ChatPause {
             delayMs = AUTO_RESUME_MS,
             stayPausedUntilTimer = true,
             showResume = false,
-            pulse = false,
-            pulseColor = RESUME_PULSE
+            pulse = false
         )
     }
 
@@ -96,8 +90,7 @@ object ChatPause {
         delayMs = 0L,
         stayPausedUntilTimer = true,
         showResume = true,
-        pulse = false,
-        pulseColor = RESUME_PULSE
+        pulse = false
     )
 
     /** Focus, typing, dictation, and opening a thread all drop a pending auto-resume. */

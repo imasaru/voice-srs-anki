@@ -5,7 +5,7 @@ package com.evan.voicesrs
  * fenced code, and lists. The plain text never keeps `**` or backticks.
  */
 data class MdSpan(val start: Int, val end: Int, val kind: Kind) {
-    enum class Kind { BOLD, CODE, HEADING }
+    enum class Kind { BOLD, ITALIC, CODE, CODE_BLOCK, HEADING }
 }
 
 data class MarkdownDoc(val text: String, val spans: List<MdSpan>) {
@@ -40,7 +40,7 @@ object MarkdownRender {
                 breakLine()
                 val from = text.length
                 appendScrubbed(text, block.toString())
-                if (text.length > from) spans += MdSpan(from, text.length, MdSpan.Kind.CODE)
+                if (text.length > from) spans += MdSpan(from, text.length, MdSpan.Kind.CODE_BLOCK)
                 continue
             }
             breakLine()
@@ -85,6 +85,24 @@ object MarkdownRender {
                 i += 2
                 continue
             }
+            if (src.startsWith("*", i) && !src.startsWith("**", i)) {
+                val end = src.indexOf('*', i + 1)
+                if (end > i + 1 && (end + 1 >= src.length || src[end + 1] != '*')) {
+                    val from = text.length
+                    appendScrubbed(text, src.substring(i + 1, end))
+                    spans += MdSpan(from, text.length, MdSpan.Kind.ITALIC)
+                    i = end + 1
+                    continue
+                }
+            }
+            if (src.startsWith("_", i) && !src.startsWith("__", i) && italicUnderscore(src, i)) {
+                val end = src.indexOf('_', i + 1)
+                val from = text.length
+                appendScrubbed(text, src.substring(i + 1, end))
+                spans += MdSpan(from, text.length, MdSpan.Kind.ITALIC)
+                i = end + 1
+                continue
+            }
             if (src[i] == '`') {
                 val end = src.indexOf('`', i + 1)
                 if (end > i + 1) {
@@ -99,6 +117,16 @@ object MarkdownRender {
             if (ch != '`') text.append(ch)
             i++
         }
+    }
+
+    /** `_italic_` but not snake_case like `delta_log`. */
+    private fun italicUnderscore(src: String, start: Int): Boolean {
+        val end = src.indexOf('_', start + 1)
+        if (end <= start + 1) return false
+        val before = if (start == 0) ' ' else src[start - 1]
+        val after = if (end + 1 >= src.length) ' ' else src[end + 1]
+        if (before.isLetterOrDigit() || after.isLetterOrDigit()) return false
+        return true
     }
 
     /** Drops leftover markdown markers so a bubble cannot show raw `**` or backticks. */

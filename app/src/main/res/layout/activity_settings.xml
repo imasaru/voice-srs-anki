@@ -574,6 +574,14 @@
                         android:textAppearance="?attr/textAppearanceBodyLarge" />
 
                     <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/keepScreenOnSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="48dp"
+                        android:text="@string/settings_keep_screen_on"
+                        android:textAppearance="?attr/textAppearanceBodyLarge" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/highlightSentenceSwitch"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"

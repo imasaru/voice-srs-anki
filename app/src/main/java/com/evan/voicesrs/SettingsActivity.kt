@@ -89,6 +89,7 @@ class SettingsActivity : AppCompatActivity() {
         val testVoiceStatus: TextView = findViewById(R.id.testVoiceStatus)
         val speedSwitch: MaterialSwitch = findViewById(R.id.speedModeSwitch)
         val showCardSwitch: MaterialSwitch = findViewById(R.id.showCardSwitch)
+        val keepScreenOnSwitch: MaterialSwitch = findViewById(R.id.keepScreenOnSwitch)
         val highlightSentenceSwitch: MaterialSwitch = findViewById(R.id.highlightSentenceSwitch)
         val handsFreeSwitch: MaterialSwitch = findViewById(R.id.handsFreeSwitch)
         val handsFreeReadySwitch: MaterialSwitch = findViewById(R.id.handsFreeReadySwitch)
@@ -121,6 +122,7 @@ class SettingsActivity : AppCompatActivity() {
         )
         speedSwitch.isChecked = held.speedMode
         showCardSwitch.isChecked = held.showCard
+        keepScreenOnSwitch.isChecked = held.keepScreenOn
         highlightSentenceSwitch.isChecked = held.highlightSentence
         handsFreeSwitch.isChecked = held.handsFree
         handsFreeReadySwitch.isChecked = held.handsFreeReady
@@ -248,6 +250,9 @@ class SettingsActivity : AppCompatActivity() {
         }
         showCardSwitch.setOnCheckedChangeListener { _, checked ->
             persist { it.copy(showCard = checked) }
+        }
+        keepScreenOnSwitch.setOnCheckedChangeListener { _, checked ->
+            persist { it.copy(keepScreenOn = checked) }
         }
         highlightSentenceSwitch.setOnCheckedChangeListener { _, checked ->
             persist { it.copy(highlightSentence = checked) }

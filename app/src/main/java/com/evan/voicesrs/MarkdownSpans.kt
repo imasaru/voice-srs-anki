@@ -25,7 +25,13 @@ object MarkdownSpans {
                     styled.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     styled.setSpan(RelativeSizeSpan(1.15f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
+                MdSpan.Kind.ITALIC -> styled.setSpan(
+                    StyleSpan(Typeface.ITALIC), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
                 MdSpan.Kind.CODE -> styled.setSpan(
+                    TypefaceSpan("monospace"), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                MdSpan.Kind.CODE_BLOCK -> styled.setSpan(
                     TypefaceSpan("monospace"), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                 )
             }

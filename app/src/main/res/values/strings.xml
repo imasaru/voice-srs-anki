@@ -69,6 +69,7 @@
     <string name="test_voice_failed">Could not play that sample.</string>
     <string name="settings_speed_mode">Speed mode (skip voice guides)</string>
     <string name="settings_show_card">Show card on screen</string>
+    <string name="settings_keep_screen_on">Keep screen on during a drill</string>
     <string name="settings_highlight_sentence">Highlight sentence while reading</string>
     <string name="settings_silent_mode">Silent mode</string>
     <string name="settings_silent_mode_help">Never uses the microphone, so you can review during a phone call. Tap to show the answer and to rate.</string>

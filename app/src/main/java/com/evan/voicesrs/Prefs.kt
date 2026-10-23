@@ -64,7 +64,8 @@ data class AnkiConfig(
     /** Wrap detected code on card faces. Display only. */
     val detectCode: Boolean = true,
     /** Deck for AI-generated Basic notes. */
-    val generatedDeck: String = MakeCard.DEFAULT_DECK
+    val generatedDeck: String = MakeCard.DEFAULT_DECK,
+    val keepScreenOn: Boolean = KeepScreenOn.SETTING_DEFAULT
 )
 
 /** SharedPreferences-backed settings. The API key and neural token live in encrypted prefs. */
@@ -108,6 +109,7 @@ object Prefs {
     private const val KEY_AUTO_EXPLAIN = "auto_explain"
     private const val KEY_DETECT_CODE = "detect_code"
     private const val KEY_GENERATED_DECK = "generated_deck"
+    private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
 
     const val DEFAULT_URL = "http://192.0.2.10:8765"
     const val DEFAULT_DECK = "VoiceSRS-Test"
@@ -208,6 +210,7 @@ object Prefs {
             .putString(KEY_AUTO_EXPLAIN_EASES, AutoExplain.encode(cfg.autoExplainEases))
             .putBoolean(KEY_DETECT_CODE, cfg.detectCode)
             .putString(KEY_GENERATED_DECK, cfg.generatedDeck.ifBlank { MakeCard.DEFAULT_DECK })
+            .putBoolean(KEY_KEEP_SCREEN_ON, cfg.keepScreenOn)
             .remove(KEY_AUTO_EXPLAIN)
             .remove(KEY_API_KEY)
             .remove(KEY_NEURAL_TOKEN)
@@ -286,7 +289,8 @@ object Prefs {
             ),
             detectCode = p.getBoolean(KEY_DETECT_CODE, CodeDetect.SETTING_DEFAULT),
             generatedDeck = p.getString(KEY_GENERATED_DECK, MakeCard.DEFAULT_DECK).orEmpty()
-                .ifBlank { MakeCard.DEFAULT_DECK }
+                .ifBlank { MakeCard.DEFAULT_DECK },
+            keepScreenOn = p.getBoolean(KEY_KEEP_SCREEN_ON, KeepScreenOn.SETTING_DEFAULT)
         )
     }
 

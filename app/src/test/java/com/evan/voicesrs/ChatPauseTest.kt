@@ -48,7 +48,6 @@ class ChatPauseTest {
     @Test
     fun `no question sent auto resumes after one second and re engage cancels it`() {
         assertEquals(1_000L, ChatPause.AUTO_RESUME_MS)
-        assertEquals("#f5b8c8", ChatPause.RESUME_PULSE)
         for (end in listOf(
             ChatPause.Disengage.DICTATION_FAILED,
             ChatPause.Disengage.DICTATION_CANCELLED,
@@ -85,7 +84,6 @@ class ChatPauseTest {
         assertTrue(plan.stayPausedUntilTimer)
         assertTrue(plan.showResume)
         assertTrue(plan.pulse)
-        assertEquals("#f5b8c8", plan.pulseColor)
         assertTrue(ChatPause.accepts(ChatPause.Action.RATING))
         assertTrue(ChatPause.accepts(ChatPause.Action.RESUME))
     }

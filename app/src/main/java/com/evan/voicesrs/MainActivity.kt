@@ -10,9 +10,9 @@ import android.content.pm.PackageManager
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.content.res.ColorStateList
-import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.util.TypedValue
 import android.transition.Fade
 import android.transition.TransitionManager
 import android.text.Editable
@@ -680,6 +680,12 @@ class MainActivity : AppCompatActivity() {
         showAnswerButton?.visibility = if (controls.showAnswer) View.VISIBLE else View.GONE
         renderCue(state, drilling, silentOn)
         paintPlayback(PlaybackUi.state)
+        val keepOn = KeepScreenOn.apply(drilling, cfg.keepScreenOn)
+        if (keepOn) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
     }
 
     private fun paintPlayback(snap: PlaybackControl.Snapshot) {
@@ -730,8 +736,9 @@ class MainActivity : AppCompatActivity() {
             stopResumePulse(button)
             return
         }
-        val tint = Color.parseColor(ChatPause.RESUME_PULSE)
-        button.backgroundTintList = ColorStateList.valueOf(tint)
+        val typed = TypedValue()
+        button.context.theme.resolveAttribute(com.google.android.material.R.attr.colorPrimary, typed, true)
+        button.backgroundTintList = ColorStateList.valueOf(typed.data)
         if (resumePulse?.isRunning == true) return
         resumePulse = ObjectAnimator.ofFloat(button, View.ALPHA, 1f, 0.45f).apply {
             duration = 700L

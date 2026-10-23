@@ -349,12 +349,6 @@ object CardFaceBinder {
                     if (sb.length > start) {
                         sb.setSpan(TypefaceSpan("monospace"), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                         sb.setSpan(
-                            BackgroundColorSpan(view.context.getColor(R.color.code_block)),
-                            start,
-                            sb.length,
-                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                        )
-                        sb.setSpan(
                             ForegroundColorSpan(view.context.getColor(R.color.code_block_text)),
                             start,
                             sb.length,
