@@ -33,15 +33,20 @@ object PromptBuilder {
     fun generalSystem(): String =
         "You are a concise tutor for the Databricks Certified Data Engineer Associate exam. " +
             "The learner asked a general question about the selected deck. There is no specific card. " +
-            "Stay under 120 words. No preamble."
+            "Stay under 120 words. No preamble. " +
+            "For questions about this learner's study history, accuracy, missed cards, or today's progress, " +
+            "use get_study_summary, get_category_stats, and get_missed_cards. Do not guess those numbers."
 
-    fun generalMessages(deck: String, question: String): List<ChatMsg> {
-        return listOf(
-            ChatMsg(
-                "user",
-                "Deck: ${deck.trim()}\nThere is no specific card.\nQuestion: ${question.trim()}"
-            )
-        )
+    fun generalMessages(deck: String, question: String, toolContext: String = ""): List<ChatMsg> {
+        val extra = toolContext.trim()
+        val body = buildString {
+            append("Deck: ${deck.trim()}\nThere is no specific card.\nQuestion: ${question.trim()}")
+            if (extra.isNotEmpty()) {
+                append("\nStudy data:\n")
+                append(extra)
+            }
+        }
+        return listOf(ChatMsg("user", body))
     }
 
     const val FOLLOW_UP_EXTRA =

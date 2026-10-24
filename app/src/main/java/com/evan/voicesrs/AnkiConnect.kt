@@ -181,6 +181,44 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) {
         return ids
     }
 
+    /**
+     * Reviews after [startId] (exclusive). Each row is a 9-tuple from revlog.
+     * Empty when the add-on does not support the action.
+     */
+    fun cardReviews(deck: String, startId: Long): List<StudyReview> {
+        val r = try {
+            post("cardReviews", mapOf("deck" to deck, "startID" to startId)) as? JSONArray
+        } catch (_: Exception) {
+            null
+        } ?: return emptyList()
+        return StudyTools.parseCardReviews(r)
+    }
+
+    fun noteTags(ids: List<Long>): Map<Long, List<String>> {
+        if (ids.isEmpty()) return emptyMap()
+        val r = try {
+            post("notesInfo", mapOf("notes" to ids)) as? JSONArray
+        } catch (_: Exception) {
+            null
+        } ?: return emptyMap()
+        val out = LinkedHashMap<Long, List<String>>()
+        for (i in 0 until r.length()) {
+            val o = r.optJSONObject(i) ?: continue
+            val id = o.optLong("noteId", 0L)
+            if (id == 0L) continue
+            val tags = o.optJSONArray("tags")
+            val list = ArrayList<String>()
+            if (tags != null) {
+                for (t in 0 until tags.length()) {
+                    val s = tags.optString(t).trim()
+                    if (s.isNotEmpty()) list += s
+                }
+            }
+            out[id] = list
+        }
+        return out
+    }
+
     fun cardsInfo(ids: List<Long>): List<OfflineCard> {
         if (ids.isEmpty()) return emptyList()
         val r = post("cardsInfo", mapOf("cards" to ids)) as? JSONArray ?: return emptyList()

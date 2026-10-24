@@ -9,17 +9,20 @@ object AiRequest {
         model: String,
         messages: JSONArray,
         maxTokens: Int,
-        stream: Boolean
+        stream: Boolean,
+        tools: JSONArray? = null
     ): JSONObject {
         val stop = JSONArray()
         for (token in SelfTalk.STOP) stop.put(token)
-        return JSONObject()
+        val body = JSONObject()
             .put("model", model)
             .put("temperature", AiTimeouts.TEMPERATURE)
             .put("max_tokens", maxTokens)
             .put("stream", stream)
             .put("messages", messages)
             .put("stop", stop)
+        if (tools != null && tools.length() > 0) body.put("tools", tools)
+        return body
     }
 
     /** TypeSafe System One / oMLX `POST /v1/systemone` body. */

@@ -87,4 +87,18 @@ class PromptBuilderTest {
         assertEquals("nice llama analogy?", messages[5].content)
         assertTrue(messages[0].content.contains("Card front: Front"))
     }
+
+    @Test
+    fun `general chat names study tools and drill prompts do not`() {
+        val general = PromptBuilder.generalSystem()
+        assertTrue(general.contains("get_study_summary"))
+        assertTrue(general.contains("get_category_stats"))
+        assertTrue(general.contains("get_missed_cards"))
+        assertFalse(PromptBuilder.SYSTEM.contains("get_study_summary"))
+        assertFalse(PromptBuilder.hintSystem().contains("get_study_summary"))
+        assertFalse(PromptBuilder.followUpSystem().contains("get_study_summary"))
+        val withData = PromptBuilder.generalMessages("Deck", "How did I do?", "{\"cards\":1}")
+        assertTrue(withData.single().content.contains("Study data:"))
+        assertTrue(withData.single().content.contains("{\"cards\":1}"))
+    }
 }

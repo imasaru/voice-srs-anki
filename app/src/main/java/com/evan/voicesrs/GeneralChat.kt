@@ -2,6 +2,7 @@ package com.evan.voicesrs
 
 import android.content.Context
 import android.util.Log
+import org.json.JSONArray
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -48,6 +49,15 @@ object GeneralChat {
     }
 
     fun ask(context: Context, deck: String, question: String) {
+        startAsk(context, deck, question, injectReport = false)
+    }
+
+    /** Runs the three study tools for today and passes the results in once as context. */
+    fun todayReport(context: Context, deck: String) {
+        startAsk(context, deck, context.getString(R.string.today_report_prompt), injectReport = true)
+    }
+
+    private fun startAsk(context: Context, deck: String, question: String, injectReport: Boolean) {
         val q = question.trim()
         if (q.isEmpty()) {
             showNotice(ChatSend.visible(ChatSend.Fail.EMPTY))
@@ -66,14 +76,29 @@ object GeneralChat {
             var lastPaint = -1L
             try {
                 val cfg = Prefs.load(app)
-                val text = AiClient().completeChat(
-                    baseUrl = cfg.aiBaseUrl,
-                    apiKey = cfg.aiApiKey,
-                    model = cfg.aiModel,
-                    system = PromptBuilder.generalSystem(),
-                    messages = PromptBuilder.generalMessages(name, q),
-                    cancelled = { false }
-                ) { partial ->
+                val client = AiClient()
+                val tools: JSONArray?
+                val onTool: ((String, String) -> String)?
+                val contextBlob: String
+                if (injectReport) {
+                    tools = null
+                    onTool = null
+                    contextBlob = try {
+                        val anki = AnkiConnect(cfg.url, cfg.apiKey)
+                        StudyToolRunner(anki, cfg.deck).todayBundle(cfg.deck)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "today report tools failed: ${e.javaClass.simpleName}")
+                        """{"error":"${e.javaClass.simpleName}"}"""
+                    }
+                } else {
+                    contextBlob = ""
+                    tools = StudyTools.schemas()
+                    onTool = { toolName, args ->
+                        val anki = AnkiConnect(cfg.url, cfg.apiKey)
+                        StudyToolRunner(anki, cfg.deck).invoke(toolName, args)
+                    }
+                }
+                val paint: (String) -> Unit = { partial ->
                     val now = System.currentTimeMillis()
                     if (ScrollAnchor.paintNow(now, lastPaint, streamingOnly = true)) {
                         val shown = ThinkStrip.strip(partial).trim()
@@ -82,6 +107,37 @@ object GeneralChat {
                             mark(id, ExplState.Streaming(shown))
                         }
                     }
+                }
+                val text = try {
+                    client.completeChat(
+                        baseUrl = cfg.aiBaseUrl,
+                        apiKey = cfg.aiApiKey,
+                        model = cfg.aiModel,
+                        system = PromptBuilder.generalSystem(),
+                        messages = PromptBuilder.generalMessages(name, q, contextBlob),
+                        cancelled = { false },
+                        tools = tools,
+                        onTool = onTool,
+                        onDelta = paint
+                    )
+                } catch (e: ToolsRejected) {
+                    Log.w(TAG, "study tools rejected")
+                    showNotice(app.getString(R.string.today_report_fallback))
+                    client.completeChat(
+                        baseUrl = cfg.aiBaseUrl,
+                        apiKey = cfg.aiApiKey,
+                        model = cfg.aiModel,
+                        system = PromptBuilder.generalSystem(),
+                        messages = PromptBuilder.generalMessages(name, q),
+                        cancelled = { false },
+                        onDelta = paint
+                    )
+                }
+                if (!injectReport &&
+                    StudyTools.needsFallbackChip(true, client.lastSawToolCalls, false) &&
+                    StudyTools.looksLikeStudyAsk(q)
+                ) {
+                    showNotice(app.getString(R.string.today_report_fallback))
                 }
                 val shown = ThinkStrip.strip(text).trim()
                 if (shown.isBlank()) {

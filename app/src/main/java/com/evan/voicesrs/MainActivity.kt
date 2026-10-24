@@ -655,6 +655,26 @@ class MainActivity : AppCompatActivity() {
             chatInputView?.hint = getString(hintRes)
             appliedHintRes = hintRes
         }
+        val reportChip = findViewById<Chip>(R.id.todayReportChip)
+        if (reportChip != null) {
+            val showReport = !hasQuestion && cfg.aiEnabled
+            reportChip.visibility = if (showReport) View.VISIBLE else View.GONE
+            if (showReport && reportChip.tag == null) {
+                reportChip.tag = "wired"
+                reportChip.setOnClickListener {
+                    val fullDeck = try {
+                        Prefs.load(this).deck
+                    } catch (_: Exception) {
+                        ""
+                    }
+                    if (fullDeck.isBlank()) {
+                        GeneralChat.showNotice(ChatSend.visible(ChatSend.Fail.NO_DECK))
+                    } else {
+                        GeneralChat.todayReport(this, fullDeck)
+                    }
+                }
+            }
+        }
         val controls = AnswerControls.of(
             hasQuestion = hasQuestion,
             answerShown = state.showBack,

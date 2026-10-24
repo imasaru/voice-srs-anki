@@ -153,6 +153,26 @@ class SseParserTest {
     }
 
     @Test
+    fun `tool_calls are parsed from a chat completion`() {
+        val body = """
+            {"choices":[{"finish_reason":"tool_calls","message":{
+              "content":null,
+              "tool_calls":[{
+                "id":"call_1",
+                "type":"function",
+                "function":{"name":"get_study_summary","arguments":"{\"from\":\"2026-10-24\"}"}
+              }]
+            }}]}
+        """.trimIndent()
+        val parsed = ChatJson.parse(body)
+        assertEquals(1, parsed?.toolCalls?.size)
+        assertEquals("get_study_summary", parsed?.toolCalls?.single()?.name)
+        assertEquals("call_1", parsed?.toolCalls?.single()?.id)
+        assertTrue(parsed?.toolCalls?.single()?.arguments?.contains("2026-10-24") == true)
+        assertEquals("tool_calls", parsed?.finishReason)
+    }
+
+    @Test
     fun `reasoning only stream is empty visible text so the client can fall back`() {
         val parser = SseParser()
         parser.push("data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"hmm\"}}]}\n")

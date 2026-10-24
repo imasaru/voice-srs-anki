@@ -1,5 +1,6 @@
 package com.evan.voicesrs
 
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -80,10 +81,17 @@ object ThinkStrip {
 
 /** Non-stream chat completion body. Reasoning is reported, never returned as content. */
 object ChatJson {
+    data class ToolCall(
+        val id: String,
+        val name: String,
+        val arguments: String
+    )
+
     data class Completion(
         val content: String?,
         val reasoning: Boolean,
-        val finishReason: String?
+        val finishReason: String?,
+        val toolCalls: List<ToolCall> = emptyList()
     )
 
     fun parse(body: String): Completion? {
@@ -102,7 +110,22 @@ object ChatJson {
             null
         }
         val reasoning = nonEmpty(node, "reasoning_content") || nonEmpty(node, "reasoning")
-        return Completion(content, reasoning, finish)
+        return Completion(content, reasoning, finish, parseToolCalls(node))
+    }
+
+    fun parseToolCalls(node: JSONObject): List<ToolCall> {
+        val arr = node.optJSONArray("tool_calls") ?: return emptyList()
+        val out = ArrayList<ToolCall>(arr.length())
+        for (i in 0 until arr.length()) {
+            val call = arr.optJSONObject(i) ?: continue
+            val fn = call.optJSONObject("function")
+            val name = fn?.optString("name").orEmpty().ifBlank { call.optString("name") }
+            val args = fn?.optString("arguments").orEmpty().ifBlank { call.optString("arguments") }
+            val id = call.optString("id").ifBlank { "call_$i" }
+            if (name.isBlank()) continue
+            out += ToolCall(id, name, args)
+        }
+        return out
     }
 
     fun messageContent(body: String): String? = parse(body)?.content

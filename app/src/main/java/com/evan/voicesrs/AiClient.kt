@@ -12,7 +12,10 @@ import java.net.URL
 class AiCancelled : Exception("cancelled")
 
 /** HTTP status from the model server. The message is the status only. */
-class AiHttpException(val code: Int) : IOException("HTTP $code")
+class AiHttpException(val code: Int, val body: String = "") : IOException("HTTP $code")
+
+/** The server rejected the tools schema. General chat falls back to the report chip. */
+class ToolsRejected(message: String) : IOException(message)
 
 /** The server rejected `stream: true`. The client retries once without streaming. */
 class StreamRejected : Exception("stream rejected")
@@ -72,6 +75,9 @@ object AiMessages {
  * Explanations are text only. This class never speaks.
  */
 class AiClient {
+    @Volatile var lastSawToolCalls: Boolean = false
+        private set
+
     fun probe(baseUrl: String, apiKey: String, cancelled: () -> Boolean = { false }) {
         if (cancelled()) throw AiCancelled()
         val conn = open(baseUrl, apiKey, "GET", "/models")
@@ -80,7 +86,7 @@ class AiClient {
             conn.readTimeout = AiTimeouts.CONNECT_MS
             val code = conn.responseCode
             if (cancelled()) throw AiCancelled()
-            if (code !in 200..299) throw AiHttpException(code)
+            if (code !in 200..299) throw AiHttpException(code, readError(conn))
         } finally {
             conn.disconnect()
         }
@@ -95,7 +101,7 @@ class AiClient {
             conn.readTimeout = AiTimeouts.CONNECT_MS
             val code = conn.responseCode
             if (cancelled()) throw AiCancelled()
-            if (code !in 200..299) throw AiHttpException(code)
+            if (code !in 200..299) throw AiHttpException(code, readError(conn))
             val body = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
             return ModelList.parse(body)
         } finally {
@@ -140,14 +146,133 @@ class AiClient {
         maxTokens: Int = AiTimeouts.MAX_TOKENS,
         cancelled: () -> Boolean = { false },
         onThinking: () -> Unit = {},
+        tools: JSONArray? = null,
+        onTool: ((name: String, args: String) -> String)? = null,
+        maxToolRounds: Int = StudyTools.MAX_ROUNDS,
         onDelta: (String) -> Unit = {}
     ): String {
         if (cancelled()) throw AiCancelled()
+        lastSawToolCalls = false
         val array = JSONArray().put(JSONObject().put("role", "system").put("content", system))
         for (message in messages) {
             array.put(JSONObject().put("role", message.role).put("content", message.content))
         }
+        if (tools != null && tools.length() > 0 && onTool != null) {
+            return completeWithTools(
+                baseUrl, apiKey, model, array, maxTokens, tools, onTool, maxToolRounds, cancelled, onThinking, onDelta
+            )
+        }
         return completeMessages(baseUrl, apiKey, model, array, maxTokens, cancelled, onThinking, onDelta)
+    }
+
+    /**
+     * Non-stream tool loop. Max [maxToolRounds] rounds of tool_calls.
+     * HTTP 400 mentioning tools becomes [ToolsRejected].
+     */
+    private fun completeWithTools(
+        baseUrl: String,
+        apiKey: String,
+        model: String,
+        messages: JSONArray,
+        maxTokens: Int,
+        tools: JSONArray,
+        onTool: (String, String) -> String,
+        maxToolRounds: Int,
+        cancelled: () -> Boolean,
+        onThinking: () -> Unit,
+        onDelta: (String) -> Unit
+    ): String {
+        val budget = AiTimeouts.budget(maxTokens)
+        val rounds = maxToolRounds.coerceIn(1, StudyTools.MAX_ROUNDS)
+        lastSawToolCalls = false
+        repeat(rounds) {
+            if (cancelled()) throw AiCancelled()
+            val parsed = try {
+                completeJson(baseUrl, apiKey, model, messages, budget, tools, cancelled)
+            } catch (e: AiHttpException) {
+                if (StudyTools.toolsRejected(e.code, e.body)) throw ToolsRejected(e.body)
+                throw e
+            }
+            if (parsed.toolCalls.isEmpty()) {
+                val text = AiMessages.require(parsed.content.orEmpty(), parsed.finishReason)
+                val clipped = SelfTalk.clip(text)
+                onDelta(clipped)
+                return clipped
+            }
+            lastSawToolCalls = true
+            val assistant = JSONObject().put("role", "assistant")
+            if (!parsed.content.isNullOrBlank()) assistant.put("content", parsed.content)
+            val calls = JSONArray()
+            for (call in parsed.toolCalls) {
+                calls.put(
+                    JSONObject()
+                        .put("id", call.id)
+                        .put("type", "function")
+                        .put(
+                            "function",
+                            JSONObject().put("name", call.name).put("arguments", call.arguments)
+                        )
+                )
+            }
+            assistant.put("tool_calls", calls)
+            messages.put(assistant)
+            for (call in parsed.toolCalls) {
+                if (cancelled()) throw AiCancelled()
+                val result = try {
+                    onTool(call.name, call.arguments)
+                } catch (e: Exception) {
+                    JSONObject().put("error", e.javaClass.simpleName).toString()
+                }
+                messages.put(
+                    JSONObject()
+                        .put("role", "tool")
+                        .put("tool_call_id", call.id)
+                        .put("content", result)
+                )
+            }
+        }
+        val last = completeJson(baseUrl, apiKey, model, messages, budget, null, cancelled)
+        val text = AiMessages.require(last.content.orEmpty(), last.finishReason)
+        val clipped = SelfTalk.clip(text)
+        onDelta(clipped)
+        return clipped
+    }
+
+    private fun completeJson(
+        baseUrl: String,
+        apiKey: String,
+        model: String,
+        messages: JSONArray,
+        maxTokens: Int,
+        tools: JSONArray?,
+        cancelled: () -> Boolean
+    ): ChatJson.Completion {
+        val started = System.currentTimeMillis()
+        val conn = open(baseUrl, apiKey, "POST", "/chat/completions")
+        try {
+            conn.doOutput = true
+            conn.useCaches = false
+            conn.connectTimeout = AiTimeouts.CONNECT_MS
+            conn.readTimeout = AiTimeouts.FIRST_TOKEN_MS
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("Connection", "close")
+            conn.setRequestProperty("Expect", "")
+            val body = AiRequest.completionBody(model, messages, maxTokens, stream = false, tools = tools)
+            val bytes = body.toString().toByteArray(Charsets.UTF_8)
+            conn.setFixedLengthStreamingMode(bytes.size)
+            conn.outputStream.use { it.write(bytes) }
+            if (cancelled()) throw AiCancelled()
+            val code = conn.responseCode
+            if (code !in 200..299) {
+                val err = readError(conn)
+                throw AiHttpException(code, err)
+            }
+            val raw = readBody(conn, started, cancelled)
+            return ChatJson.parse(raw) ?: throw AiException(AiMessages.NO_TEXT, retryable = false)
+        } finally {
+            conn.disconnect()
+        }
     }
 
     /**
@@ -178,7 +303,7 @@ class AiClient {
             conn.outputStream.use { it.write(bytes) }
             if (cancelled()) throw AiCancelled()
             val code = conn.responseCode
-            if (code !in 200..299) throw AiHttpException(code)
+            if (code !in 200..299) throw AiHttpException(code, readError(conn))
             return conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
         } finally {
             conn.disconnect()
@@ -237,7 +362,7 @@ class AiClient {
             if (cancelled()) throw AiCancelled()
             val code = conn.responseCode
             if (stream && code in STREAM_REJECT) throw StreamRejected()
-            if (code !in 200..299) throw AiHttpException(code)
+            if (code !in 200..299) throw AiHttpException(code, readError(conn))
             val type = conn.contentType.orEmpty()
             val eventStream = type.contains("event-stream")
             val jsonType = type.contains("json")
@@ -385,6 +510,14 @@ class AiClient {
             out.append(buf, 0, n)
         }
         return out.toString()
+    }
+
+    private fun readError(conn: HttpURLConnection): String {
+        return try {
+            (conn.errorStream ?: conn.inputStream)?.readBytes()?.decodeToString().orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
     }
 
     private fun open(baseUrl: String, apiKey: String, method: String, path: String): HttpURLConnection {
