@@ -249,8 +249,9 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) {
      * @return one boolean per grade, true when Anki accepted it.
      * Each answer may include [AnswerCardsRequest] `time` (ms). Stock
      * AnkiConnect ignores extra fields and starts the card timer immediately
-     * before answering, so revlog.time would be ~0. The bundled add-on reads
-     * `time`. If the server rejects the extra field, the grade is retried
+     * before answering, so revlog.time would be ~0. Answer time is kept
+     * locally in [AnswerTimeLog]; the extra `time` field is harmless.
+     * If the server rejects the extra field, the grade is retried
      * without it; a duration miss never fails the grade.
      */
     fun answerCards(grades: List<PendingGrade>): List<Boolean> {

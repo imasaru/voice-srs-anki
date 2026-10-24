@@ -8,7 +8,7 @@ import org.json.JSONObject
  *
  * Stock AnkiConnect takes `{cardId, ease}` only and starts the card timer
  * immediately before answering. Extra `time` (review duration in ms) is
- * ignored there. The bundled add-on applies it to revlog.time. Duration 0
+ * ignored there (harmless); real duration lives in [AnswerTimeLog]. Duration 0
  * is omitted so Anki keeps its own timer.
  */
 object AnswerCardsRequest {

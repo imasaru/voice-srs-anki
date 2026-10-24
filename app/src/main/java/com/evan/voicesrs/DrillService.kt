@@ -409,6 +409,7 @@ class DrillService : Service(), VoiceIo {
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "onCreate")
+        runCatching { AnswerTimeLog.init(filesDir) }
         pendingGrades.clear()
         active = this
         mainHandler = Handler(Looper.getMainLooper())

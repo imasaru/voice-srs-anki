@@ -120,6 +120,11 @@ class ExplainSession private constructor(
         val ordinal = DrillUi.state.questionOrdinal.coerceAtLeast(ReviewLog.snapshot().size + 1)
         val label = QuestionLabel.of(front, ordinal).label
         val auto = AutoExplain.shouldAuto(cfg.autoExplainEases, ease)
+        runCatching {
+            AnswerTimeLog.record(
+                AnswerTime(cardId, cfg.deck, ease, durationMs, System.currentTimeMillis())
+            )
+        }
         val turn = ReviewLog.appendAfterGrade(
             ease = ease,
             cardId = cardId,

@@ -12,7 +12,8 @@ import java.util.TimeZone
 class StudyToolRunner(
     private val anki: AnkiConnect,
     private val defaultDeck: String,
-    private val tz: TimeZone = TimeZone.getDefault()
+    private val tz: TimeZone = TimeZone.getDefault(),
+    private val timeLog: () -> List<AnswerTime> = { AnswerTimeLog.snapshot() }
 ) {
     fun invoke(name: String, argsJson: String): String {
         return try {
@@ -27,9 +28,12 @@ class StudyToolRunner(
             val limit = args.optInt("limit", StudyTools.DEFAULT_LIMIT)
             val (rows, cards) = load(from, to, deck)
             when (name) {
-                StudyTools.GET_STUDY_SUMMARY -> StudyTools.summary(rows).toString()
+                StudyTools.GET_STUDY_SUMMARY -> StudyTools.summary(rows)
+                    .put("answer_time", answerTime(from, to, deck, rows.size))
+                    .toString()
                 StudyTools.GET_CATEGORY_STATS -> JSONObject()
                     .put("categories", StudyTools.categoryStats(rows, cards))
+                    .put("answer_time", answerTime(from, to, deck, rows.size))
                     .toString()
                 StudyTools.GET_MISSED_CARDS -> JSONObject()
                     .put("missed", StudyTools.missed(rows, cards, limit))
@@ -40,6 +44,15 @@ class StudyToolRunner(
             JSONObject().put("error", e.javaClass.simpleName).toString()
         }
     }
+
+    fun answerTime(from: String, to: String, deck: String, reviews: Int): JSONObject =
+        StudyTools.answerTime(
+            timeLog(),
+            StudyTools.dayStartMs(from, tz),
+            StudyTools.dayEndMs(to, tz),
+            deck,
+            reviews
+        )
 
     fun todayBundle(deck: String): String {
         val day = StudyTools.today(tz)

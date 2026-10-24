@@ -146,6 +146,55 @@ object StudyTools {
         return obj
     }
 
+    const val TIME_UNAVAILABLE_NOTE =
+        "Answer time unavailable for this range: Voice SRS only logs answer time locally " +
+            "since v0.1.21, so older reviews (and reviews done outside the app) have no time data."
+
+    /** True when [deck] is [wanted] or one of its subdecks. Blank [wanted] matches all. */
+    fun deckMatches(deck: String, wanted: String): Boolean {
+        val w = wanted.trim()
+        if (w.isEmpty()) return true
+        return deck == w || deck.startsWith("$w::")
+    }
+
+    /**
+     * Total and average answer time from the local [AnswerTimeLog] for the
+     * window and deck. [reviews] is Anki's review count for the same window,
+     * used to say how much of it has time data.
+     */
+    fun answerTime(
+        log: List<AnswerTime>,
+        startMs: Long,
+        endMs: Long,
+        deck: String,
+        reviews: Int
+    ): JSONObject {
+        val timed = log.filter {
+            it.atMs in startMs..endMs && it.durationMs > 0L && deckMatches(it.deck, deck)
+        }
+        val obj = JSONObject()
+        if (timed.isEmpty()) {
+            return obj.put("answer_time", UNAVAILABLE)
+                .put("timed_reviews", 0)
+                .put("note", TIME_UNAVAILABLE_NOTE)
+        }
+        val total = timed.sumOf { it.durationMs }
+        val avg = total / timed.size
+        obj.put("timed_reviews", timed.size)
+            .put("total_answer_time_ms", total)
+            .put("total_answer_time", formatMs(total))
+            .put("avg_answer_time_ms", avg)
+            .put("avg_answer_time", formatSec(avg))
+        if (reviews > timed.size) {
+            obj.put(
+                "note",
+                "Only ${timed.size} of $reviews reviews in this range have answer time; " +
+                    "older reviews or ones done outside Voice SRS have no time data."
+            )
+        }
+        return obj
+    }
+
     fun categoryStats(rows: List<StudyReview>, cards: Map<Long, StudyCard>): JSONArray {
         val first = firstReviews(rows)
         val byCat = LinkedHashMap<String, CatAcc>()
@@ -255,6 +304,8 @@ object StudyTools {
         val min = (ms + 30_000L) / 60_000L
         return if (min <= 0L) "${ms / 1000L} sec" else "$min min"
     }
+
+    private fun formatSec(ms: Long): String = "${round1(ms / 1000.0)} sec"
 
     private fun parseDay(date: String, tz: TimeZone): Calendar? {
         val parts = date.trim().split("-")
