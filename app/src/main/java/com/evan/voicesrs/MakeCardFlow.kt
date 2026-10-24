@@ -92,7 +92,8 @@ object MakeCardFlow {
                     listOf(MakeCard.TAG)
                 )
                 id != 0L
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                ErrorSnackbar.report(context, e, SaveErrors.Op.MAKE_CARD)
                 false
             }
             main.post {
