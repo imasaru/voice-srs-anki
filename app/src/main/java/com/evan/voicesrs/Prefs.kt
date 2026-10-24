@@ -53,7 +53,7 @@ data class AnkiConfig(
     val needsNeuralToken: Boolean = false,
     /** Master switch for AI explanations. Off until the user turns it on. */
     val aiEnabled: Boolean = false,
-    val aiBaseUrl: String = "http://example.local/v1",
+    val aiBaseUrl: String = "",
     val aiModel: String = "scottlowry/Ornith-1.5-35B-A3B-oQ5e-mtp:precise",
     /** Optional. Stored only in encrypted prefs. Never logged. */
     val aiApiKey: String = "",
@@ -118,17 +118,20 @@ object Prefs {
     private const val KEY_GENERATED_DECK = "generated_deck"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
 
-    const val DEFAULT_URL = "http://192.0.2.10:8765"
+    val DEFAULT_URL: String get() = BuildConfig.DEFAULT_ANKI_URL
     const val DEFAULT_DECK = "VoiceSRS-Test"
-    const val DEFAULT_NEURAL_URL = "http://192.0.2.10:8766"
+    val DEFAULT_NEURAL_URL: String get() = BuildConfig.DEFAULT_NEURAL_URL
     const val DEFAULT_BATCH_SIZE = 20
     const val DEFAULT_GOAL_CARDS = 20
     const val DEFAULT_GOAL_MINUTES = 10
-    const val DEFAULT_AI_URL = "http://example.local/v1"
+    val DEFAULT_AI_URL: String get() = BuildConfig.DEFAULT_AI_URL
     const val DEFAULT_AI_MODEL = "scottlowry/Ornith-1.5-35B-A3B-oQ5e-mtp:precise"
     const val DEFAULT_AI_LOOKAHEAD = 2
-    const val DEFAULT_DECISION_URL = ""
+    val DEFAULT_DECISION_URL: String get() = BuildConfig.DEFAULT_DECISION_URL
     const val DEFAULT_DECISION_MODEL = ""
+
+    /** Blank host with no baked default: Settings should ask for it. */
+    fun promptForUrl(value: String): Boolean = value.isBlank()
 
     /**
      * Build-time default from the gitignored local-api-key.txt.

@@ -1,4 +1,5 @@
 import java.io.File
+import java.util.Properties
 
 plugins {
     id("com.android.application")
@@ -12,6 +13,18 @@ val edgeTtsToken: String = if (edgeTokenFile.isFile) edgeTokenFile.readText().tr
 
 val ankiKeyFile = rootProject.file("local-api-key.txt")
 val ankiApiKey: String = if (ankiKeyFile.isFile) ankiKeyFile.readText().trim() else ""
+
+/** Host defaults from gitignored local.properties. Blank when missing so a fresh clone builds. */
+val localProps = Properties()
+val localPropsFile = rootProject.file("local.properties")
+if (localPropsFile.isFile) {
+    localPropsFile.inputStream().use { localProps.load(it) }
+}
+fun localProp(key: String): String = localProps.getProperty(key)?.trim().orEmpty()
+val defaultAnkiUrl = localProp("voicesrs.ankiUrl")
+val defaultNeuralUrl = localProp("voicesrs.neuralUrl")
+val defaultAiUrl = localProp("voicesrs.aiUrl")
+val defaultDecisionUrl = localProp("voicesrs.decisionUrl")
 
 /** Java string literal. Does not log [raw]. */
 fun javaStringLiteral(raw: String): String {
@@ -42,6 +55,10 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ANKI_API_KEY", javaStringLiteral(ankiApiKey))
         buildConfigField("String", "EDGE_TTS_TOKEN", javaStringLiteral(edgeTtsToken))
+        buildConfigField("String", "DEFAULT_ANKI_URL", javaStringLiteral(defaultAnkiUrl))
+        buildConfigField("String", "DEFAULT_NEURAL_URL", javaStringLiteral(defaultNeuralUrl))
+        buildConfigField("String", "DEFAULT_AI_URL", javaStringLiteral(defaultAiUrl))
+        buildConfigField("String", "DEFAULT_DECISION_URL", javaStringLiteral(defaultDecisionUrl))
     }
 
     buildFeatures {

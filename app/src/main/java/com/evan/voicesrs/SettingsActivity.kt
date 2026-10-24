@@ -106,6 +106,8 @@ class SettingsActivity : AppCompatActivity() {
 
         held = Prefs.load(this)
         urlView.setText(held.url)
+        (urlView.parent as? TextInputLayout)?.helperText =
+            if (Prefs.promptForUrl(held.url)) getString(R.string.settings_url_missing) else null
         keyView.setText("")
         keyStatus.text = getString(
             if (held.apiKey.isNotBlank()) R.string.settings_key_saved else R.string.settings_key_missing
@@ -442,6 +444,8 @@ class SettingsActivity : AppCompatActivity() {
         fun commitUrl() {
             val url = urlView.text?.toString()?.trim().orEmpty().ifBlank { Prefs.DEFAULT_URL }
             if (urlView.text?.toString() != url) urlView.setText(url)
+            (urlView.parent as? TextInputLayout)?.helperText =
+                if (Prefs.promptForUrl(url)) getString(R.string.settings_url_missing) else null
             if (!AutoSave.decide(held.url, url).save) return
             persist { it.copy(url = url) }
         }

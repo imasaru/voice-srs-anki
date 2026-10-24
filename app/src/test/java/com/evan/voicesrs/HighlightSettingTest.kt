@@ -15,7 +15,7 @@ import org.junit.Test
 class HighlightSettingTest {
 
     private fun baseCfg(): AnkiConfig = AnkiConfig(
-        url = Prefs.DEFAULT_URL,
+        url = "http://anki.example.invalid:8765",
         apiKey = "",
         deck = Prefs.DEFAULT_DECK,
         highlightSentence = true,

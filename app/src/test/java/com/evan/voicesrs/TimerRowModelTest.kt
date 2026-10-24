@@ -12,7 +12,7 @@ import org.junit.Test
 class TimerRowModelTest {
 
     /** Base config: goal off, a 10-minute time goal already stored. */
-    private val offAtTen = AnkiConfig(url = "http://x", apiKey = "k", deck = "d")
+    private val offAtTen = AnkiConfig(url = "http://anki.example.invalid", apiKey = "k", deck = "d")
         .copy(goalMode = GoalModes.OFF, goalMinutes = 10, goalCards = 20)
 
     @Test

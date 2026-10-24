@@ -20,6 +20,7 @@
     <string name="settings_key">API key</string>
     <string name="settings_key_saved">A key is saved. Leave this blank to keep it, or type a new one.</string>
     <string name="settings_key_missing">No API key yet. Enter the AnkiConnect key to connect.</string>
+    <string name="settings_url_missing">Enter the AnkiConnect URL.</string>
     <string name="settings_token_saved">A token is saved. Leave this blank to keep it, or type a new one.</string>
     <string name="settings_token_missing">No neural token yet. Neural speech needs one, or switch to on-device.</string>
     <string name="settings_deck">Deck</string>
