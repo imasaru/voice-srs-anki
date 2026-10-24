@@ -68,9 +68,18 @@ object ChatFeed {
         embedControls: Boolean = true,
         liveFollowUps: List<FollowUp> = emptyList(),
         asks: List<ChatRow.Ask> = emptyList(),
-        notice: String? = null
+        notice: String? = null,
+        history: List<StoredChat> = emptyList()
     ): List<ChatRow> {
-        val out = ArrayList<ChatRow>(turns.size + asks.size + 3)
+        val liveTurnIds = turns.map { it.turnId }.toSet()
+        val liveAskIds = asks.map { it.id }.toSet()
+        val out = ArrayList<ChatRow>(turns.size + asks.size + history.size + 3)
+        for (item in history) {
+            when (item.kind) {
+                StoredChat.TURN -> if (item.id !in liveTurnIds) out += ChatRow.Past(item.toTurn())
+                StoredChat.ASK -> if (item.id !in liveAskIds) out += item.toAsk()
+            }
+        }
         for (turn in turns) out += ChatRow.Past(turn)
         for (ask in asks) out += ask
         val note = notice?.trim().orEmpty()

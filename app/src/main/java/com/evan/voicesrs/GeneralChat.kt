@@ -153,12 +153,17 @@ object GeneralChat {
     }
 
     private fun mark(id: Long, state: ExplState) {
+        var stored: ChatRow.Ask? = null
         synchronized(lock) {
             val index = items.indexOfFirst { it.id == id }
             if (index < 0) return
             val copy = items.toMutableList()
             copy[index] = copy[index].copy(state = state)
             items = copy
+            stored = copy[index]
+        }
+        stored?.let { row ->
+            StoredChat.ofAsk(row)?.let { runCatching { ChatHistoryStore.upsert(it) } }
         }
         dispatch()
     }

@@ -10,7 +10,10 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 
-/** Folded-layout history. The list opens on the newest turn once, via stackFromEnd. */
+/**
+ * Folded-layout history. The list opens on the newest turn once, via stackFromEnd.
+ * [ChatPane] includes [ChatHistoryStore] so reports and past asks survive restarts.
+ */
 class HistorySheet : BottomSheetDialogFragment() {
     private var pane: ChatPane? = null
 

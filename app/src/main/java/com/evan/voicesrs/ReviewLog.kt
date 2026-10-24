@@ -118,6 +118,7 @@ object ReviewLog {
             turns = turns + created
             created
         }
+        persist(turn)
         dispatch()
         return turn
     }
@@ -163,7 +164,10 @@ object ReviewLog {
             turns = copy
             changed = true
         }
-        if (changed) dispatch()
+        if (changed) {
+            snapshot().firstOrNull { it.turnId == turnId }?.let { persist(it) }
+            dispatch()
+        }
         return changed
     }
 
@@ -183,6 +187,7 @@ object ReviewLog {
             found = true
             turn.copy(transcript = transcript, ease = ease)
         }
+        if (found) snapshot().firstOrNull { it.turnId == turnId }?.let { persist(it) }
         return found
     }
 
@@ -261,6 +266,10 @@ object ReviewLog {
             changed = true
         }
         if (changed) dispatch()
+    }
+
+    private fun persist(turn: ReviewTurn) {
+        runCatching { ChatHistoryStore.upsert(StoredChat.ofTurn(turn)) }
     }
 
     private fun dispatch() {
