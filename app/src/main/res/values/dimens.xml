@@ -3,4 +3,5 @@
     <dimen name="screen_padding">20dp</dimen>
     <dimen name="settings_side">0dp</dimen>
     <dimen name="pane_gap">12dp</dimen>
+    <dimen name="question_label_gap">8dp</dimen>
 </resources>
