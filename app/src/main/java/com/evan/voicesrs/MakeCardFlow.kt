@@ -83,6 +83,7 @@ object MakeCardFlow {
         }
         val app = context.applicationContext
         Thread({
+            var reported = false
             val ok = try {
                 val cfg = Prefs.load(app)
                 val id = AnkiConnect(cfg.url, cfg.apiKey).addNote(
@@ -94,8 +95,11 @@ object MakeCardFlow {
                 id != 0L
             } catch (e: Exception) {
                 ErrorSnackbar.report(context, e, SaveErrors.Op.MAKE_CARD)
+                reported = true
                 false
             }
+            // The snackbar already explained the failure; do not stack a generic toast on it.
+            if (reported) return@Thread
             main.post {
                 Toast.makeText(
                     app,
