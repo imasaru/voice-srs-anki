@@ -87,12 +87,6 @@ class TestAnswerCards:
         result = ac.answerCards(answers)
         assert result == [True] * 4
 
-    def test_answerCards_with_time(self, setup):
-        ac.scheduler().reset()
-        cid = setup.card_ids[0]
-        result = ac.answerCards([{"cardId": cid, "ease": 3, "time": 4200}])
-        assert result == [True]
-
     def test_answerCards_with_invalid_card_id(self, setup):
         ac.scheduler().reset()
         result = ac.answerCards([{"cardId": 123, "ease": 2}])

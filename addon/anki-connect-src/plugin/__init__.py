@@ -1539,19 +1539,7 @@ class AnkiConnect:
                 cid = answer['cardId']
                 ease = answer['ease']
                 card = self.getCard(cid)
-                # Optional time in ms. Stock AnkiConnect always called
-                # start_timer() immediately before answering, so revlog.time
-                # was ~0. Voice SRS sends think-to-grade duration as `time`.
-                duration_ms = answer.get('time')
-                if duration_ms is None:
-                    duration_ms = answer.get('duration')
-                if duration_ms:
-                    try:
-                        card.timer_started = time.time() - (float(duration_ms) / 1000.0)
-                    except Exception:
-                        card.start_timer()
-                else:
-                    card.start_timer()
+                card.start_timer()
                 scheduler.answerCard(card, ease)
                 success.append(True)
             except NotFoundError:
