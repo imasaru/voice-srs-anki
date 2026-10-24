@@ -20,6 +20,20 @@ class LocalQueueTest {
     }
 
     @Test
+    fun `pending grade duration round trips and old rows default to unknown`() {
+        val withTime = listOf(PendingGrade(9L, 3, 50L, durationMs = 4_200L))
+        assertEquals(withTime, LocalQueueJson.decodeGrades(LocalQueueJson.encodeGrades(withTime)))
+        val old = """{"grades":[{"cardId":9,"ease":3,"queuedAtMs":50}]}"""
+        val decoded = LocalQueueJson.decodeGrades(old).single()
+        assertEquals(9L, decoded.cardId)
+        assertEquals(3, decoded.ease)
+        assertEquals(50L, decoded.queuedAtMs)
+        assertEquals(0L, decoded.durationMs)
+        val zero = listOf(PendingGrade(9L, 1, 1L, durationMs = 0L))
+        assertEquals(zero, LocalQueueJson.decodeGrades(LocalQueueJson.encodeGrades(zero)))
+    }
+
+    @Test
     fun `bad grade json is empty`() {
         assertTrue(LocalQueueJson.decodeGrades("nope").isEmpty())
         assertTrue(LocalQueueJson.decodeBatch("{").isEmpty())

@@ -21,7 +21,9 @@ data class ReviewTurn(
     /** QUESTION N or CARD N. Empty on turns recorded before v0.1.19. */
     val questionLabel: String = "",
     /** Note Correct field. Empty on turns recorded before v0.1.20. */
-    val correctField: String = ""
+    val correctField: String = "",
+    /** Think-to-grade duration in ms. 0 when unknown. */
+    val durationMs: Long = ThinkTime.UNKNOWN_DURATION_MS
 )
 
 sealed interface ExplState {
@@ -87,7 +89,8 @@ object ReviewLog {
         aiEnabled: Boolean,
         autoExplain: Boolean = true,
         questionLabel: String = "",
-        correctField: String = ""
+        correctField: String = "",
+        durationMs: Long = ThinkTime.UNKNOWN_DURATION_MS
     ): ReviewTurn? {
         if (ease == null) return null
         val explanation = when {
@@ -109,7 +112,8 @@ object ReviewLog {
                 explanation = explanation,
                 unread = false,
                 questionLabel = questionLabel,
-                correctField = correctField
+                correctField = correctField,
+                durationMs = durationMs
             )
             turns = turns + created
             created

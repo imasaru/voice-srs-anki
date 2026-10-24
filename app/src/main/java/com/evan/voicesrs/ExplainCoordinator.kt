@@ -23,7 +23,8 @@ class ExplainSession private constructor(
         frontHtml: String,
         backHtml: String,
         transcript: String,
-        ease: Int
+        ease: Int,
+        durationMs: Long = ThinkTime.UNKNOWN_DURATION_MS
     ) {
         val info = resolve(anki, cardId)
         record(
@@ -33,14 +34,29 @@ class ExplainSession private constructor(
             info?.back ?: backHtml,
             transcript,
             ease,
-            info?.correct.orEmpty().ifBlank { DrillUi.state.correctField }
+            info?.correct.orEmpty().ifBlank { DrillUi.state.correctField },
+            durationMs
         )
         seen += cardId
     }
 
-    fun recordOffline(card: OfflineCard, transcript: String, ease: Int) {
+    fun recordOffline(
+        card: OfflineCard,
+        transcript: String,
+        ease: Int,
+        durationMs: Long = ThinkTime.UNKNOWN_DURATION_MS
+    ) {
         notes[card.cardId] = card
-        record(card.cardId, card.noteId, card.front, card.back, transcript, ease, card.correct)
+        record(
+            card.cardId,
+            card.noteId,
+            card.front,
+            card.back,
+            transcript,
+            ease,
+            card.correct,
+            durationMs
+        )
         seen += card.cardId
     }
 
@@ -95,7 +111,8 @@ class ExplainSession private constructor(
         back: String,
         transcript: String,
         ease: Int,
-        correct: String = ""
+        correct: String = "",
+        durationMs: Long = ThinkTime.UNKNOWN_DURATION_MS
     ) {
         val hash = ContentHash.of(PromptBuilder.PROMPT_VERSION, front, back)
         val noteKey = noteId ?: cardId
@@ -115,7 +132,8 @@ class ExplainSession private constructor(
             aiEnabled = cfg.aiEnabled,
             autoExplain = auto,
             questionLabel = label,
-            correctField = correct
+            correctField = correct,
+            durationMs = durationMs
         ) ?: return
         attachThread(turn)
         mergeLiveAsks(turn)

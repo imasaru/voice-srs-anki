@@ -1466,7 +1466,8 @@ class DrillService : Service(), VoiceIo {
                                 step.questionHtml.ifBlank { card.questionHtml },
                                 step.answerHtml,
                                 step.transcript,
-                                step.ease
+                                step.ease,
+                                step.elapsedMs
                             )
                         }
                         progress.recordGrade(step.ease, step.elapsedMs)
@@ -1564,8 +1565,22 @@ class DrillService : Service(), VoiceIo {
                     }
                 }
                 is CardStep.Graded -> {
-                    runCatching { explainSession?.recordOffline(card, step.transcript, step.ease) }
-                    store.enqueueGrade(PendingGrade(card.cardId, step.ease, System.currentTimeMillis()))
+                    runCatching {
+                        explainSession?.recordOffline(
+                            card,
+                            step.transcript,
+                            step.ease,
+                            step.elapsedMs
+                        )
+                    }
+                    store.enqueueGrade(
+                        PendingGrade(
+                            card.cardId,
+                            step.ease,
+                            System.currentTimeMillis(),
+                            step.elapsedMs
+                        )
+                    )
                     progress.recordGrade(step.ease, step.elapsedMs)
                     publish(progress, store)
                     Log.i(TAG, "queued ease=${step.ease}")
@@ -1617,7 +1632,8 @@ class DrillService : Service(), VoiceIo {
         activeQuestionHtml = questionHtml
         val question = spokenQuestion(questionHtml, cardId)
         if (question.isBlank()) return CardStep.Blank
-        val started = SystemClock.elapsedRealtime()
+        var presentedAt = 0L
+        var questionRead = false
         showAnswerEarly.set(false)
         silentReveal.set(false)
         chosenLetter = null
@@ -1634,6 +1650,7 @@ class DrillService : Service(), VoiceIo {
             memoHint
         )
         if (!awaitOnScreen(cardIndex + 1)) return CardStep.Paused
+        presentedAt = SystemClock.elapsedRealtime()
         var repeats = 0
         var transcript = ""
         while (!stopRequested.get()) {
@@ -1651,6 +1668,10 @@ class DrillService : Service(), VoiceIo {
                 CardResume.READ_ANSWER -> break
                 CardResume.READ_QUESTION -> {
                     speak(question)
+                    if (!questionRead) {
+                        presentedAt = SystemClock.elapsedRealtime()
+                        questionRead = true
+                    }
                     if (stopRequested.get()) return CardStep.Paused
                     if (chatPaused.get()) continue
                     if (showAnswerEarly.get() || sessionSilent) continue
@@ -1731,7 +1752,7 @@ class DrillService : Service(), VoiceIo {
             if (!awaitChatResume()) return CardStep.Paused
             val tappedEarly = claimedEase()
             if (tappedEarly != null) {
-                return gradedByTap(tappedEarly, gradeButtons, started, transcript, answerHtml, questionForGrade)
+                return gradedByTap(tappedEarly, gradeButtons, presentedAt, transcript, answerHtml, questionForGrade)
             }
             when (AudioGate.resume(sessionSilent, cardUp = true, answerShown = true)) {
                 CardResume.HOLD, CardResume.READ_QUESTION -> when (val wait = awaitSilentGrade()) {
@@ -1741,7 +1762,7 @@ class DrillService : Service(), VoiceIo {
                         continue
                     }
                     is GradeWait.Ease -> return gradedByTap(
-                        wait.ease, gradeButtons, started, transcript, answerHtml, questionForGrade
+                        wait.ease, gradeButtons, presentedAt, transcript, answerHtml, questionForGrade
                     )
                 }
                 CardResume.READ_ANSWER -> {
@@ -1774,12 +1795,12 @@ class DrillService : Service(), VoiceIo {
                         if (tapGrade) {
                             val raw = claimedEase() ?: ease
                             return gradedByTap(
-                                raw, gradeButtons, started, transcript, answerHtml, questionForGrade
+                                raw, gradeButtons, presentedAt, transcript, answerHtml, questionForGrade
                             )
                         }
                         return CardStep.Graded(
                             ease,
-                            SystemClock.elapsedRealtime() - started,
+                            ThinkTime.answerDurationMs(presentedAt, SystemClock.elapsedRealtime()),
                             transcript,
                             answerHtml,
                             questionForGrade
@@ -2544,7 +2565,7 @@ class DrillService : Service(), VoiceIo {
         }
         return CardStep.Graded(
             ease,
-            SystemClock.elapsedRealtime() - startedElapsed,
+            ThinkTime.answerDurationMs(startedElapsed, SystemClock.elapsedRealtime()),
             transcript,
             answerHtml,
             questionHtml

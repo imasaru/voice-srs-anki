@@ -41,6 +41,20 @@ object ThinkTime {
     fun durationMs(sec: Int): Long = normalize(sec) * 1_000L
 
     /**
+     * Time from question presented (end of TTS, or card shown in silent)
+     * to the grade, in ms. Zero means unknown: the clock never armed, or
+     * an old queued row from before duration was stored.
+     */
+    const val UNKNOWN_DURATION_MS = 0L
+
+    fun answerDurationMs(presentedAtMs: Long, gradedAtMs: Long): Long {
+        if (presentedAtMs <= 0L || gradedAtMs <= 0L) return UNKNOWN_DURATION_MS
+        val delta = gradedAtMs - presentedAtMs
+        if (delta <= 0L) return UNKNOWN_DURATION_MS
+        return delta
+    }
+
+    /**
      * Whole seconds still on the clock, counting the current second.
      * Zero once [deadlineMs] has been reached.
      */

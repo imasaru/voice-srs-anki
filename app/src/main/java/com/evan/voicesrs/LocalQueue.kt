@@ -22,7 +22,9 @@ data class OfflineCard(
 data class PendingGrade(
     val cardId: Long,
     val ease: Int,
-    val queuedAtMs: Long
+    val queuedAtMs: Long,
+    /** Think-to-grade duration in ms. 0 on old queued rows (unknown). */
+    val durationMs: Long = ThinkTime.UNKNOWN_DURATION_MS
 )
 
 /** Retry delays for a failed answerCards sync. Attempt 0 waits 2s, then doubles, capped at 60s. */
@@ -56,6 +58,7 @@ object LocalQueueJson {
                 put("cardId", grade.cardId)
                 put("ease", grade.ease)
                 put("queuedAtMs", grade.queuedAtMs)
+                put("durationMs", grade.durationMs)
             })
         }
         return JSONObject().put("grades", arr).toString()
@@ -74,7 +77,12 @@ object LocalQueueJson {
             val id = o.optLong("cardId", 0L)
             val ease = o.optInt("ease", 0)
             if (id == 0L || ease !in 1..4) continue
-            out += PendingGrade(id, ease, o.optLong("queuedAtMs", 0L))
+            out += PendingGrade(
+                id,
+                ease,
+                o.optLong("queuedAtMs", 0L),
+                o.optLong("durationMs", ThinkTime.UNKNOWN_DURATION_MS)
+            )
         }
         return out
     }

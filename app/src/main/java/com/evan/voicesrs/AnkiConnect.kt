@@ -207,13 +207,33 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) {
         return out
     }
 
-    /** @return one boolean per grade, true when Anki accepted it. */
+    /**
+     * @return one boolean per grade, true when Anki accepted it.
+     * Each answer may include [AnswerCardsRequest] `time` (ms). Stock
+     * AnkiConnect ignores extra fields and starts the card timer immediately
+     * before answering, so revlog.time would be ~0. The bundled add-on reads
+     * `time`. If the server rejects the extra field, the grade is retried
+     * without it; a duration miss never fails the grade.
+     */
     fun answerCards(grades: List<PendingGrade>): List<Boolean> {
         if (grades.isEmpty()) return emptyList()
-        val answers = grades.map { mapOf("cardId" to it.cardId, "ease" to it.ease) }
+        return try {
+            postAnswerCards(AnswerCardsRequest.body(grades, includeTime = true), grades.size)
+        } catch (e: AnkiConnectException) {
+            if (!AnswerCardsRequest.timeRejected(e.message) ||
+                grades.none { it.durationMs > 0L }
+            ) {
+                throw e
+            }
+            Log.w(TAG, "answerCards rejected time; retrying without duration")
+            postAnswerCards(AnswerCardsRequest.body(grades, includeTime = false), grades.size)
+        }
+    }
+
+    private fun postAnswerCards(answers: JSONArray, n: Int): List<Boolean> {
         val r = post("answerCards", mapOf("answers" to answers)) as? JSONArray
-            ?: return List(grades.size) { false }
-        return List(grades.size) { index -> index < r.length() && r.optBoolean(index, false) }
+            ?: return List(n) { false }
+        return List(n) { index -> index < r.length() && r.optBoolean(index, false) }
     }
 
     fun suspendCards(ids: List<Long>) {

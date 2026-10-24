@@ -33,6 +33,18 @@ class ThinkTimeTest {
     }
 
     @Test
+    fun `answer duration is end of question to grade and unknown when unarmed`() {
+        assertEquals(4_200L, ThinkTime.answerDurationMs(1_000L, 5_200L))
+        assertEquals(1L, ThinkTime.answerDurationMs(10L, 11L))
+        assertEquals(0L, ThinkTime.answerDurationMs(0L, 5_200L))
+        assertEquals(0L, ThinkTime.answerDurationMs(-1L, 5_200L))
+        assertEquals(0L, ThinkTime.answerDurationMs(5_200L, 5_200L))
+        assertEquals(0L, ThinkTime.answerDurationMs(5_201L, 5_200L))
+        assertEquals(0L, ThinkTime.answerDurationMs(1_000L, 0L))
+        assertEquals(ThinkTime.UNKNOWN_DURATION_MS, ThinkTime.answerDurationMs(0L, 0L))
+    }
+
+    @Test
     fun `countdown is app side and expires on its own clock`() {
         assertEquals(20, ThinkTime.remainingSec(0L, 20_000L))
         assertEquals(1, ThinkTime.remainingSec(19_001L, 20_000L))
