@@ -33,6 +33,16 @@ object OwnWordsJudge {
         return "$root$PATH"
     }
 
+    /**
+     * Decision base URL; blank falls back to the main chat model base (same oMLX
+     * host). A trailing `/chat/completions` on the main URL is dropped.
+     */
+    fun effectiveBase(decisionUrl: String, mainBaseUrl: String): String {
+        val own = decisionUrl.trim()
+        if (own.isNotEmpty()) return own
+        return mainBaseUrl.trim().trimEnd('/').removeSuffix("/chat/completions").trimEnd('/')
+    }
+
     /** Base used for `GET /models` on the same host. */
     fun modelsBase(baseUrl: String): String {
         val root = baseUrl.trim().trimEnd('/')

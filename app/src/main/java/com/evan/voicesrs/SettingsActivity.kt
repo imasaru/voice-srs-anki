@@ -663,7 +663,10 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<View>(R.id.aiModelRefresh).setOnClickListener { loadAiModels() }
         loadAiModels()
         fun loadDecisionModels() {
-            val raw = decisionUrlInput.text?.toString()?.trim().orEmpty()
+            val raw = OwnWordsJudge.effectiveBase(
+                decisionUrlInput.text?.toString().orEmpty(),
+                aiBaseUrlInput.text?.toString()?.trim().orEmpty().ifBlank { held.aiBaseUrl }
+            )
             val url = OwnWordsJudge.modelsBase(raw)
             if (!url.startsWith("http://") && !url.startsWith("https://")) return
             val key = aiKeyInput.text?.toString()?.trim().orEmpty().ifBlank { held.aiApiKey }
@@ -691,7 +694,7 @@ class SettingsActivity : AppCompatActivity() {
             }.start()
         }
         findViewById<View>(R.id.decisionModelRefresh).setOnClickListener { loadDecisionModels() }
-        if (held.decisionUrl.isNotBlank()) loadDecisionModels()
+        loadDecisionModels()
         flushTexts = {
             commitUrl()
             commitKey()

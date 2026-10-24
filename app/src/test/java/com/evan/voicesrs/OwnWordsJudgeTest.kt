@@ -87,4 +87,16 @@ class OwnWordsJudgeTest {
             )
         )
     }
+
+    @Test
+    fun blankDecisionUrlFallsBackToMainBase() {
+        assertEquals("http://h:8000/v1", OwnWordsJudge.effectiveBase("", "http://h:8000/v1/"))
+        assertEquals("http://h:8000/v1/systemone",
+            OwnWordsJudge.endpoint(OwnWordsJudge.effectiveBase("  ", "http://h:8000/v1")))
+        assertEquals("http://h:8000/v1/systemone",
+            OwnWordsJudge.endpoint(OwnWordsJudge.effectiveBase("", "http://h:8000")))
+        assertEquals("http://h:8000/v1/systemone",
+            OwnWordsJudge.endpoint(OwnWordsJudge.effectiveBase("", "http://h:8000/v1/chat/completions")))
+        assertEquals("http://d:1", OwnWordsJudge.effectiveBase("http://d:1", "http://h:8000/v1"))
+    }
 }

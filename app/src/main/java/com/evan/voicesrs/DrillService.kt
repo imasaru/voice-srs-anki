@@ -2094,7 +2094,8 @@ class DrillService : Service(), VoiceIo {
             return
         }
         if (!cfg.decisionEnabled || sessionSilent) return
-        if (cfg.decisionUrl.isBlank()) {
+        val decisionBase = OwnWordsJudge.effectiveBase(cfg.decisionUrl, cfg.aiBaseUrl)
+        if (decisionBase.isBlank()) {
             val line = getString(R.string.own_words_fallback)
             showStatus(line)
             speak(line)
@@ -2118,7 +2119,7 @@ class DrillService : Service(), VoiceIo {
                 correctAnswer,
                 transcript
             )
-            val raw = AiClient().postDecision(cfg.decisionUrl, cfg.aiApiKey, body) {
+            val raw = AiClient().postDecision(decisionBase, cfg.aiApiKey, body) {
                 stopRequested.get() || destroyed
             }
             OwnWordsJudge.result(raw, null)
