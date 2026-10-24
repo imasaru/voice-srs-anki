@@ -9,7 +9,7 @@ import java.io.File
 /**
  * Verifies the refresh controls in activity_settings.xml are icon-only
  * MaterialButton buttons with the metrics that keep the 24dp ic_refresh
- * icon fully visible (48dp tap target, iconSize 24dp, 12dp padding,
+ * icon fully visible (wrap_content with 48dp minimum tap target, iconSize 24dp, 12dp padding,
  * zero insets). Also checks the content-description strings.
  */
 class SettingsRefreshLayoutTest {
@@ -58,8 +58,11 @@ class SettingsRefreshLayoutTest {
                 "com.google.android.material.button.MaterialButton", el.tagName)
             assertEquals("wrong style for $label",
                 "@style/Widget.Material3.Button.IconButton", attr(el, "style"))
-            assertEquals("width for $label", "48dp", attr(el, "android:layout_width"))
-            assertEquals("height for $label", "48dp", attr(el, "android:layout_height"))
+            assertEquals("width for $label", "wrap_content", attr(el, "android:layout_width"))
+            assertEquals("height for $label", "wrap_content", attr(el, "android:layout_height"))
+            assertEquals("minWidth for $label", "48dp", attr(el, "android:minWidth"))
+            assertEquals("minHeight for $label", "48dp", attr(el, "android:minHeight"))
+            assertEquals("weight for $label", "0", attr(el, "android:layout_weight"))
             assertEquals("iconSize for $label", "24dp", attr(el, "app:iconSize"))
             assertEquals("padding for $label", "12dp", attr(el, "android:padding"))
             assertEquals("insetLeft for $label", "0dp", attr(el, "android:insetLeft"))
