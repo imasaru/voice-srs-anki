@@ -29,6 +29,7 @@
             android:textAllCaps="true"
             android:textAppearance="?attr/textAppearanceLabelSmall"
             android:textColor="?attr/colorOnSurfaceVariant"
+            android:layout_marginBottom="@dimen/question_label_gap"
             android:visibility="gone" />
 
         <TextView
