@@ -2,8 +2,10 @@ package com.evan.voicesrs
 
 /**
  * The one plain line on the home card. Not a chip and not tappable.
- * Names the engine that will actually speak: Edge only when it is selected
- * and healthy, otherwise the on-device voice.
+ * Before a clip starts this is the preferred engine (Edge when selected
+ * and not known to be down). Once an utterance begins, the live drill
+ * label from [EngineLabel.afterStart] wins so a neural miss that falls
+ * back to the device voice names the device for that clip only.
  */
 object VoiceStatusLine {
     const val FALLBACK_NOTE = "· falls back to device voice offline"

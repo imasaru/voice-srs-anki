@@ -442,7 +442,9 @@ class DrillService : Service(), VoiceIo {
                     tts?.language = Locale.US
                     applyTtsPrefs()
                     tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                        override fun onStart(utteranceId: String) {}
+                        override fun onStart(utteranceId: String) {
+                            onUtteranceStarted(utteranceId)
+                        }
                         override fun onDone(utteranceId: String) { onUtteranceFinished(utteranceId) }
                         override fun onError(utteranceId: String) { onUtteranceFinished(utteranceId) }
                         override fun onStop(utteranceId: String, interrupted: Boolean) {
@@ -685,10 +687,8 @@ class DrillService : Service(), VoiceIo {
         if (preferred != EngineChoice.NEURAL) {
             neuralHealthKnown = true
             neuralBlocked = true
-            showEngine(EngineLabel.of(preferred, false))
             return
         }
-        if (!neuralHealthKnown) showEngine(EngineLabel.of(preferred, null))
         lastNeuralHealthAt = SystemClock.elapsedRealtime()
         val ok = try {
             EdgeSpeaker(this).healthy(cfg.neuralUrl, cfg.neuralToken, NeuralTts.HEALTH_TIMEOUT_MS)
@@ -699,10 +699,8 @@ class DrillService : Service(), VoiceIo {
         neuralBlocked = !ok
         if (NeuralTts.sessionEngine(preferred, ok) == EngineChoice.NEURAL) {
             Log.i(TAG, "neural health ok")
-            showEngine(EngineLabel.of(preferred, true))
         } else {
             Log.i(TAG, "neural health fail")
-            showEngine(EngineLabel.of(preferred, false))
         }
     }
 
@@ -871,6 +869,11 @@ class DrillService : Service(), VoiceIo {
         runCatching { DrillUi.update { it.copy(engineLabel = label) } }
     }
 
+    /** Home-card label follows the engine that actually began this utterance. */
+    private fun reportPlaybackStart(engine: EngineChoice) {
+        showEngine(EngineLabel.forPlayback(engine))
+    }
+
     private fun showQuestionUi(
         questionHtml: String,
         cardIndex: Int,
@@ -996,7 +999,6 @@ class DrillService : Service(), VoiceIo {
             Log.w(TAG, "prefs load failed during speak", e)
             if (speakOnDevice(spoken)) {
                 Log.i(TAG, "TTS engine=on-device ok")
-                showEngine(EngineLabel.of(EngineChoice.ON_DEVICE, false))
             }
             return
         }
@@ -1007,22 +1009,22 @@ class DrillService : Service(), VoiceIo {
                     cfg.neuralToken,
                     cfg.neuralVoice,
                     cfg.ttsRate,
-                    spoken
-                ) { stopRequested.get() || speechInterrupted || sessionSilent }
+                    spoken,
+                    cancelled = { stopRequested.get() || speechInterrupted || sessionSilent },
+                    onPlaybackStart = { reportPlaybackStart(EngineChoice.NEURAL) }
+                )
             } catch (e: Exception) {
                 Log.w(TAG, "neural speak error")
                 false
             }
             if (ok) {
                 Log.i(TAG, "TTS engine=neural ok")
-                showEngine(EngineLabel.of(EngineChoice.NEURAL, true))
                 return
             }
             // A tap or Stop already ended this utterance. Do not replay it on-device.
             if (stopRequested.get() || speechInterrupted) return
             if (speakOnDevice(spoken)) {
                 Log.i(TAG, "TTS engine=neural fail; fallback on-device ok")
-                showEngine(EngineLabel.of(EngineChoice.NEURAL, false))
             } else {
                 Log.w(TAG, "TTS engine=neural fail; fallback on-device failed")
             }
@@ -1030,7 +1032,6 @@ class DrillService : Service(), VoiceIo {
         }
         if (speakOnDevice(spoken)) {
             Log.i(TAG, "TTS engine=on-device ok")
-            showEngine(EngineLabel.of(EngineChoice.ON_DEVICE, false))
         } else {
             Log.w(TAG, "TTS engine=on-device failed")
         }
@@ -1076,6 +1077,13 @@ class DrillService : Service(), VoiceIo {
     private fun onUtteranceFinished(utteranceId: String?) {
         if (SpeakLatch.isCurrent(speakUtterance, utteranceId)) {
             speakLatch?.countDown()
+        }
+    }
+
+    /** On-device audio actually began. A rejected speak never reaches here. */
+    private fun onUtteranceStarted(utteranceId: String?) {
+        if (SpeakLatch.isCurrent(speakUtterance, utteranceId)) {
+            reportPlaybackStart(EngineChoice.ON_DEVICE)
         }
     }
 

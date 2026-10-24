@@ -53,8 +53,10 @@ object NeuralTts {
     const val HEALTH_RECHECK_MS = 45_000L
 
     /**
-     * Neural is used only when the user asked for it and /health succeeded.
-     * A failed check stays on-device until a later check passes.
+     * Engine to *try* for the next utterance. Neural only when the user asked
+     * for it and /health succeeded. A failed check stays on-device until a
+     * later check passes. The home-card label is not this value: it is set
+     * from [EngineLabel.afterStart] when audio actually begins.
      */
     fun sessionEngine(preferred: EngineChoice, healthOk: Boolean): EngineChoice {
         return if (preferred == EngineChoice.NEURAL && healthOk) {

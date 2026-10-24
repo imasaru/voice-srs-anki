@@ -43,7 +43,10 @@ object PlaybackSpeaker {
                     cfg.neuralVoice,
                     cfg.ttsRate,
                     spoken,
-                    cancelled
+                    cancelled = cancelled,
+                    onPlaybackStart = {
+                        DrillUi.update { it.copy(engineLabel = EngineLabel.forPlayback(EngineChoice.NEURAL)) }
+                    }
                 )
             } catch (_: Exception) {
                 false

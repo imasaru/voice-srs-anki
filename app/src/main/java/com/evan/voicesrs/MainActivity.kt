@@ -767,9 +767,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * The engine that will speak. A live drill label wins once the service has
-     * probed. Before that, a selected Edge voice stays on the line until /health
-     * fails. The line is not a chip and nothing here is logged.
+     * The engine that will speak. A live drill label wins once an utterance
+     * has actually started. Before that, a selected Edge voice stays on the
+     * line until /health fails. The line is not a chip and nothing here is logged.
      */
     private fun currentVoiceLine(cfg: AnkiConfig, state: DrillUiState): String {
         val preferred = TtsEngines.preferred(cfg.ttsEngine)

@@ -65,6 +65,8 @@ class EdgeSpeaker(private val context: Context) {
     /**
      * @return true when playback ran to completion.
      * [cancelled] is polled so a drill stop does not wait out the clip.
+     * [onPlaybackStart] fires once audio actually begins; a download or
+     * prepare miss never calls it, so the voice label stays as it was.
      */
     fun speakBlocking(
         baseUrl: String,
@@ -72,7 +74,8 @@ class EdgeSpeaker(private val context: Context) {
         voice: String,
         rate: Float,
         text: String,
-        cancelled: () -> Boolean = { false }
+        cancelled: () -> Boolean = { false },
+        onPlaybackStart: () -> Unit = {}
     ): Boolean {
         val spoken = text.trim()
         if (spoken.isEmpty() || spoken.length > NeuralTts.MAX_TEXT) return false
@@ -96,7 +99,7 @@ class EdgeSpeaker(private val context: Context) {
             trimCache(file.parentFile)
         }
         if (cancelled()) return false
-        val played = play(file, cancelled)
+        val played = play(file, cancelled, onPlaybackStart)
         if (!played && !cancelled()) file.delete()
         return played
     }
@@ -185,7 +188,11 @@ class EdgeSpeaker(private val context: Context) {
         return stream?.readBytes()?.decodeToString().orEmpty()
     }
 
-    private fun play(file: File, cancelled: () -> Boolean): Boolean {
+    private fun play(
+        file: File,
+        cancelled: () -> Boolean,
+        onPlaybackStart: () -> Unit = {}
+    ): Boolean {
         val player = MediaPlayer()
         val latch = CountDownLatch(1)
         val ok = AtomicBoolean(true)
@@ -207,6 +214,7 @@ class EdgeSpeaker(private val context: Context) {
             player.prepare()
             if (cancelled()) return false
             player.start()
+            runCatching { onPlaybackStart() }
             val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(120_000)
             while (latch.count > 0) {
                 if (cancelled()) {
