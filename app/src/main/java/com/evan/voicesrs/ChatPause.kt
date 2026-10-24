@@ -82,6 +82,19 @@ object ChatPause {
     fun reengageCancels(timerArmed: Boolean): Boolean = timerArmed
 
     /**
+     * Clearing the composer never auto-resumes. A typing pause holds the card
+     * until the Resume button or a voice "resume"; [showResume] keeps that
+     * button visible while it waits.
+     */
+    fun afterTextCleared(): ResumePlan = ResumePlan(
+        autoResume = false,
+        delayMs = 0L,
+        stayPausedUntilTimer = true,
+        showResume = true,
+        pulse = false
+    )
+
+    /**
      * The pause row shows Resume as soon as the drill freezes.
      * The accent pulse waits until a question was actually sent.
      */

@@ -240,6 +240,16 @@ class DrillService : Service(), VoiceIo {
             active?.onChatDisengage(end)
         }
 
+        /**
+         * The composer was cleared. Stays paused and shows Resume; never arms an
+         * auto-resume. See [ChatPause.afterTextCleared].
+         */
+        fun noteChatCleared() {
+            val svc = active ?: return
+            if (!svc.chatPaused.get()) return
+            svc.applyChatPlan(ChatPause.afterTextCleared())
+        }
+
         /** A question left the composer. The card stays paused. */
         fun noteQuestionSent() {
             active?.onQuestionSent()
@@ -2099,10 +2109,17 @@ class DrillService : Service(), VoiceIo {
         if (!chatPaused.get()) return
         if (questionSentWhilePaused && end != ChatPause.Disengage.QUESTION_SENT) return
         if (!::mainHandler.isInitialized) return
-        val plan = ChatPause.afterDisengage(end)
+        if (end == ChatPause.Disengage.QUESTION_SENT) questionSentWhilePaused = true
+        applyChatPlan(ChatPause.afterDisengage(end))
+    }
+
+    /**
+     * Apply a chat pause plan: cancel any pending auto-resume, then either arm
+     * the resume timer or just show/hide the Resume button.
+     */
+    private fun applyChatPlan(plan: ChatPause.ResumePlan) {
         mainHandler.removeCallbacks(autoResumeRunnable)
         autoResumeArmed = false
-        if (end == ChatPause.Disengage.QUESTION_SENT) questionSentWhilePaused = true
         if (plan.autoResume) {
             autoResumeArmed = true
             mainHandler.postDelayed(autoResumeRunnable, plan.delayMs)
