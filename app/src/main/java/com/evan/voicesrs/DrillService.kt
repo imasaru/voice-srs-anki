@@ -313,6 +313,8 @@ class DrillService : Service(), VoiceIo {
     @Volatile private var shownOrdinal = 0
     /** Original letter from a tap or a spoken "B" / "bee". Null until the learner picks. */
     @Volatile private var chosenLetter: String? = null
+    /** Ease from the decision model for a free-speech MCQ answer. */
+    @Volatile private var judgedEase: Int? = null
     /** Wall clock at session start. Option order is seeded with this and the card id. */
     @Volatile private var sessionStartedMs = 0L
     /** Question HTML of the card in [drillOne]. Letter parsing reads it. */
@@ -1139,6 +1141,10 @@ class DrillService : Service(), VoiceIo {
                         if (noteChoice(decision.letter)) return chosenLetter
                     }
                     is SpokenLetter.Decision.Unmatched -> {
+                        if (decision.heard.isNotBlank() && ownWordsOpen()) {
+                            runCatching { DrillUi.update { it.copy(heard = decision.heard) } }
+                            return decision.heard
+                        }
                         runCatching { DrillUi.update { it.copy(heard = decision.heard) } }
                         completed = step.attempts
                         Log.i(TAG, "answer unmatched $completed/$max")
@@ -1637,6 +1643,7 @@ class DrillService : Service(), VoiceIo {
         showAnswerEarly.set(false)
         silentReveal.set(false)
         chosenLetter = null
+        judgedEase = null
         if (!awaitChatResume()) return CardStep.Paused
         showQuestionUi(
             questionHtml,
@@ -1733,6 +1740,7 @@ class DrillService : Service(), VoiceIo {
         }
         showAnswerEarly.set(false)
         if (transcript.isBlank()) chosenLetter?.let { transcript = it }
+        judgeOwnWordsIfNeeded(questionHtml, correct, transcript)
         if (!awaitChatResume()) return CardStep.Paused
         if (stopRequested.get()) return CardStep.Paused
         val revealed = reveal()
@@ -1776,6 +1784,16 @@ class DrillService : Service(), VoiceIo {
                         speakAnswer = sessionSilent || speechInterrupted
                         if (stopRequested.get()) return CardStep.Paused
                         continue
+                    }
+                    val auto = judgedEase
+                    if (auto != null) {
+                        return CardStep.Graded(
+                            GradeMapper.toAvailableEase(auto, gradeButtons),
+                            ThinkTime.answerDurationMs(presentedAt, SystemClock.elapsedRealtime()),
+                            transcript,
+                            answerHtml,
+                            questionForGrade
+                        )
                     }
                     showStatus("Rate this card")
                     setGrading(true)
@@ -2052,6 +2070,76 @@ class DrillService : Service(), VoiceIo {
     private fun letterChoice(raw: String?): TapAnswer.Choice? {
         val letters = answerLetters() ?: return null
         return TapAnswer.onSpoken(raw, letters, correct = null, revealed = false)
+    }
+
+    private fun ownWordsOpen(): Boolean {
+        return try {
+            Prefs.load(this).decisionEnabled
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Free-speech MCQ answer. A letter still uses the existing path.
+     * Unreachable or malformed judge results fall back to [VoiceSelfGrader].
+     */
+    private fun judgeOwnWordsIfNeeded(questionHtml: String, correctField: String, transcript: String) {
+        judgedEase = null
+        val letters = answerLetters()
+        if (!OwnWordsJudge.shouldJudge(transcript, letters)) return
+        val cfg = try {
+            Prefs.load(this)
+        } catch (_: Exception) {
+            return
+        }
+        if (!cfg.decisionEnabled || sessionSilent) return
+        if (cfg.decisionUrl.isBlank()) {
+            val line = getString(R.string.own_words_fallback)
+            showStatus(line)
+            speak(line)
+            return
+        }
+        val correctAnswer = OwnWordsJudge.correctText(questionHtml, correctField, "")
+        if (correctAnswer.isBlank()) {
+            val line = getString(R.string.own_words_fallback)
+            showStatus(line)
+            speak(line)
+            return
+        }
+        showStatus(getString(R.string.own_words_checking))
+        val question = BubbleModel.fullQuestion(questionHtml).ifBlank {
+            AnkiText.stripHtml(questionHtml)
+        }
+        val verdict = try {
+            val body = OwnWordsJudge.requestBody(
+                cfg.decisionModel,
+                question,
+                correctAnswer,
+                transcript
+            )
+            val raw = AiClient().postDecision(cfg.decisionUrl, cfg.aiApiKey, body) {
+                stopRequested.get() || destroyed
+            }
+            OwnWordsJudge.result(raw, null)
+        } catch (e: Exception) {
+            OwnWordsJudge.result(null, e)
+        }
+        when (verdict) {
+            is OwnWordsJudge.Verdict.Graded -> {
+                judgedEase = verdict.ease
+                val line = getString(
+                    if (verdict.correct) R.string.own_words_correct else R.string.own_words_incorrect
+                )
+                showStatus(line)
+                speak(line)
+            }
+            OwnWordsJudge.Verdict.Fallback -> {
+                val line = getString(R.string.own_words_fallback)
+                showStatus(line)
+                speak(line)
+            }
+        }
     }
 
     /** Repeat, skip, pause, and "show answer" still leave the letter loop. */

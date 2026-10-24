@@ -150,6 +150,41 @@ class AiClient {
         return completeMessages(baseUrl, apiKey, model, array, maxTokens, cancelled, onThinking, onDelta)
     }
 
+    /**
+     * One System One decision. Short timeouts. The caller parses the body.
+     * Does not log the API key or the request.
+     */
+    fun postDecision(
+        baseUrl: String,
+        apiKey: String,
+        jsonBody: String,
+        cancelled: () -> Boolean = { false }
+    ): String {
+        if (cancelled()) throw AiCancelled()
+        val url = OwnWordsJudge.endpoint(baseUrl)
+        if (url.isBlank()) throw AiException("Decision URL is blank", retryable = false)
+        val conn = openAbsolute(url, apiKey, "POST")
+        try {
+            conn.doOutput = true
+            conn.useCaches = false
+            conn.connectTimeout = OwnWordsJudge.CONNECT_MS
+            conn.readTimeout = OwnWordsJudge.READ_MS
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("Connection", "close")
+            conn.setRequestProperty("Expect", "")
+            val bytes = jsonBody.toByteArray(Charsets.UTF_8)
+            conn.setFixedLengthStreamingMode(bytes.size)
+            conn.outputStream.use { it.write(bytes) }
+            if (cancelled()) throw AiCancelled()
+            val code = conn.responseCode
+            if (code !in 200..299) throw AiHttpException(code)
+            return conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     private fun completeMessages(
         baseUrl: String,
         apiKey: String,
@@ -354,7 +389,11 @@ class AiClient {
 
     private fun open(baseUrl: String, apiKey: String, method: String, path: String): HttpURLConnection {
         val root = baseUrl.trim().trimEnd('/')
-        val conn = (URL(root + path)).openConnection() as HttpURLConnection
+        return openAbsolute(root + path, apiKey, method)
+    }
+
+    private fun openAbsolute(url: String, apiKey: String, method: String): HttpURLConnection {
+        val conn = (URL(url)).openConnection() as HttpURLConnection
         conn.requestMethod = method
         conn.useCaches = false
         conn.connectTimeout = AiTimeouts.CONNECT_MS

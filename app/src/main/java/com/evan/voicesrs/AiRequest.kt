@@ -21,4 +21,13 @@ object AiRequest {
             .put("messages", messages)
             .put("stop", stop)
     }
+
+    /** TypeSafe System One / oMLX `POST /v1/systemone` body. */
+    fun systemOneBody(model: String, state: Any, questions: JSONObject): JSONObject {
+        val body = JSONObject()
+            .put("state", state)
+            .put("questions", questions)
+        if (model.isNotBlank()) body.put("model", model)
+        return body
+    }
 }

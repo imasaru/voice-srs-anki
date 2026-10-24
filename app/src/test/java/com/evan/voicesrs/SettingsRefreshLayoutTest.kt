@@ -46,8 +46,13 @@ class SettingsRefreshLayoutTest {
         val doc = parseXml("src/main/res/layout/activity_settings.xml")
         val refreshDecks = requireNotNull(findElement(doc, "@+id/refreshDecksButton")) { "refreshDecksButton missing" }
         val aiRefresh = requireNotNull(findElement(doc, "@+id/aiModelRefresh")) { "aiModelRefresh missing" }
+        val decisionRefresh = requireNotNull(findElement(doc, "@+id/decisionModelRefresh")) { "decisionModelRefresh missing" }
 
-        val buttons = listOf(refreshDecks to "refreshDecksButton", aiRefresh to "aiModelRefresh")
+        val buttons = listOf(
+            refreshDecks to "refreshDecksButton",
+            aiRefresh to "aiModelRefresh",
+            decisionRefresh to "decisionModelRefresh"
+        )
         for ((el, label) in buttons) {
             assertEquals("wrong root tag for $label",
                 "com.google.android.material.button.MaterialButton", el.tagName)
@@ -79,5 +84,6 @@ class SettingsRefreshLayoutTest {
         val doc = parseXml("src/main/res/values/strings.xml")
         assertEquals("Refresh decks", stringValue(doc, "settings_refresh_decks_desc"))
         assertEquals("Refresh models", stringValue(doc, "settings_ai_model_refresh"))
+        assertEquals("Refresh decision models", stringValue(doc, "settings_decision_model_refresh"))
     }
 }

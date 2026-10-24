@@ -61,6 +61,10 @@ data class AnkiConfig(
     val aiBatch: Boolean = false,
     /** Ease values (1–4) that generate an explanation after a grade. */
     val autoExplainEases: Set<Int> = AutoExplain.DEFAULT,
+    /** Judge free-speech MCQ answers with the local decision model. */
+    val decisionEnabled: Boolean = false,
+    val decisionUrl: String = "",
+    val decisionModel: String = "",
     /** Wrap detected code on card faces. Display only. */
     val detectCode: Boolean = true,
     /** Deck for AI-generated Basic notes. */
@@ -107,6 +111,9 @@ object Prefs {
     private const val KEY_AI_BATCH = "ai_batch"
     private const val KEY_AUTO_EXPLAIN_EASES = "auto_explain_eases"
     private const val KEY_AUTO_EXPLAIN = "auto_explain"
+    private const val KEY_DECISION_ENABLED = "decision_enabled"
+    private const val KEY_DECISION_URL = "decision_url"
+    private const val KEY_DECISION_MODEL = "decision_model"
     private const val KEY_DETECT_CODE = "detect_code"
     private const val KEY_GENERATED_DECK = "generated_deck"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
@@ -120,6 +127,8 @@ object Prefs {
     const val DEFAULT_AI_URL = "http://example.local/v1"
     const val DEFAULT_AI_MODEL = "scottlowry/Ornith-1.5-35B-A3B-oQ5e-mtp:precise"
     const val DEFAULT_AI_LOOKAHEAD = 2
+    const val DEFAULT_DECISION_URL = ""
+    const val DEFAULT_DECISION_MODEL = ""
 
     /**
      * Build-time default from the gitignored local-api-key.txt.
@@ -208,6 +217,9 @@ object Prefs {
             .putInt(KEY_AI_LOOKAHEAD, cfg.aiLookahead.coerceIn(0, 5))
             .putBoolean(KEY_AI_BATCH, cfg.aiBatch)
             .putString(KEY_AUTO_EXPLAIN_EASES, AutoExplain.encode(cfg.autoExplainEases))
+            .putBoolean(KEY_DECISION_ENABLED, cfg.decisionEnabled)
+            .putString(KEY_DECISION_URL, cfg.decisionUrl.trim())
+            .putString(KEY_DECISION_MODEL, cfg.decisionModel.trim())
             .putBoolean(KEY_DETECT_CODE, cfg.detectCode)
             .putString(KEY_GENERATED_DECK, cfg.generatedDeck.ifBlank { MakeCard.DEFAULT_DECK })
             .putBoolean(KEY_KEEP_SCREEN_ON, cfg.keepScreenOn)
@@ -287,6 +299,11 @@ object Prefs {
                 stored = if (p.contains(KEY_AUTO_EXPLAIN_EASES)) p.getString(KEY_AUTO_EXPLAIN_EASES, null) else null,
                 legacy = if (p.contains(KEY_AUTO_EXPLAIN)) p.getBoolean(KEY_AUTO_EXPLAIN, true) else null
             ),
+            decisionEnabled = p.getBoolean(KEY_DECISION_ENABLED, false),
+            decisionUrl = p.getString(KEY_DECISION_URL, DEFAULT_DECISION_URL).orEmpty()
+                .ifBlank { DEFAULT_DECISION_URL },
+            decisionModel = p.getString(KEY_DECISION_MODEL, DEFAULT_DECISION_MODEL).orEmpty()
+                .ifBlank { DEFAULT_DECISION_MODEL },
             detectCode = p.getBoolean(KEY_DETECT_CODE, CodeDetect.SETTING_DEFAULT),
             generatedDeck = p.getString(KEY_GENERATED_DECK, MakeCard.DEFAULT_DECK).orEmpty()
                 .ifBlank { MakeCard.DEFAULT_DECK },

@@ -54,6 +54,26 @@ class HighlightSettingTest {
         assertEquals(false, cfg.showCard)
         assertEquals(false, cfg.shuffleOptions)
         assertEquals(7, cfg.offlineBatchSize)
+        assertEquals(false, cfg.decisionEnabled)
+        assertEquals("", cfg.decisionUrl)
+        assertEquals("", cfg.decisionModel)
+    }
+
+    @Test
+    fun `decision model fields round trip`() {
+        val prefs = FakeSharedPreferences()
+        Prefs.write(
+            prefs,
+            baseCfg().copy(
+                decisionEnabled = true,
+                decisionUrl = "http://omlx.example.invalid",
+                decisionModel = "clef"
+            )
+        )
+        val cfg = Prefs.read(prefs)
+        assertEquals(true, cfg.decisionEnabled)
+        assertEquals("http://omlx.example.invalid", cfg.decisionUrl)
+        assertEquals("clef", cfg.decisionModel)
     }
 }
 
