@@ -32,7 +32,7 @@ sealed class VoiceAction {
  * Listed mis-hearings are exact: gud, ez, nope, wrong, no.
  *
  * "again" is the Again grade, including "say that again". The repeat command is the word "repeat"
- * (or an exact phrase such as "one more time"), not the word "again".
+ * (or an exact phrase such as "one more time", "say again", "say it again"), not the word "again".
  */
 object GradeMapper {
     private val EXACT_GRADE_WORDS = setOf("again", "hard", "good", "easy")
@@ -47,7 +47,8 @@ object GradeMapper {
     private val REPEAT_PHRASES = setOf(
         "repeat", "repeat that", "repeat it", "repeat please",
         "repeat the question", "repeat the answer", "repeat question", "repeat answer",
-        "read it back", "one more time"
+        "read it back", "one more time",
+        "say again", "say it again"
     )
 
     /** Whole-utterance grade phrases that the token rules would reject. */
