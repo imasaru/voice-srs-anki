@@ -37,6 +37,27 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) {
         private const val VERSION = 6
         private const val CONNECT_TIMEOUT_MS = 15_000
         private const val READ_TIMEOUT_MS = 30_000
+
+        /** Best-effort readable form of an AnkiConnect error response (string or list). */
+        private fun errorText(resp: JSONObject): String {
+            val err = resp.opt("error")
+            val raw = when (err) {
+                is JSONArray -> {
+                    val sb = StringBuilder()
+                    for (i in 0 until err.length()) {
+                        val v = err.opt(i)
+                        if (v is String) {
+                            if (sb.isNotEmpty()) sb.append("; ")
+                            sb.append(v)
+                        }
+                    }
+                    sb.toString()
+                }
+                is String -> err
+                else -> "AnkiConnect refused the request"
+            }
+            return if (raw.isBlank()) "AnkiConnect refused the request" else raw
+        }
     }
 
     private fun post(action: String, params: Map<String, Any?> = emptyMap()): Any? {
@@ -59,7 +80,7 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) {
             val text = stream?.readBytes()?.decodeToString() ?: ""
             if (code !in 200..299) throw AnkiConnectException("HTTP $code from AnkiConnect")
             val resp = JSONObject(text)
-            if (!resp.isNull("error")) throw AnkiConnectException("AnkiConnect refused the request")
+            if (!resp.isNull("error")) throw AnkiConnectException(errorText(resp))
             return if (resp.isNull("result")) null else resp.get("result")
         } catch (e: AnkiConnectException) {
             throw e

@@ -411,7 +411,19 @@ class ChatAdapter(
                 val front = memoFront.text.toString()
                 val back = memoBack.text.toString()
                 DrillUi.update { it.copy(memoFront = front, memoBack = back) }
-                MemoSaver.save(itemView.context, row.noteId, row.cardId, front, back)
+                MemoSaver.save(
+                    itemView.context,
+                    row.noteId,
+                    row.cardId,
+                    front,
+                    back,
+                    onError = { e ->
+                        ErrorSnackbar.onMain(
+                            itemView,
+                            SaveErrors.message(SaveErrors.Op.MEMO, e),
+                        )
+                    },
+                )
             }
             memoFront.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) commit() }
             memoBack.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) commit() }
