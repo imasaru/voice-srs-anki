@@ -374,7 +374,7 @@ class MainActivity : AppCompatActivity() {
                     DrillService.noteChatReengage()
                 } else if (hadComposerText) {
                     hadComposerText = false
-                    DrillService.noteChatDisengage(ChatPause.Disengage.INPUT_CLEARED)
+                    DrillService.noteChatCleared()
                 }
             }
         })
