@@ -982,9 +982,11 @@ class DrillService : Service(), VoiceIo {
 
     override fun speak(text: String) {
         if (text.isBlank()) return
+        val spoken = AnkiText.sanitizeForSpeech(text)
+        if (spoken.isBlank()) return
         if (!AudioGate.outputAllowed(sessionSilent)) return
         speechInterrupted = false
-        when (text) {
+        when (spoken) {
             RatingGuides.LONG, RatingGuides.SHORT -> Log.i(TAG, "rating prompt spoken")
             RatingGuides.REPROMPT -> Log.i(TAG, "rating reprompt")
         }
@@ -992,7 +994,7 @@ class DrillService : Service(), VoiceIo {
             Prefs.load(this)
         } catch (e: Exception) {
             Log.w(TAG, "prefs load failed during speak", e)
-            if (speakOnDevice(text)) {
+            if (speakOnDevice(spoken)) {
                 Log.i(TAG, "TTS engine=on-device ok")
                 showEngine(EngineLabel.of(EngineChoice.ON_DEVICE, false))
             }
@@ -1005,7 +1007,7 @@ class DrillService : Service(), VoiceIo {
                     cfg.neuralToken,
                     cfg.neuralVoice,
                     cfg.ttsRate,
-                    text
+                    spoken
                 ) { stopRequested.get() || speechInterrupted || sessionSilent }
             } catch (e: Exception) {
                 Log.w(TAG, "neural speak error")
@@ -1018,7 +1020,7 @@ class DrillService : Service(), VoiceIo {
             }
             // A tap or Stop already ended this utterance. Do not replay it on-device.
             if (stopRequested.get() || speechInterrupted) return
-            if (speakOnDevice(text)) {
+            if (speakOnDevice(spoken)) {
                 Log.i(TAG, "TTS engine=neural fail; fallback on-device ok")
                 showEngine(EngineLabel.of(EngineChoice.NEURAL, false))
             } else {
@@ -1026,7 +1028,7 @@ class DrillService : Service(), VoiceIo {
             }
             return
         }
-        if (speakOnDevice(text)) {
+        if (speakOnDevice(spoken)) {
             Log.i(TAG, "TTS engine=on-device ok")
             showEngine(EngineLabel.of(EngineChoice.ON_DEVICE, false))
         } else {

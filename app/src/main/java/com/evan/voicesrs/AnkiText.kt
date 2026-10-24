@@ -27,6 +27,10 @@ object AnkiText {
     )
     private val numericEntity = Regex("&#(\\d+);")
     private val hexEntity = Regex("&#x([0-9a-fA-F]+);")
+    /** Three or more underscores in a row. */
+    private val underscoreRun = Regex("_{3,}")
+    /** Three or more of the same punctuation/symbol char (----, ===, ~~~, ...). */
+    private val symbolRun = Regex("([\\p{P}\\p{S}])\\1{2,}")
     /** Anki's default back template is `{{FrontSide}}<hr id=answer>`. */
     private val answerDivider = Regex(
         """<hr[^>]*\bid\s*=\s*["']?answer["']?[^>]*>""",
@@ -125,7 +129,22 @@ object AnkiText {
             val spoken = Citation.withoutCitation(trimmed)
             if (spoken.isNotEmpty()) kept.add(spoken)
         }
-        return kept.joinToString(" ")
+        return sanitizeForSpeech(kept.joinToString(" "))
+    }
+
+    /**
+     * Make text safe to speak. Runs of 3+ underscores become the word "blank"
+     * (deck fill-in-the-blank markers). Runs of 3+ of the same punctuation or
+     * symbol (----, ===, ***, ~~~, ....) are dropped to a single space so TTS
+     * does not garble them. A three-dot ellipsis is kept, and single
+     * punctuation is kept; everything else is whitespace-collapsed and trimmed.
+     */
+    fun sanitizeForSpeech(text: String): String {
+        var s = underscoreRun.replace(text, " blank ")
+        s = symbolRun.replace(s) { m ->
+            if (m.value == "...") "..." else " "
+        }
+        return whitespace.replace(s, " ").trim()
     }
 
     /**
