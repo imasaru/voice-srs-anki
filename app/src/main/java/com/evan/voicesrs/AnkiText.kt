@@ -562,24 +562,62 @@ object AnkiText {
     private fun percentDecode(s: String): String {
         if (s.indexOf('%') < 0) return s
         val out = StringBuilder(s.length)
+        val bytes = ArrayList<Byte>()
+        var runStart = -1
         var i = 0
         while (i < s.length) {
-            if (s[i] == '%' && i + 2 < s.length) {
-                val hi = hexVal(s[i + 1])
-                val lo = hexVal(s[i + 2])
+            val c = s[i]
+            if (c == '%') {
+                val hi = hexVal(s.getOrNull(i + 1))
+                val lo = hexVal(s.getOrNull(i + 2))
                 if (hi >= 0 && lo >= 0) {
-                    out.append((hi shl 4 or lo).toChar())
+                    if (runStart < 0) runStart = i
+                    bytes.add(((hi shl 4 or lo).toByte()))
                     i += 3
                     continue
                 }
+                // Malformed %: flush buffered bytes (raw if not valid UTF-8),
+                // then keep the literal '%'.
+                flushBytes(out, bytes, s, runStart, i)
+                out.append('%')
+                runStart = -1
+                i++
+            } else {
+                flushBytes(out, bytes, s, runStart, i)
+                out.append(c)
+                runStart = -1
+                i++
             }
-            out.append(s[i])
-            i++
         }
+        flushBytes(out, bytes, s, runStart, s.length)
         return out.toString()
     }
 
-    private fun hexVal(c: Char): Int = when (c) {
+    /**
+     * Decode a run of consecutive %XX bytes as UTF-8. When the bytes do not
+     * form a complete UTF-8 sequence (e.g. a lone or truncated escape), the
+     * original raw text [s] [runStart, runEnd) is kept unchanged instead of
+     * emitting replacement characters.
+     */
+    private fun flushBytes(
+        out: StringBuilder,
+        bytes: MutableList<Byte>,
+        s: String,
+        runStart: Int,
+        runEnd: Int
+    ) {
+        if (bytes.isEmpty()) return
+        val decoded = String(bytes.toByteArray(), Charsets.UTF_8)
+        if (decoded.toByteArray(Charsets.UTF_8).contentEquals(bytes.toByteArray())) {
+            out.append(decoded)
+        } else {
+            out.append(s, runStart, runEnd)
+        }
+        bytes.clear()
+    }
+
+    private fun hexVal(c: Char?): Int = when (c) {
+        null -> -1
         in '0'..'9' -> c - '0'
         in 'a'..'f' -> c - 'a' + 10
         in 'A'..'F' -> c - 'A' + 10

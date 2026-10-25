@@ -40,6 +40,27 @@ class AnkiTextImageTest {
     }
 
     @Test
+    fun `image refs decode percent-encoded UTF-8 filenames`() {
+        // Japanese: %E7%8A%AC = 犬 (3 UTF-8 bytes decoded as a unit).
+        assertEquals(listOf("犬.jpg"), AnkiText.imageRefs("""<img src="%E7%8A%AC.jpg">"""))
+        // Mixed ASCII plus encoded Japanese.
+        assertEquals(listOf("a犬.png"), AnkiText.imageRefs("""<img src="a%E7%8A%AC.png">"""))
+        assertEquals(listOf("犬 a.png"), AnkiText.imageRefs("""<img src="%E7%8A%AC%20a.png">"""))
+        // Two consecutive multi-byte characters in one run.
+        assertEquals(listOf("犬字.png"), AnkiText.imageRefs("""<img src="%E7%8A%AC%E5%AD%97.png">"""))
+    }
+
+    @Test
+    fun `image refs keep a literal plus and leave malformed percent sequences unchanged`() {
+        // '+' must stay literal (not become a space).
+        assertEquals(listOf("a+b.jpg"), AnkiText.imageRefs("""<img src="a+b.jpg">"""))
+        // Malformed '%' with no hex digits is kept as-is.
+        assertEquals(listOf("a%b.jpg"), AnkiText.imageRefs("""<img src="a%b.jpg">"""))
+        // Incomplete sequence at the end is kept as-is.
+        assertEquals(listOf("a%E7.jpg"), AnkiText.imageRefs("""<img src="a%E7.jpg">"""))
+    }
+
+    @Test
     fun `image refs skip data and http urls and empty src`() {
         val html =
             """<img src="data:image/png;base64,AAAA"><img src="https://x.test/a.png">""" +
