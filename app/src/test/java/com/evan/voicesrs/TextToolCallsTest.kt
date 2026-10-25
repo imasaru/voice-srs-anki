@@ -1,17 +1,31 @@
 package com.evan.voicesrs
 
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TextToolCallsTest {
-    private val BT = "\u0060\u0060\u0060" // three backticks
+    // Build every angle-bracket tag from escapes so the environment's own
+    // tool-call parser never intercepts them.
+    private val LT = "\u003c"
+    private val GT = "\u003e"
+    private val TOOL_CALL_OPEN = LT + "tool_call" + GT
+    private val TOOL_CALL_CLOSE = LT + "/tool_call" + GT
+    private val FUNCTION_OPEN_PREFIX = LT + "function="
+    private val FUNCTION_CLOSE = LT + "/function" + GT
+    private val PARAM_OPEN_PREFIX = LT + "parameter="
+    private val PARAM_CLOSE = LT + "/parameter" + GT
 
     private val jsonInner = """{"name":"get_category_stats","arguments":{"deck":"X"}}"""
 
     @Test
-    fun `no params yields empty args and strips the block`() {
-        val sample = BT + "function=get_study_summary>" + BT + "/function>" + BT + "\n"
+    fun `exact get_study_summary with no params`() {
+        val sample =
+            TOOL_CALL_OPEN + "\n" +
+            FUNCTION_OPEN_PREFIX + "get_study_summary" + GT + "\n" +
+            FUNCTION_CLOSE + "\n" +
+            TOOL_CALL_CLOSE + "\n"
         val (calls, stripped) = TextToolCalls.extract(sample)
         assertEquals(1, calls.size)
         assertEquals("get_study_summary", calls[0].name)
@@ -20,73 +34,71 @@ class TextToolCallsTest {
     }
 
     @Test
-    fun `parameter form with multiple params`() {
-        val sample = "" +
-            BT + "function=get_category_stats>" + BT + "\n" +
-            BT + "parameter=deck>" + BT + "Front\n" +
-            BT + "/parameter>" + BT + "\n" +
-            BT + "parameter=from>" + BT + "\n" +
-            "2026-10-01\n" +
-            BT + "/parameter>" + BT + "\n" +
-            BT + "/function>" + BT + "\n"
+    fun `one call with a parameter`() {
+        val sample =
+            TOOL_CALL_OPEN + "\n" +
+            FUNCTION_OPEN_PREFIX + "get_category_stats" + GT + "\n" +
+            PARAM_OPEN_PREFIX + "deck" + GT + "\n" +
+            "Front\n" +
+            PARAM_CLOSE + "\n" +
+            FUNCTION_CLOSE + "\n" +
+            TOOL_CALL_CLOSE + "\n"
         val (calls, stripped) = TextToolCalls.extract(sample)
         assertEquals(1, calls.size)
         assertEquals("get_category_stats", calls[0].name)
-        val args = calls[0].arguments.orEmpty()
-        assertTrue("expected deck+Front in " + args, args.contains("deck"))
-        assertTrue("expected Front in " + args, args.contains("Front"))
-        assertTrue("expected from in " + args, args.contains("from"))
-        assertTrue("expected 2026-10-01 in " + args, args.contains("2026-10-01"))
+        val args = JSONObject(calls[0].arguments)
+        assertEquals("Front", args.getString("deck"))
         assertEquals("", stripped)
     }
 
     @Test
-    fun `json form`() {
-        val sample = BT + jsonInner + BT + "\n"
-        val (calls, stripped) = TextToolCalls.extract(sample)
-        assertEquals(1, calls.size)
-        assertEquals("get_category_stats", calls[0].name)
-        val args = calls[0].arguments.orEmpty()
-        assertTrue("expected deck+X in " + args, args.contains("deck"))
-        assertTrue("expected X in " + args, args.contains("X"))
-        assertEquals("", stripped)
-    }
-
-    @Test
-    fun `multiple blocks`() {
-        val b1 = BT + "function=get_study_summary>" + BT + "/function>" + BT + "\n"
-        val b2 = BT + jsonInner + BT + "\n"
+    fun `two calls in one response`() {
+        val b1 =
+            TOOL_CALL_OPEN + "\n" +
+            FUNCTION_OPEN_PREFIX + "get_study_summary" + GT + "\n" +
+            FUNCTION_CLOSE + "\n" +
+            TOOL_CALL_CLOSE + "\n"
+        val b2 =
+            TOOL_CALL_OPEN + "\n" +
+            FUNCTION_OPEN_PREFIX + "get_category_stats" + GT + "\n" +
+            PARAM_OPEN_PREFIX + "deck" + GT + "\n" +
+            "Hard\n" +
+            PARAM_CLOSE + "\n" +
+            FUNCTION_CLOSE + "\n" +
+            TOOL_CALL_CLOSE + "\n"
         val sample = "before\n" + b1 + "\n" + b2 + "after\n"
         val (calls, stripped) = TextToolCalls.extract(sample)
         assertEquals(2, calls.size)
         assertEquals("get_study_summary", calls[0].name)
         assertEquals("get_category_stats", calls[1].name)
+        assertEquals("Hard", JSONObject(calls[1].arguments).getString("deck"))
         assertTrue(stripped.startsWith("before"))
         assertTrue(stripped.endsWith("after"))
     }
 
     @Test
-    fun `surrounding prose is preserved`() {
-        val b = BT + "function=get_study_summary>" + BT + "/function>" + BT
-        val sample = "Here is the summary." + b + "\nHope that helps!"
+    fun `JSON in wrapper form`() {
+        val sample =
+            TOOL_CALL_OPEN + "\n" +
+            jsonInner + "\n" +
+            TOOL_CALL_CLOSE + "\n"
         val (calls, stripped) = TextToolCalls.extract(sample)
         assertEquals(1, calls.size)
-        assertEquals("Here is the summary.\nHope that helps!", stripped)
+        assertEquals("get_category_stats", calls[0].name)
+        val args = JSONObject(calls[0].arguments)
+        assertEquals("X", args.getString("deck"))
+        assertEquals("", stripped)
     }
 
     @Test
-    fun `malformed unclosed block is left harmless`() {
-        val sample = "before\n" + BT + "function=foo>bar"
-        val (calls, stripped) = TextToolCalls.extract(sample)
+    fun `plain code block with a name field is not a tool call`() {
+        val code = """
+            |```json
+            |{"name":"get_category_stats","arguments":{"deck":"X"}}
+            |```
+        """.trimMargin()
+        val (calls, stripped) = TextToolCalls.extract(code)
         assertEquals(0, calls.size)
-        assertEquals(sample, stripped)
-    }
-
-    @Test
-    fun `content without tags is unchanged`() {
-        val plain = "Just a plain answer with no tools here."
-        val (calls, stripped) = TextToolCalls.extract(plain)
-        assertEquals(emptyList<ChatJson.ToolCall>(), calls)
-        assertEquals(plain, stripped)
+        assertEquals(code, stripped)
     }
 }

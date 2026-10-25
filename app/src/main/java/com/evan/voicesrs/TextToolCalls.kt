@@ -4,50 +4,62 @@ import org.json.JSONObject
 
 /**
  * Parse a block a local model prints as plain text, so the app can run it
- * as a tool. Two forms are supported:
+ * as a tool. The real Qwen text form wraps each call in angle-bracket tags
+ * with NO backticks:
  *
- *  - XML parameter form: a function tag whose name comes from the name=
- *    attribute and whose parameters are child parameter tags.
- *  - JSON form: a single tag whose inner text is a JSON object with a
- *    name field and an arguments field.
+ *    FIRSTWRAP
+ *    FUNCOPEN NAME >
+ *    PARAMOPEN KEY >
+ *    VALUE
+ *    FUNCEND
+ *    FIRSTEND
  *
- * Each block is delimited by three backticks on both sides (for example
- * function=name ... /function>). Returns the extracted tool calls and the
- * content with the blocks removed and trimmed. A block with no closing tag
- * is left in place (harmless).
+ * where FIRSTWRAP/FIRSTEND wrap the whole call, FUNCOPEN/FUNCEND wrap the
+ * function, and PARAMOPEN/PARAMEND wrap each parameter. NAME and KEY have no
+ * surrounding spaces. This object builds every real tag from escape
+ * sequences (see the constants below) so the surrounding environment's own
+ * tool-call parser never intercepts them.
+ *
+ * Two forms are accepted inside the wrapper:
+ *  - parameter form: a function tag with zero or more child parameter tags;
+ *  - JSON form: the inner text is a JSON object with a name field and an
+ *    arguments field.
+ *
+ * Text outside the wrapper is returned unchanged (trimmed). A block with no
+ * closing wrapper is left in place.
  */
 object TextToolCalls {
-    private const val BT = "\u0060\u0060\u0060" // three backticks
+    // Build every angle-bracket tag from escapes so the environment's own
+    // tool-call parser never intercepts them.
+    private const val LT = "\u003c"
+    private const val GT = "\u003e"
 
-    /** Parse [content] into tool calls and the content with blocks stripped. */
+    private val TOOL_CALL_OPEN = LT + "tool_call" + GT
+    private val TOOL_CALL_CLOSE = LT + "/tool_call" + GT
+    private val FUNCTION_OPEN_PREFIX = LT + "function="
+    private val FUNCTION_CLOSE = LT + "/function" + GT
+    private val PARAM_OPEN_PREFIX = LT + "parameter="
+    private val PARAM_CLOSE = LT + "/parameter" + GT
+
+    /** Parse [content] into tool calls and the content with wrappers stripped. */
     fun extract(content: String): Pair<List<ChatJson.ToolCall>, String> {
         val calls = ArrayList<ChatJson.ToolCall>()
         val out = StringBuilder()
         val n = content.length
         var i = 0
         while (i < n) {
-            if (content.startsWith(BT + "function=", i)) {
+            if (content.startsWith(TOOL_CALL_OPEN, i)) {
                 val p = i
-                val nameEnd = content.indexOf('>', i + (BT + "function=").length)
-                if (nameEnd < 0) { out.append(content, i, n); break }
-                val name = content.substring(i + (BT + "function=").length, nameEnd).trim()
-                val c = findClose(content, BT + "/function>" + BT, BT + "/function>", i)
-                if (c.first < 0) { out.append(content, p, n); break }
-                val inner = content.substring(nameEnd + 1, c.first)
-                if (name.isNotEmpty()) {
-                    calls += ChatJson.ToolCall("textcall_${calls.size}", name, parseFunctionInner(inner))
-                }
-                i = c.first + c.second
-            } else if (content.startsWith(BT + "{", i)) {
-                val p = i
-                val close = content.indexOf(BT, i + BT.length)
-                if (close < 0) { out.append(content, p, n); break }
-                val (name, args) = parseJsonArgs(content.substring(i + BT.length, close))
-                if (name.isNotEmpty()) {
-                    calls += ChatJson.ToolCall("textcall_${calls.size}", name, args)
-                    i = close + BT.length
+                val end = content.indexOf(TOOL_CALL_CLOSE, i + TOOL_CALL_OPEN.length)
+                if (end < 0) { out.append(content, p, n); break }
+                val inner = content.substring(i + TOOL_CALL_OPEN.length, end)
+                val parsed = parseWrapper(inner)
+                if (parsed != null) {
+                    calls += ChatJson.ToolCall("textcall_${calls.size}", parsed.first, parsed.second)
+                    i = end + TOOL_CALL_CLOSE.length
                 } else {
-                    out.append(content[i]); i++
+                    out.append(content, p, i + TOOL_CALL_OPEN.length)
+                    i = i + TOOL_CALL_OPEN.length
                 }
             } else {
                 out.append(content[i])
@@ -57,58 +69,65 @@ object TextToolCalls {
         return Pair(calls, out.toString().trim())
     }
 
-    /** Remove any remaining a model left as text. Returns the content. */
+    /** Remove any wrapper a model left as text. Returns the content. */
     fun stripLeftover(text: String): String = extract(text).second
 
-    /** Find a delimited close block (full = BT...BT). Returns [start, length],
-     *  or [-1, 0] when neither the full nor the bare short marker is present. */
-    private fun findClose(s: String, full: String, short: String, from: Int): Pair<Int, Int> {
-        val f = s.indexOf(full, from)
-        if (f >= 0) return Pair(f, full.length)
-        val sh = s.indexOf(short, from)
-        if (sh >= 0) return Pair(sh, short.length)
-        return Pair(-1, 0)
-    }
-
-    private fun parseFunctionInner(inner: String): String {
-        val params = LinkedHashMap<String, String>()
-        val n = inner.length
+    /** Parse the text between the wrapper tags. Returns [name, argumentsJson]
+     *  or null when the inner text is not a recognized tool block. */
+    private fun parseWrapper(inner: String): Pair<String, String>? {
+        val trimmed = inner.trim()
+        // JSON form first: the whole inner text is a JSON object with
+        // name/arguments and no function= prefix.
+        val json = try { JSONObject(trimmed) } catch (_: Exception) { null }
+        if (json != null && json.has("name")) {
+            val args = json.optString("arguments", "{}").ifBlank { "{}" }
+            return Pair(json.optString("name", "").trim(), args)
+        }
+        val funcOpen = trimmed.indexOf(FUNCTION_OPEN_PREFIX)
+        if (funcOpen < 0) return null
+        val nameEnd = trimmed.indexOf(GT, funcOpen + FUNCTION_OPEN_PREFIX.length)
+        if (nameEnd < 0) return null
+        val name = trimmed.substring(funcOpen + FUNCTION_OPEN_PREFIX.length, nameEnd).trim()
+        if (name.isEmpty()) return null
+        val afterName = nameEnd + 1
+        val afterFunc = afterName
+        val funcClose = trimmed.indexOf(FUNCTION_CLOSE, afterName)
+        val innerText = if (funcClose < 0) "" else trimmed.substring(afterFunc, funcClose)
+        // Parameter form.
+        val params = LinkedHashMap<String, Any?>()
         var i = 0
-        while (i < n) {
-            if (!inner.startsWith(BT + "parameter=", i)) { i++; continue }
-            val nameStart = i + (BT + "parameter=").length
-            val gt = inner.indexOf('>', nameStart)
-            if (gt < 0) break
-            val pName = inner.substring(nameStart, gt).trim()
-            val valueStart = gt + 1 + BT.length
-            val c = findClose(inner, BT + "/parameter>" + BT, BT + "/parameter>", i)
-            val value = if (c.first < 0) inner.substring(valueStart).trim()
-                        else inner.substring(valueStart, c.first).trim()
-            if (pName.isNotEmpty()) params[pName] = value
-            if (c.first < 0) break
-            i = c.first + c.second
+        val m = innerText.length
+        while (i < m) {
+            val pStart = innerText.indexOf(PARAM_OPEN_PREFIX, i)
+            if (pStart < 0) break
+            val keyStart = pStart + PARAM_OPEN_PREFIX.length
+            val keyEnd = innerText.indexOf(GT, keyStart)
+            if (keyEnd < 0) break
+            val key = innerText.substring(keyStart, keyEnd).trim()
+            val valueStart = keyEnd + 1
+            val pClose = innerText.indexOf(PARAM_CLOSE, valueStart)
+            val raw = if (pClose < 0) innerText.substring(valueStart)
+                      else innerText.substring(valueStart, pClose)
+            val value = raw.trim()
+            if (key.isNotEmpty()) params[key] = coerceValue(value)
+            if (pClose < 0) break
+            i = pClose + PARAM_CLOSE.length
         }
         val obj = JSONObject()
-        for ((k, v) in params) obj.put(k, coerceValue(v))
-        return obj.toString()
+        for ((k, v) in params) obj.put(k, v ?: JSONObject.NULL)
+        return Pair(name, obj.toString())
     }
 
-    /** Turn a string parameter value into a JSON number/bool when it parses,
-     *  otherwise keep it as a string. */
-    private fun coerceValue(v: String): Any {
+    /** Turn a string parameter value into a JSON number/bool/object when it
+     *  parses, otherwise keep it as a string. */
+    private fun coerceValue(v: String): Any? {
         val t = v.trim()
         if (t.isEmpty()) return v
         t.toLongOrNull()?.let { return it }
         t.toDoubleOrNull()?.let { return it }
         if (t == "true" || t == "false") return t.toBoolean()
+        val o = try { JSONObject(t) } catch (_: Exception) { null }
+        if (o != null) return o
         return v
-    }
-
-    private fun parseJsonArgs(inner: String): Pair<String, String> {
-        val obj = try { JSONObject(inner) } catch (_: Exception) { null } ?: return Pair("", "")
-        val name = obj.optString("name", "").trim()
-        if (name.isEmpty()) return Pair("", "")
-        val args = obj.optString("arguments", "{}").ifBlank { "{}" }
-        return Pair(name, args)
     }
 }
