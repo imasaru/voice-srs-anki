@@ -193,17 +193,23 @@ class AiClient {
                 if (StudyTools.toolsRejected(e.code, e.body)) throw ToolsRejected(e.body)
                 throw e
             }
-            if (parsed.toolCalls.isEmpty()) {
+            val textExtracted =
+                if (parsed.toolCalls.isEmpty()) TextToolCalls.extract(parsed.content.orEmpty()) else null
+            val toolCalls: List<ChatJson.ToolCall> =
+                if (parsed.toolCalls.isNotEmpty()) parsed.toolCalls else textExtracted?.first.orEmpty()
+            val assistantContent: String? =
+                if (parsed.toolCalls.isNotEmpty()) parsed.content else textExtracted?.second
+            if (toolCalls.isEmpty()) {
                 val text = AiMessages.require(parsed.content.orEmpty(), parsed.finishReason)
-                val clipped = SelfTalk.clip(text)
+                val clipped = SelfTalk.clip(TextToolCalls.stripLeftover(text))
                 onDelta(clipped)
                 return clipped
             }
             lastSawToolCalls = true
             val assistant = JSONObject().put("role", "assistant")
-            if (!parsed.content.isNullOrBlank()) assistant.put("content", parsed.content)
+            if (!assistantContent.isNullOrBlank()) assistant.put("content", assistantContent)
             val calls = JSONArray()
-            for (call in parsed.toolCalls) {
+            for (call in toolCalls) {
                 calls.put(
                     JSONObject()
                         .put("id", call.id)
@@ -216,7 +222,7 @@ class AiClient {
             }
             assistant.put("tool_calls", calls)
             messages.put(assistant)
-            for (call in parsed.toolCalls) {
+            for (call in toolCalls) {
                 if (cancelled()) throw AiCancelled()
                 val result = try {
                     onTool(call.name, call.arguments)
@@ -233,7 +239,7 @@ class AiClient {
         }
         val last = completeJson(baseUrl, apiKey, model, messages, budget, null, cancelled)
         val text = AiMessages.require(last.content.orEmpty(), last.finishReason)
-        val clipped = SelfTalk.clip(text)
+        val clipped = SelfTalk.clip(TextToolCalls.stripLeftover(text))
         onDelta(clipped)
         return clipped
     }
