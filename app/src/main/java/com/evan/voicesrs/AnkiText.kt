@@ -494,4 +494,98 @@ object AnkiText {
         sb.append(html, i, html.length)
         return sb.toString()
     }
+
+    /**
+     * src of every IMG tag, in document order, de-duplicated. Handles double,
+     * single and unquoted src; case-insensitive tag/attr; a '>' inside a quoted
+     * src does not end the tag. Anki stores media names HTML- and
+     * percent-encoded, so values are decoded before use. Empty src, data: URIs
+     * and http(s) URLs are dropped (only local collection media). IMG tags
+     * inside script/style are ignored.
+     */
+    fun imageRefs(html: String): List<String> {
+        val out = ArrayList<String>()
+        val seen = HashSet<String>()
+        var i = 0
+        while (i < html.length) {
+            val tag = nextTag(html, i) ?: break
+            if (tag.tagEnd <= i) break
+            if (!tag.closing &&
+                (tag.name.equals("script", true) || tag.name.equals("style", true)) &&
+                !tag.selfClosing && !isVoid(tag.name)
+            ) {
+                i = matchingClose(html, tag.name, tag.tagEnd).elementEnd
+                continue
+            }
+            if (!tag.closing && tag.name.equals("img", true)) {
+                val src = decodeMediaSrc(attrValue(tag.attrs, "src"))
+                if (src != null && seen.add(src)) out.add(src)
+            }
+            i = tag.tagEnd
+        }
+        return out
+    }
+
+    fun hasImage(html: String): Boolean = imageRefs(html).isNotEmpty()
+
+    /**
+     * True when the card is an Image Occlusion card: an
+     * id="image-occlusion-container", a class containing "image-occlusion", or
+     * the cloze marker {{c1::image-occlusion} (case-insensitive).
+     */
+    fun isImageOcclusion(html: String): Boolean {
+        val idRe = Regex("""id\s*=\s*["']?image-occlusion-container["']?""", RegexOption.IGNORE_CASE)
+        val classRe = Regex("""class\s*=\s*["']?[^"'>]*image-occlusion[^"'>]*""", RegexOption.IGNORE_CASE)
+        val clozeRe = Regex("""\{\{c1::image-occlusion""", RegexOption.IGNORE_CASE)
+        return idRe.containsMatchIn(html) ||
+            classRe.containsMatchIn(html) ||
+            clozeRe.containsMatchIn(html)
+    }
+
+    /**
+     * Has a local image and too little to speak (fewer than 4 spoken words), so
+     * the card needs the screen for context.
+     */
+    fun needsScreen(html: String): Boolean =
+        hasImage(html) && wordCount(spokenText(html)) < 4
+
+    private fun decodeMediaSrc(raw: String?): String? {
+        if (raw == null) return null
+        val decoded = percentDecode(decodeEntities(raw))
+        if (decoded.isEmpty()) return null
+        val lower = decoded.lowercase()
+        if (lower.startsWith("data:")) return null
+        if (lower.startsWith("http://") || lower.startsWith("https://")) return null
+        return decoded
+    }
+
+    private fun percentDecode(s: String): String {
+        if (s.indexOf('%') < 0) return s
+        val out = StringBuilder(s.length)
+        var i = 0
+        while (i < s.length) {
+            if (s[i] == '%' && i + 2 < s.length) {
+                val hi = hexVal(s[i + 1])
+                val lo = hexVal(s[i + 2])
+                if (hi >= 0 && lo >= 0) {
+                    out.append((hi shl 4 or lo).toChar())
+                    i += 3
+                    continue
+                }
+            }
+            out.append(s[i])
+            i++
+        }
+        return out.toString()
+    }
+
+    private fun hexVal(c: Char): Int = when (c) {
+        in '0'..'9' -> c - '0'
+        in 'a'..'f' -> c - 'a' + 10
+        in 'A'..'F' -> c - 'A' + 10
+        else -> -1
+    }
+
+    private fun wordCount(s: String): Int =
+        s.split(Regex("\\s+")).count { it.isNotEmpty() }
 }
