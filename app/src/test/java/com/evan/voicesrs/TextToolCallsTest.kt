@@ -101,4 +101,23 @@ class TextToolCallsTest {
         assertEquals(0, calls.size)
         assertEquals(code, stripped)
     }
+
+    @Test
+    fun `unclosed tool_call wrapper is left as-is`() {
+        val sample =
+            "intro\n" + TOOL_CALL_OPEN + "\n" +
+            FUNCTION_OPEN_PREFIX + "get_study_summary" + GT + "\n" +
+            FUNCTION_CLOSE
+        val (calls, stripped) = TextToolCalls.extract(sample)
+        assertEquals(0, calls.size)
+        assertEquals(sample, stripped)
+    }
+
+    @Test
+    fun `plain text with no tags returns no calls`() {
+        val text = "You studied 12 cards today. Nice work!"
+        val (calls, stripped) = TextToolCalls.extract(text)
+        assertEquals(0, calls.size)
+        assertEquals(text, stripped)
+    }
 }
