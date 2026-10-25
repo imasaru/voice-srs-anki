@@ -341,6 +341,49 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) {
         return (r as? JSONArray)?.length() ?: 0
     }
 
+    /** The full preset object for [deck], or throw on an unexpected result. */
+    fun getDeckConfig(deck: String): JSONObject {
+        val r = post("getDeckConfig", DeckConfigRequest.getDeckConfigParams(deck))
+        return (r as? JSONObject)
+            ?: throw AnkiConnectException("unexpected getDeckConfig response: $r")
+    }
+
+    /** Persist an edited preset object (must carry its "id"). */
+    fun saveDeckConfig(config: JSONObject): Boolean {
+        val r = post("saveDeckConfig", DeckConfigRequest.saveDeckConfigParams(config))
+        return (r as? Boolean)
+            ?: throw AnkiConnectException("unexpected saveDeckConfig response: $r")
+    }
+
+    /** Create a preset copy, or null when Anki refused it. */
+    fun cloneDeckConfigId(name: String, cloneFrom: Long): Long? {
+        val r = post("cloneDeckConfigId", DeckConfigRequest.cloneParams(name, cloneFrom))
+        return DeckConfigRequest.parseCloneId(r)
+    }
+
+    /** Assign [configId] to each deck, or false when Anki refused it. */
+    fun setDeckConfigId(decks: List<String>, configId: Long): Boolean {
+        val r = post("setDeckConfigId", DeckConfigRequest.setDeckConfigIdParams(decks, configId))
+        return (r as? Boolean)
+            ?: throw AnkiConnectException("unexpected setDeckConfigId response: $r")
+    }
+
+    /** Push [cardIds] out to [days] from today. */
+    fun setDueDate(cardIds: List<Long>, days: String): Boolean {
+        val r = post("setDueDate", DeckConfigRequest.setDueDateParams(cardIds, days))
+        return (r as? Boolean)
+            ?: throw AnkiConnectException("unexpected setDueDate response: $r")
+    }
+
+    /**
+     * A media file's bytes as base64, or null when the file does not exist
+     * (AnkiConnect returns false) or the result is unexpected.
+     */
+    fun retrieveMediaFile(filename: String): ByteArray? {
+        val r = post("retrieveMediaFile", DeckConfigRequest.retrieveMediaParams(filename))
+        return DeckConfigRequest.parseMedia(r)
+    }
+
     private fun noteIdOf(o: JSONObject): Long? {
         val raw = when {
             o.has("note") && !o.isNull("note") -> o.optLong("note", 0L)
