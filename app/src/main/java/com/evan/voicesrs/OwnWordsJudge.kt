@@ -1,20 +1,30 @@
 package com.evan.voicesrs
 
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Free-speech MCQ answers judged by a local H2O / System One decision model.
- * POST `{base}/v1/systemone` with OpenAI-compatible JSON. Confidence at or
- * above [THRESHOLD] is Good (ease 3); below is Again (ease 1). Malformed
- * bodies and transport failures are [Verdict.Fallback] so the existing
- * grader still runs.
+ * Free-speech MCQ answers judged by a local decision model over OpenAI
+ * `chat/completions`. POST `{base}/chat/completions` with an OpenAI-compatible
+ * JSON body (temperature 0, `response_format` json_object). A `correct` of true
+ * at or above [THRESHOLD] is Good (ease 3); otherwise Again (ease 1). Malformed
+ * bodies and transport failures are [Verdict.Fallback] so the existing grader
+ * still runs.
  */
 object OwnWordsJudge {
-    const val PATH = "/v1/systemone"
     const val THRESHOLD = 0.70
     const val QUESTION_ID = "correct"
+    const val MAX_TOKENS = 64
     const val CONNECT_MS = 5_000
     const val READ_MS = 15_000
+
+    /** The model must reply with exactly this shape; the user answer means the
+     * same as the correct answer. */
+    private const val SYSTEM_PROMPT =
+        "You judge whether a learner's own-words answer means the same as the " +
+        "correct answer. Reply with exactly one JSON object and nothing else: " +
+        "{\"correct\": <boolean>, \"confidence\": <number 0..1>}. " +
+        "Set correct=true only when the meaning matches; otherwise correct=false."
 
     sealed class Verdict {
         data class Graded(
@@ -25,12 +35,17 @@ object OwnWordsJudge {
         data object Fallback : Verdict()
     }
 
+    /**
+     * Full judge endpoint. The base is the effective base URL (already ending in
+     * `/v1`); a missing `/v1` is appended once and a trailing `/chat/completions`
+     * is never doubled. Trailing slashes are trimmed.
+     */
     fun endpoint(baseUrl: String): String {
-        val root = baseUrl.trim().trimEnd('/')
+        var root = baseUrl.trim().trimEnd('/')
         if (root.isEmpty()) return ""
-        if (root.endsWith("/v1/systemone") || root.endsWith("/systemone")) return root
-        if (root.endsWith("/v1")) return "$root/systemone"
-        return "$root$PATH"
+        root = root.removeSuffix("/chat/completions").trimEnd('/')
+        val base = if (root.endsWith("/v1")) root else "$root/v1"
+        return "$base/chat/completions"
     }
 
     /**
@@ -43,36 +58,39 @@ object OwnWordsJudge {
         return mainBaseUrl.trim().trimEnd('/').removeSuffix("/chat/completions").trimEnd('/')
     }
 
-    /** Base used for `GET /models` on the same host. */
+    /** Base used for `GET /models` on the same host (e.g. `{base}/v1/models`). */
     fun modelsBase(baseUrl: String): String {
-        val root = baseUrl.trim().trimEnd('/')
+        var root = baseUrl.trim().trimEnd('/')
         if (root.isEmpty()) return ""
-        if (root.endsWith("/v1/systemone")) return root.removeSuffix("/systemone")
-        if (root.endsWith("/systemone")) {
-            val parent = root.removeSuffix("/systemone").trimEnd('/')
-            return if (parent.endsWith("/v1")) parent else "$parent/v1"
-        }
-        if (root.endsWith("/v1")) return root
-        return "$root/v1"
+        root = root.removeSuffix("/chat/completions").trimEnd('/')
+        return if (root.endsWith("/v1")) root else "$root/v1"
     }
 
+    /**
+     * OpenAI `chat/completions` request. `temperature` 0, `max_tokens` 64,
+     * thinking disabled, JSON-only response.
+     */
     fun requestJson(
         model: String,
         question: String,
         correctAnswer: String,
         userAnswer: String
     ): JSONObject {
-        val state = JSONObject()
-            .put("question", question)
-            .put("correct_answer", correctAnswer)
-            .put("user_answer", userAnswer)
-        val questions = JSONObject().put(
-            QUESTION_ID,
-            JSONObject()
-                .put("type", "noul")
-                .put("instructions", "Is the user's answer correct for this question?")
-        )
-        return AiRequest.systemOneBody(model, state, questions)
+        val user = buildString {
+            appendLine("Question: $question")
+            appendLine("Correct answer: $correctAnswer")
+            appendLine("Learner's own-words answer: $userAnswer")
+        }
+        val messages = JSONArray()
+            .put(JSONObject().put("role", "system").put("content", SYSTEM_PROMPT))
+            .put(JSONObject().put("role", "user").put("content", user))
+        return JSONObject()
+            .put("model", model)
+            .put("temperature", 0)
+            .put("max_tokens", MAX_TOKENS)
+            .put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
+            .put("response_format", JSONObject().put("type", "json_object"))
+            .put("messages", messages)
     }
 
     fun requestBody(
@@ -82,14 +100,24 @@ object OwnWordsJudge {
         userAnswer: String
     ): String = requestJson(model, question, correctAnswer, userAnswer).toString()
 
+    /**
+     * Parse an OpenAI chat completion. Reads `choices[0].message.content`, takes
+     * the first `{...}` block (ignoring surrounding text or code fences), and
+     * grades on `correct` and `confidence`. Anything malformed or missing is
+     * [Verdict.Fallback].
+     */
     fun parse(body: String): Verdict {
-        val obj = try {
-            JSONObject(body)
-        } catch (_: Exception) {
-            return Verdict.Fallback
+        val content = responseContent(body) ?: return Verdict.Fallback
+        val obj = jsonBlock(content) ?: return Verdict.Fallback
+        if (!obj.has(QUESTION_ID)) return Verdict.Fallback
+        val confidence = obj.optDouble("confidence", Double.NaN)
+        if (confidence.isNaN() || confidence.isInfinite()) return Verdict.Fallback
+        val correct = obj.optBoolean(QUESTION_ID, false)
+        return if (correct && confidence >= THRESHOLD) {
+            Verdict.Graded(ease = 3, confidence = confidence, correct = true)
+        } else {
+            Verdict.Graded(ease = 1, confidence = confidence, correct = false)
         }
-        val confidence = readConfidence(obj) ?: return Verdict.Fallback
-        return grade(confidence)
     }
 
     fun grade(confidence: Double): Verdict {
@@ -109,9 +137,29 @@ object OwnWordsJudge {
     }
 
     /**
-     * Free speech on an MCQ, not a letter and not a drill command.
-     * Non-MCQ cards stay on the existing grader.
+     * Reason a [result] call produced [Verdict.Fallback], or null when it did not.
+     * Safe to log: never contains the API key, auth headers, or request bodies.
      */
+    fun fallbackReason(body: String?, error: Exception?): String? = when (result(body, error)) {
+        is OwnWordsJudge.Verdict.Graded -> null
+        OwnWordsJudge.Verdict.Fallback -> when {
+            error != null -> reasonForError(error)
+            body.isNullOrBlank() -> "no response"
+            responseContent(body) == null -> "no content in response"
+            else -> "unparseable or missing judge fields"
+        }
+    }
+
+    private fun reasonForError(e: Exception): String = when (e) {
+        is AiHttpException -> "HTTP ${e.code}"
+        else -> buildString {
+            append(e.javaClass.simpleName)
+            e.message?.takeIf { it.isNotBlank() }?.let { append(": ").append(it) }
+        }
+    }
+
+    /** Free speech on an MCQ, not a letter and not a drill command.
+     * Non-MCQ cards stay on the existing grader. */
     fun shouldJudge(transcript: String, letters: Set<String>?): Boolean {
         if (transcript.isBlank() || letters.isNullOrEmpty()) return false
         if (SpokenLetter.normalise(transcript, letters) != null) return false
@@ -133,51 +181,47 @@ object OwnWordsJudge {
         return source.trim()
     }
 
-    private fun readConfidence(obj: JSONObject): Double? {
-        obj.optJSONObject("answers")?.let { answers ->
-            namedConfidence(answers, QUESTION_ID)?.let { return it }
-            namedConfidence(answers, "is_correct")?.let { return it }
-            val keys = answers.keys()
-            while (keys.hasNext()) {
-                val node = answers.optJSONObject(keys.next() as String) ?: continue
-                nodeConfidence(node)?.let { return it }
-            }
+    /** `choices[0].message.content` from an OpenAI-style chat completion. */
+    private fun responseContent(body: String): String? {
+        val content = try {
+            JSONObject(body)
+                .optJSONArray("choices")
+                ?.optJSONObject(0)
+                ?.optJSONObject("message")
+                ?.optString("content")
+        } catch (_: Exception) {
+            null
         }
-        nodeConfidence(obj)?.let { return it }
-        val content = obj.optJSONArray("choices")
-            ?.optJSONObject(0)
-            ?.optJSONObject("message")
-            ?.optString("content")
-            .orEmpty()
-            .trim()
-        if (content.startsWith("{")) {
-            val inner = try {
-                JSONObject(content)
-            } catch (_: Exception) {
-                null
-            }
-            if (inner != null) return readConfidence(inner)
-        }
-        return null
+        return content?.trim()?.ifBlank { null }
     }
 
-    private fun namedConfidence(answers: JSONObject, id: String): Double? {
-        if (!answers.has(id)) return null
-        return nodeConfidence(answers.optJSONObject(id) ?: return null)
-    }
-
-    private fun nodeConfidence(node: JSONObject): Double? {
-        if (node.has("noul") && !node.isNull("noul")) {
-            val v = node.optDouble("noul", Double.NaN)
-            if (!v.isNaN()) return v
-        }
-        if (node.has("confidence") && !node.isNull("confidence")) {
-            val v = node.optDouble("confidence", Double.NaN)
-            if (!v.isNaN()) return v
-        }
-        if (node.has("score") && !node.isNull("score")) {
-            val v = node.optDouble("score", Double.NaN)
-            if (!v.isNaN()) return v
+    /** First balanced `{...}` block in [content], ignoring surrounding text and
+     * code fences. Returns null when there is no complete block. */
+    private fun jsonBlock(content: String): JSONObject? {
+        val s = content.trim()
+        val start = s.indexOf('{')
+        if (start < 0) return null
+        var depth = 0
+        var inString = false
+        var escaped = false
+        for (i in start until s.length) {
+            val c = s[i]
+            if (escaped) { escaped = false; continue }
+            when {
+                c == '\\' && inString -> escaped = true
+                c == '"' -> inString = !inString
+                !inString && c == '{' -> depth++
+                !inString && c == '}' -> {
+                    depth--
+                    if (depth == 0) {
+                        return try {
+                            JSONObject(s.substring(start, i + 1))
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
+                }
+            }
         }
         return null
     }
