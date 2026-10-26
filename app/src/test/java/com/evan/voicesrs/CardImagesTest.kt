@@ -151,4 +151,40 @@ class CardImagesTest {
         assertTrue(CardImages.shouldResume(fb, "next", 0L))
         assertFalse(CardImages.shouldResume(fb, "good", 10_000_000L))
     }
+
+    @Test
+    fun `paused time is excluded from the auto-advance timer`() {
+        val fb = CardImages.waitFallback(
+            CardImages.Policy(speakPrompt = true, autoAdvance = true, voiceGrade = false),
+            autoAdvance = true, timeoutMs = 30_000L
+        )
+        // 35 s of wall-clock time, but 10 s was paused: only 25 s of real waiting,
+        // still under the 30 s timeout, so it keeps waiting.
+        assertFalse(CardImages.shouldResume(fb, null, 35_000L, 10_000L))
+        // Without the pause credit the same wall-clock time would have already advanced.
+        assertTrue(CardImages.shouldResume(fb, null, 35_000L, 0L))
+        // 35 s wall-clock minus 5 s paused = 30 s of real waiting: at the timeout it advances.
+        assertTrue(CardImages.shouldResume(fb, null, 35_000L, 5_000L))
+        // Paused time larger than elapsed never forces a negative wait below the timeout.
+        assertFalse(CardImages.shouldResume(fb, null, 3_000L, 10_000L))
+    }
+
+    @Test
+    fun `a full 3500 ms listen window resumes correctly on elapsed accounting`() {
+        val fb = CardImages.waitFallback(
+            CardImages.Policy(speakPrompt = true, autoAdvance = true, voiceGrade = false),
+            autoAdvance = true, timeoutMs = 3_500L
+        )
+        // One 3.5 s listen window: at its end the silence auto-advances.
+        assertTrue(CardImages.shouldResume(fb, null, 3_500L))
+        // A later window still advances on accumulated elapsed time.
+        assertTrue(CardImages.shouldResume(fb, null, 7_000L))
+        // Before the first window ends, silence keeps waiting.
+        assertFalse(CardImages.shouldResume(fb, null, 3_499L))
+        // A "next" heard inside the window resumes immediately, regardless of elapsed.
+        assertTrue(CardImages.shouldResume(fb, "next", 1L))
+        assertTrue(CardImages.shouldResume(fb, "Continue", 3_000L))
+        // A pause credit keeps a just-finished window from advancing early.
+        assertFalse(CardImages.shouldResume(fb, null, 3_500L, 1_000L))
+    }
 }
