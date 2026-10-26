@@ -83,7 +83,11 @@ class StudyToolRunner(
     fun load(from: String, to: String, deck: String): Pair<List<StudyReview>, Map<Long, StudyCard>> {
         val start = StudyTools.dayStartMs(from, tz)
         val end = StudyTools.dayEndMs(to, tz)
-        val raw = anki.cardReviewsTree(deck, start - 1L)
+        val raw = try {
+            anki.cardReviewsTree(deck, start - 1L)
+        } catch (_: Exception) {
+            emptyList<StudyReview>()
+        }
         val rows = raw.filter { it.atMs in start..end }
         val ids = rows.map { it.cardId }.distinct()
         val info = if (ids.isEmpty()) emptyList() else anki.cardsInfo(ids)

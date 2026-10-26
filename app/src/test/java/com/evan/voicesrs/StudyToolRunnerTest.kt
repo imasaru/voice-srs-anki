@@ -16,7 +16,8 @@ class StudyToolRunnerTest {
 
     private class FakeAnki(
         private val rowsByDeck: Map<String, List<StudyReview>>,
-        private val crashDeck: String? = null
+        private val crashDeck: String? = null,
+        private val crashCardsInfo: Boolean = false
     ) : StudyAnki {
         /** Deck names cardReviewsTree queried (i.e. the ones it kept). */
         val queried = mutableListOf<String>()
@@ -32,7 +33,10 @@ class StudyToolRunnerTest {
             return out.sortedBy { it.atMs }
         }
 
-        override fun cardsInfo(ids: List<Long>): List<OfflineCard> = emptyList()
+        override fun cardsInfo(ids: List<Long>): List<OfflineCard> {
+            if (crashCardsInfo) throw RuntimeException("boom cardsInfo")
+            return emptyList()
+        }
         override fun noteTags(ids: List<Long>): Map<Long, List<String>> = emptyMap()
     }
 
@@ -52,12 +56,12 @@ class StudyToolRunnerTest {
     }
 
     @Test
-    fun todayBundleReturnsErrorWhenReviewsThrow() {
+    fun todayBundleReturnsErrorWhenCardsInfoThrows() {
         val day = "2026-10-26"
         val at = StudyTools.dayStartMs(day, tz) + 60_000L
         val fake = FakeAnki(
             mapOf("Parent" to listOf(StudyReview(at, 100L, 3, 5000L))),
-            crashDeck = "Parent"
+            crashCardsInfo = true
         )
         val runner = StudyToolRunner(fake, "Parent", tz)
         val bundle = JSONObject(runner.todayBundle("Parent"))
