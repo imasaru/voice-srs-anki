@@ -86,6 +86,10 @@ class DrillService : Service(), VoiceIo {
         /** Latch wait past the listen deadline: client backoff plus main-thread slack. */
         private const val LISTEN_LATCH_SLACK_MS = CLIENT_BACKOFF_MS + 5_000L
         private const val NEXT_LISTEN_BACKOFF_MS = 1000L
+        /** Forced-tap image wait auto-advances after this much silence. */
+        private const val FORCED_TAP_ADVANCE_MS = 30_000L
+        /** Per-tick slice for the forced-tap voice wait (listen + latch). */
+        private const val FALLBACK_TICK_MS = 250L
 
         @Volatile var running = false
             private set
@@ -1678,7 +1682,13 @@ class DrillService : Service(), VoiceIo {
                 questionRead = true
             }
             if (stopRequested.get()) return CardStep.Paused
-            when (awaitShowAnswer(forceTap = true)) {
+            val fallback = CardImages.waitFallback(
+                CardImages.policy(questionHtml),
+                autoAdvance = true,
+                timeoutMs = FORCED_TAP_ADVANCE_MS
+            )
+            fallback.prompt?.let { speak(it) }
+            when (awaitShowAnswer(forceTap = true, fallback = fallback)) {
                 ShowWait.STOPPED -> return CardStep.Paused
                 ShowWait.SHOWN, ShowWait.RESUME_VOICE -> { }
             }
@@ -2452,64 +2462,91 @@ class DrillService : Service(), VoiceIo {
     /**
      * Block until Show answer, Silent turning off, or Stop.
      * Silent off does not count as a reveal.
+     *
+     * When [fallback] is set (the forced-tap image wait) and the mic is live, also
+     * resume on a spoken "next"/"continue" and auto-advance after
+     * [CardImages.WaitFallback.autoAdvanceTimeoutMs], so the hands-free drill never
+     * hangs. The timeout still fires in silent mode so it never waits forever when
+     * auto-advance is on. [fallback] is null on the normal path: tap-only, as before.
      */
-    private fun awaitShowAnswer(forceTap: Boolean = false): ShowWait {
+    private fun awaitShowAnswer(
+        forceTap: Boolean = false,
+        fallback: CardImages.WaitFallback? = null
+    ): ShowWait {
         fun hold(): Boolean = forceTap || sessionSilent
-        while (!stopRequested.get() && !destroyed) {
-            if (chatPaused.get()) {
-                if (!awaitChatResume()) return ShowWait.STOPPED
-                continue
-            }
-            if (showAnswerEarly.get()) {
-                Log.i(TAG, "show answer already tapped")
-                return ShowWait.SHOWN
-            }
-            if (!hold()) return ShowWait.RESUME_VOICE
-            val latch = CountDownLatch(1)
-            showAnswerLatch.set(latch)
-            try {
-                if (chatPaused.get()) continue
+        val voiceWait = fallback != null && !sessionSilent
+        var startedAt = 0L
+        // We only want to catch "next" here, so suppress the listen start cue.
+        if (voiceWait) quietListen = true
+        try {
+            while (!stopRequested.get() && !destroyed) {
+                if (chatPaused.get()) {
+                    if (!awaitChatResume()) return ShowWait.STOPPED
+                    continue
+                }
                 if (showAnswerEarly.get()) {
                     Log.i(TAG, "show answer already tapped")
                     return ShowWait.SHOWN
                 }
                 if (!hold()) return ShowWait.RESUME_VOICE
-                Log.i(TAG, "waiting for show answer")
-                runCatching {
-                    DrillUi.update {
-                        val notice = it.status == ListenWindow.SILENT_NOTICE ||
-                            it.heard == ListenWindow.SILENT_NOTICE
-                        it.copy(
-                            awaitingShowAnswer = true,
-                            status = if (notice) ListenWindow.SILENT_NOTICE else "Tap to show the answer"
-                        )
+                val latch = CountDownLatch(1)
+                showAnswerLatch.set(latch)
+                try {
+                    if (chatPaused.get()) continue
+                    if (showAnswerEarly.get()) {
+                        Log.i(TAG, "show answer already tapped")
+                        return ShowWait.SHOWN
                     }
-                }
-                while (!stopRequested.get() && !destroyed) {
-                    if (chatPaused.get()) break
-                    if (showAnswerEarly.get()) return ShowWait.SHOWN
                     if (!hold()) return ShowWait.RESUME_VOICE
-                    try {
-                        if (latch.await(250, TimeUnit.MILLISECONDS)) {
-                            if (chatPaused.get()) break
-                            if (showAnswerEarly.get()) return ShowWait.SHOWN
-                            if (!hold()) return ShowWait.RESUME_VOICE
+                    if (startedAt == 0L) startedAt = SystemClock.elapsedRealtime()
+                    Log.i(TAG, "waiting for show answer")
+                    runCatching {
+                        DrillUi.update {
+                            val notice = it.status == ListenWindow.SILENT_NOTICE ||
+                                it.heard == ListenWindow.SILENT_NOTICE
+                            it.copy(
+                                awaitingShowAnswer = true,
+                                status = if (notice) ListenWindow.SILENT_NOTICE else "Tap to show the answer"
+                            )
                         }
-                    } catch (_: InterruptedException) {
-                        Thread.currentThread().interrupt()
-                        return ShowWait.STOPPED
                     }
-                }
-                if (chatPaused.get()) continue
-                return ShowWait.STOPPED
-            } finally {
-                showAnswerLatch.compareAndSet(latch, null)
-                if (showAnswerEarly.get() || hold()) {
-                    runCatching { DrillUi.update { it.copy(awaitingShowAnswer = !showAnswerEarly.get()) } }
+                    while (!stopRequested.get() && !destroyed) {
+                        if (chatPaused.get()) break
+                        if (showAnswerEarly.get()) return ShowWait.SHOWN
+                        if (!hold()) return ShowWait.RESUME_VOICE
+                        // A spoken "next"/"continue" (non-silent) or the auto-advance
+                        // timeout both break the hang; treat them like a shown answer.
+                        if (fallback != null) {
+                            val heard = if (voiceWait) listen(FALLBACK_TICK_MS) else null
+                            val elapsed = SystemClock.elapsedRealtime() - startedAt
+                            if (CardImages.shouldResume(fallback, heard, elapsed)) {
+                                return ShowWait.RESUME_VOICE
+                            }
+                        }
+                        try {
+                            if (latch.await(FALLBACK_TICK_MS, TimeUnit.MILLISECONDS)) {
+                                if (chatPaused.get()) break
+                                if (showAnswerEarly.get()) return ShowWait.SHOWN
+                                if (!hold()) return ShowWait.RESUME_VOICE
+                            }
+                        } catch (_: InterruptedException) {
+                            Thread.currentThread().interrupt()
+                            return ShowWait.STOPPED
+                        }
+                    }
+                    if (chatPaused.get()) continue
+                    return ShowWait.STOPPED
+                } finally {
+                    showAnswerLatch.compareAndSet(latch, null)
+                    if (showAnswerEarly.get() || hold()) {
+                        runCatching { DrillUi.update { it.copy(awaitingShowAnswer = !showAnswerEarly.get()) } }
+                    }
                 }
             }
+            return ShowWait.STOPPED
+        } finally {
+            if (voiceWait) quietListen = false
         }
-        return ShowWait.STOPPED
     }
 
     /**

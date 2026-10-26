@@ -57,6 +57,17 @@ object CardImages {
     fun waitFallback(policy: Policy, autoAdvance: Boolean, timeoutMs: Long = 0L): WaitFallback =
         WaitFallback(policy.speakPrompt, autoAdvance, timeoutMs)
 
+    /**
+     * Whether a forced-tap wait should resume given what was [heard] and how long
+     * the learner has been waiting ([elapsedMs]). A spoken "next"/"continue"
+     * resumes immediately; otherwise auto-advance once
+     * [WaitFallback.autoAdvanceTimeoutMs] has elapsed. A timeout of 0 never
+     * auto-advances. Pure so the same call path is unit-tested.
+     */
+    fun shouldResume(fallback: WaitFallback, heard: String?, elapsedMs: Long): Boolean =
+        fallback.resumes(heard) ||
+            (fallback.autoAdvanceTimeoutMs > 0L && elapsedMs >= fallback.autoAdvanceTimeoutMs)
+
     fun waitForTap(html: String): Boolean =
         AnkiText.needsScreen(html) || AnkiText.isImageOcclusion(html)
 
