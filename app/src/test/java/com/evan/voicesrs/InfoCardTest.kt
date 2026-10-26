@@ -7,11 +7,10 @@ import org.junit.Test
 
 class InfoCardTest {
     @Test
-    fun `Heard is first even when nothing was captured`() {
+    fun `Heard is hidden while TTS reads the question`() {
         val idle = InfoCard.compose(heard = "", status = "Reading the question", drilling = true)
-        assertTrue(idle.startsWith(InfoCard.HEARD_EMPTY))
-        assertTrue(idle.contains("Reading the question"))
-        assertEquals(InfoCard.HEARD_EMPTY, idle.lines().first())
+        assertFalse(idle.contains(InfoCard.HEARD_EMPTY))
+        assertEquals("Reading the question", idle)
     }
 
     @Test
@@ -33,5 +32,26 @@ class InfoCardTest {
     @Test
     fun `idle drill keeps the ready line without Heard`() {
         assertEquals("Ready", InfoCard.compose("", "Ready", drilling = false))
+    }
+
+    @Test
+    fun `Heard is hidden in silent mode even while listening`() {
+        val text = InfoCard.compose("bee", "Listening for your answer", drilling = true, silent = true)
+        assertFalse(text.contains("Heard"))
+        assertEquals(InfoCard.LISTEN_ANSWER, text)
+    }
+
+    @Test
+    fun `Heard is hidden while paused`() {
+        val text = InfoCard.compose("bee", "Paused", drilling = true)
+        assertFalse(text.contains("Heard"))
+        assertEquals("Paused", text)
+    }
+
+    @Test
+    fun `Heard shows when the mic is open even on the rating stage`() {
+        val text = InfoCard.compose("bee", "Rate it", drilling = true, micOpen = true)
+        assertEquals("Heard: \"bee\"", text.lines().first())
+        assertEquals("Rate it", text.lines().last())
     }
 }
