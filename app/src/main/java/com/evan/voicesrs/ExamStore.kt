@@ -10,6 +10,7 @@ object ExamStore {
     const val PREFIX_DATE = "exam_date:"
     const val PREFIX_TARGET = "exam_target:"
     const val PREFIX_CLONE = "exam_clone_id:"
+    const val PREFIX_ORIG = "exam_orig_cfg:"
     const val PREFIX_APPLIED = "exam_applied:"
     const val PREFIX_COVERAGE = "exam_coverage:"
 
@@ -17,6 +18,7 @@ object ExamStore {
         val date: LocalDate? = null,
         val target: Double? = null,
         val cloneId: Long? = null,
+        val origCfg: Long? = null,
         val lastApplied: LocalDate? = null,
         val coverage: Int? = null
     )
@@ -25,12 +27,14 @@ object ExamStore {
         key.startsWith(PREFIX_DATE) ||
             key.startsWith(PREFIX_TARGET) ||
             key.startsWith(PREFIX_CLONE) ||
+            key.startsWith(PREFIX_ORIG) ||
             key.startsWith(PREFIX_APPLIED) ||
             key.startsWith(PREFIX_COVERAGE)
 
     fun dateKey(deck: String) = PREFIX_DATE + deck
     fun targetKey(deck: String) = PREFIX_TARGET + deck
     fun cloneKey(deck: String) = PREFIX_CLONE + deck
+    fun origKey(deck: String) = PREFIX_ORIG + deck
     fun appliedKey(deck: String) = PREFIX_APPLIED + deck
     fun coverageKey(deck: String) = PREFIX_COVERAGE + deck
 
@@ -39,6 +43,7 @@ object ExamStore {
             date = parseDate(asString(map[dateKey(deck)])),
             target = parseTarget(asString(map[targetKey(deck)])),
             cloneId = parseLong(map[cloneKey(deck)]),
+            origCfg = parseLong(map[origKey(deck)]),
             lastApplied = parseDate(asString(map[appliedKey(deck)])),
             coverage = parseInt(map[coverageKey(deck)])
         )
@@ -48,11 +53,12 @@ object ExamStore {
         putOrRemove(map, dateKey(deck), state.date?.toString())
         putOrRemove(map, targetKey(deck), formatTarget(state.target))
         putOrRemove(map, cloneKey(deck), state.cloneId?.toString())
+        putOrRemove(map, origKey(deck), state.origCfg?.toString())
         putOrRemove(map, appliedKey(deck), state.lastApplied?.toString())
         putOrRemove(map, coverageKey(deck), state.coverage?.toString())
     }
 
-    /** Drop the date and ramp override; keep a clone id so a later date reuses it. */
+    /** Drop the date and ramp override; keep clone/orig so a later restore reuses them. */
     fun disable(state: State): State =
         state.copy(date = null, target = null, lastApplied = null, coverage = null)
 
