@@ -769,6 +769,7 @@ class DrillService : Service(), VoiceIo {
                 return
             }
             val anki = AnkiConnect(cfg.url, cfg.apiKey)
+            CardMedia.bind(anki)
             val report = anki.preflight(cfg.deck)
             if (!report.ok) {
                 if (cfg.offlineBatch && store.hasBatch()) {
@@ -907,11 +908,12 @@ class DrillService : Service(), VoiceIo {
         val gate = synchronized(gateLock) { listenGate }
         val silent = gate.silent
         val pausedNow = chatPaused.get()
-        val front = AnkiText.displayHtml(questionHtml)
+        val waitForTap = CardImages.waitForTap(questionHtml)
+        val front = CardMedia.display(questionHtml)
         runCatching {
             DrillUi.update {
                 it.copy(
-                    status = if (silent) "Tap to show the answer" else "Reading the question",
+                    status = if (silent || waitForTap) "Tap to show the answer" else "Reading the question",
                     frontHtml = front,
                     backHtml = "",
                     showBack = false,
@@ -956,8 +958,8 @@ class DrillService : Service(), VoiceIo {
             DrillUi.update {
                 it.copy(
                     status = "Answer",
-                    frontHtml = if (questionHtml.isBlank()) it.frontHtml else AnkiText.displayHtml(questionHtml),
-                    backHtml = AnkiText.displayHtml(answerHtml),
+                    frontHtml = if (questionHtml.isBlank()) it.frontHtml else CardMedia.display(questionHtml),
+                    backHtml = CardMedia.display(answerHtml),
                     showBack = true,
                     ratingVisible = true,
                     ratingMicOpen = false,
@@ -1643,8 +1645,9 @@ class DrillService : Service(), VoiceIo {
         reveal: () -> Revealed
     ): CardStep {
         activeQuestionHtml = questionHtml
+        val screenCard = CardImages.waitForTap(questionHtml)
         val question = spokenQuestion(questionHtml, cardId)
-        if (question.isBlank()) return CardStep.Blank
+        if (question.isBlank() && !screenCard) return CardStep.Blank
         var presentedAt = 0L
         var questionRead = false
         showAnswerEarly.set(false)
@@ -1667,7 +1670,21 @@ class DrillService : Service(), VoiceIo {
         presentedAt = SystemClock.elapsedRealtime()
         var repeats = 0
         var transcript = ""
-        while (!stopRequested.get()) {
+        if (screenCard) {
+            speak(getString(R.string.image_look_screen))
+            if (question.isNotBlank()) speak(question)
+            if (!questionRead) {
+                presentedAt = SystemClock.elapsedRealtime()
+                questionRead = true
+            }
+            if (stopRequested.get()) return CardStep.Paused
+            when (awaitShowAnswer(forceTap = true)) {
+                ShowWait.STOPPED -> return CardStep.Paused
+                ShowWait.SHOWN, ShowWait.RESUME_VOICE -> { }
+            }
+            if (transcript.isBlank()) chosenLetter?.let { transcript = it }
+        }
+        while (!screenCard && !stopRequested.get()) {
             if (!awaitChatResume()) return CardStep.Paused
             if (showAnswerEarly.getAndSet(false)) {
                 if (transcript.isBlank()) chosenLetter?.let { transcript = it }
@@ -1769,6 +1786,25 @@ class DrillService : Service(), VoiceIo {
             if (tappedEarly != null) {
                 return gradedByTap(tappedEarly, gradeButtons, presentedAt, transcript, answerHtml, questionForGrade)
             }
+            if (screenCard) {
+                if (speakAnswer && answerText.isNotBlank()) {
+                    speak(answerText)
+                    speakAnswer = false
+                    if (stopRequested.get()) return CardStep.Paused
+                    if (chatPaused.get()) {
+                        speakAnswer = true
+                        continue
+                    }
+                }
+                when (val wait = awaitSilentGrade(forceTap = true)) {
+                    GradeWait.Stopped -> return CardStep.Paused
+                    GradeWait.ResumeVoice -> continue
+                    is GradeWait.Ease -> return gradedByTap(
+                        wait.ease, gradeButtons, presentedAt, transcript, answerHtml, questionForGrade
+                    )
+                }
+                continue
+            }
             when (AudioGate.resume(sessionSilent, cardUp = true, answerShown = true)) {
                 CardResume.HOLD, CardResume.READ_QUESTION -> when (val wait = awaitSilentGrade()) {
                     GradeWait.Stopped -> return CardStep.Paused
@@ -1793,7 +1829,7 @@ class DrillService : Service(), VoiceIo {
                         continue
                     }
                     val auto = judgedEase
-                    if (auto != null) {
+                    if (auto != null && !screenCard) {
                         return CardStep.Graded(
                             GradeMapper.toAvailableEase(auto, gradeButtons),
                             ThinkTime.answerDurationMs(presentedAt, SystemClock.elapsedRealtime()),
@@ -2417,7 +2453,8 @@ class DrillService : Service(), VoiceIo {
      * Block until Show answer, Silent turning off, or Stop.
      * Silent off does not count as a reveal.
      */
-    private fun awaitShowAnswer(): ShowWait {
+    private fun awaitShowAnswer(forceTap: Boolean = false): ShowWait {
+        fun hold(): Boolean = forceTap || sessionSilent
         while (!stopRequested.get() && !destroyed) {
             if (chatPaused.get()) {
                 if (!awaitChatResume()) return ShowWait.STOPPED
@@ -2427,7 +2464,7 @@ class DrillService : Service(), VoiceIo {
                 Log.i(TAG, "show answer already tapped")
                 return ShowWait.SHOWN
             }
-            if (!sessionSilent) return ShowWait.RESUME_VOICE
+            if (!hold()) return ShowWait.RESUME_VOICE
             val latch = CountDownLatch(1)
             showAnswerLatch.set(latch)
             try {
@@ -2436,7 +2473,7 @@ class DrillService : Service(), VoiceIo {
                     Log.i(TAG, "show answer already tapped")
                     return ShowWait.SHOWN
                 }
-                if (!sessionSilent) return ShowWait.RESUME_VOICE
+                if (!hold()) return ShowWait.RESUME_VOICE
                 Log.i(TAG, "waiting for show answer")
                 runCatching {
                     DrillUi.update {
@@ -2451,12 +2488,12 @@ class DrillService : Service(), VoiceIo {
                 while (!stopRequested.get() && !destroyed) {
                     if (chatPaused.get()) break
                     if (showAnswerEarly.get()) return ShowWait.SHOWN
-                    if (!sessionSilent) return ShowWait.RESUME_VOICE
+                    if (!hold()) return ShowWait.RESUME_VOICE
                     try {
                         if (latch.await(250, TimeUnit.MILLISECONDS)) {
                             if (chatPaused.get()) break
                             if (showAnswerEarly.get()) return ShowWait.SHOWN
-                            if (!sessionSilent) return ShowWait.RESUME_VOICE
+                            if (!hold()) return ShowWait.RESUME_VOICE
                         }
                     } catch (_: InterruptedException) {
                         Thread.currentThread().interrupt()
@@ -2467,7 +2504,7 @@ class DrillService : Service(), VoiceIo {
                 return ShowWait.STOPPED
             } finally {
                 showAnswerLatch.compareAndSet(latch, null)
-                if (showAnswerEarly.get() || sessionSilent) {
+                if (showAnswerEarly.get() || hold()) {
                     runCatching { DrillUi.update { it.copy(awaitingShowAnswer = !showAnswerEarly.get()) } }
                 }
             }
@@ -2479,7 +2516,8 @@ class DrillService : Service(), VoiceIo {
      * Block until a grade chip, Silent turning off, or Stop.
      * Voice resuming is not a grade.
      */
-    private fun awaitSilentGrade(): GradeWait {
+    private fun awaitSilentGrade(forceTap: Boolean = false): GradeWait {
+        fun hold(): Boolean = forceTap || sessionSilent
         while (!stopRequested.get() && !destroyed) {
             if (chatPaused.get()) {
                 if (!awaitChatResume()) return GradeWait.Stopped
@@ -2491,7 +2529,7 @@ class DrillService : Service(), VoiceIo {
                 val already = claimedEase()
                 if (already != null) return GradeWait.Ease(already)
                 if (chatPaused.get()) continue
-                if (!sessionSilent) return GradeWait.ResumeVoice
+                if (!hold()) return GradeWait.ResumeVoice
                 Log.i(TAG, "waiting for grade")
                 var paused = false
                 while (!stopRequested.get() && !destroyed) {
@@ -2499,7 +2537,7 @@ class DrillService : Service(), VoiceIo {
                         paused = true
                         break
                     }
-                    if (!sessionSilent) return GradeWait.ResumeVoice
+                    if (!hold()) return GradeWait.ResumeVoice
                     val claimed = claimedEase()
                     if (claimed != null) return GradeWait.Ease(claimed)
                     try {
@@ -2508,7 +2546,7 @@ class DrillService : Service(), VoiceIo {
                                 paused = true
                                 break
                             }
-                            if (!sessionSilent && claimedEase() == null) return GradeWait.ResumeVoice
+                            if (!hold() && claimedEase() == null) return GradeWait.ResumeVoice
                             break
                         }
                     } catch (_: InterruptedException) {
@@ -2520,7 +2558,7 @@ class DrillService : Service(), VoiceIo {
                 if (stopRequested.get() || destroyed) return GradeWait.Stopped
                 val ease = claimedEase()
                 if (ease != null) return GradeWait.Ease(ease)
-                if (!sessionSilent) return GradeWait.ResumeVoice
+                if (!hold()) return GradeWait.ResumeVoice
                 return GradeWait.Stopped
             } finally {
                 silentGradeLatch.compareAndSet(latch, null)

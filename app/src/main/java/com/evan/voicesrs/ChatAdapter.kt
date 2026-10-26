@@ -345,8 +345,12 @@ class ChatAdapter(
                     correctField = row.correctField
                 )
                 if (!mcq) {
-                    val stem = QuestionLabel.of(row.front, row.questionOrdinal).stem
-                    CardFaceBinder.setMarkup(question, stem.ifBlank { row.front })
+                    val markup = if (row.front.contains("<img", ignoreCase = true)) {
+                        row.front
+                    } else {
+                        QuestionLabel.of(row.front, row.questionOrdinal).stem.ifBlank { row.front }
+                    }
+                    CardFaceBinder.setMarkup(question, markup)
                 }
                 if (row.questionLabel.isNotBlank()) {
                     label.visibility = View.VISIBLE

@@ -76,6 +76,7 @@
     <string name="settings_silent_mode_help">Never uses the microphone, so you can review during a phone call. Tap to show the answer and to rate.</string>
     <string name="silent_indicator">Silent</string>
     <string name="show_answer">Show answer</string>
+    <string name="image_look_screen">Look at the screen for this one</string>
     <string name="section_drill">Drill</string>
     <string name="settings_offline_header">OFFLINE</string>
     <string name="settings_session_goal_header">SESSION GOAL</string>

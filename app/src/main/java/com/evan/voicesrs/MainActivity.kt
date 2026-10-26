@@ -640,9 +640,14 @@ class MainActivity : AppCompatActivity() {
                 }
             } else if (renderedFront != state.frontHtml) {
                 renderedFront = state.frontHtml
-                val face = QuestionLabel.of(state.frontHtml, state.questionOrdinal.coerceAtLeast(1))
-                val shown = if (face.fromCard) face.stem else state.frontHtml
-                CardFaceBinder.setMarkup(frontView, shown.ifBlank { state.frontHtml })
+                val markup = if (state.frontHtml.contains("<img", ignoreCase = true)) {
+                    state.frontHtml
+                } else {
+                    val face = QuestionLabel.of(state.frontHtml, state.questionOrdinal.coerceAtLeast(1))
+                    val shown = if (face.fromCard) face.stem else state.frontHtml
+                    shown.ifBlank { state.frontHtml }
+                }
+                CardFaceBinder.setMarkup(frontView, markup)
             }
             val showBack = state.showBack && state.backHtml.isNotBlank()
             val backVis = if (showBack) View.VISIBLE else View.GONE

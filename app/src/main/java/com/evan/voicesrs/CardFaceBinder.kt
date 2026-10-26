@@ -1,6 +1,7 @@
 package com.evan.voicesrs
 
 import android.graphics.Typeface
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.text.Editable
 import android.text.Html
@@ -57,7 +58,8 @@ object CardFaceBinder {
         if (!parsed.mcq || options == null) {
             options?.visibility = View.GONE
             options?.removeAllViews()
-            setMarkup(stem, face.stem)
+            val markup = if (source.contains("<img", ignoreCase = true)) source else face.stem
+            setMarkup(stem, markup)
             return false
         }
         setMarkup(stem, parsed.stem)
@@ -268,9 +270,24 @@ object CardFaceBinder {
         view.text = HtmlCompat.fromHtml(
             CodeMarkup.prepareForHtml(shown),
             HtmlCompat.FROM_HTML_MODE_COMPACT,
-            null,
+            imageGetter(view),
             ChipTagHandler(view)
         )
+    }
+
+    private fun imageGetter(view: TextView): Html.ImageGetter {
+        return Html.ImageGetter { source ->
+            val bmp = CardMedia.bitmap(source) ?: return@ImageGetter null
+            val drawable = BitmapDrawable(view.resources, bmp)
+            val maxW = view.width.takeIf { it > 0 }
+                ?: view.resources.displayMetrics.widthPixels
+            val cap = maxW.coerceAtLeast(1)
+            val scale = if (bmp.width > cap) cap.toFloat() / bmp.width else 1f
+            val w = (bmp.width * scale).toInt().coerceAtLeast(1)
+            val h = (bmp.height * scale).toInt().coerceAtLeast(1)
+            drawable.setBounds(0, 0, w, h)
+            drawable
+        }
     }
 
     private class ChipMark(val block: Boolean)
