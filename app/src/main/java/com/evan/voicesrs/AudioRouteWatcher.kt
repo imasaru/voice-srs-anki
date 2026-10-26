@@ -1,5 +1,14 @@
 package com.evan.voicesrs
 
+import android.content.Context
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
+
 /**
  * Pure route decision built on top of [MicRoute.pickInput].
  *
@@ -51,5 +60,101 @@ object AudioRouteDecision {
             changed = chosen != null,
             useCommunicationDevice = chosen?.let { usesCommunicationDevice(it.type) } ?: false,
         )
+    }
+}
+
+/**
+ * Watches for audio-device changes and re-routes the flashcard drill's input.
+ *
+ * The routing decision itself is pure ([MicRoute] + [AudioRouteDecision]); this
+ * class only bridges Android's [AudioManager] into that logic and applies the
+ * result. It is intentionally not wired into [DrillService] yet.
+ */
+class AudioRouteWatcher(context: Context) {
+
+    private val audioManager =
+        context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+    private val handler = Handler(Looper.getMainLooper())
+
+    /** Set true when [evaluate] decides the route changed; cleared by [consumeChange]. */
+    @Volatile
+    var routeChanged = false
+        private set
+
+    private var previousInput: MicRoute.AudioDev? = null
+
+    private val callback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<AudioDeviceInfo>?) = evaluate()
+        override fun onAudioDevicesRemoved(removedDevices: Array<AudioDeviceInfo>?) = evaluate()
+    }
+
+    /** Register the callback and evaluate the current device set once. */
+    fun start() {
+        audioManager.registerAudioDeviceCallback(callback, handler)
+        evaluate()
+    }
+
+    /** Unregister the callback and clear any communication device. */
+    fun stop() {
+        audioManager.unregisterAudioDeviceCallback(callback)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            audioManager.clearCommunicationDevice()
+        }
+    }
+
+    /** Returns whether a route change happened, and clears the flag. */
+    fun consumeChange(): Boolean {
+        val did = routeChanged
+        routeChanged = false
+        return did
+    }
+
+    private fun evaluate() {
+        val outputInfos =
+            audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS) ?: emptyArray()
+        val inputInfos =
+            audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS) ?: emptyArray()
+
+        val outputDevs = outputInfos.map { MicRoute.AudioDev(it.id, MicRoute.typeOf(it.type), it.productName.toString()) }
+        val inputDevs = inputInfos.map { MicRoute.AudioDev(it.id, MicRoute.typeOf(it.type), it.productName.toString()) }
+
+        val result = AudioRouteDecision.decide(previousInput, outputDevs, inputDevs)
+        if (!result.changed) return
+
+        previousInput = result.chosen
+        routeChanged = true
+        result.chosen?.let { Log.i(LOG_TAG, "audio route changed to ${it.type}") }
+
+        if (result.useCommunicationDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            result.chosen?.let { matchingOutput(it, outputInfos) }?.let {
+                audioManager.setCommunicationDevice(it)
+            }
+        } else {
+            audioManager.clearCommunicationDevice()
+        }
+    }
+
+    /** The output device matching [chosen] by type, else any external communication output. */
+    private fun matchingOutput(
+        chosen: MicRoute.AudioDev,
+        outputs: Array<AudioDeviceInfo>,
+    ): AudioDeviceInfo? =
+        outputs.firstOrNull { MicRoute.typeOf(it.type) == chosen.type }
+            ?: outputs.firstOrNull { isCommunicationOutput(MicRoute.typeOf(it.type)) }
+
+    private fun isCommunicationOutput(type: MicRoute.AudioDevType): Boolean = when (type) {
+        MicRoute.AudioDevType.BLUETOOTH_SCO,
+        MicRoute.AudioDevType.BLUETOOTH_A2DP,
+        MicRoute.AudioDevType.BLE_HEADSET,
+        MicRoute.AudioDevType.BLE_SPEAKER,
+        MicRoute.AudioDevType.WIRED_HEADSET,
+        MicRoute.AudioDevType.WIRED_HEADPHONES,
+        MicRoute.AudioDevType.USB_HEADSET -> true
+        else -> false
+    }
+
+    private companion object {
+        const val LOG_TAG = "AudioRoute"
     }
 }
