@@ -275,7 +275,7 @@ object Prefs {
         secretEd?.apply()
     }
 
-    private fun putAny(editor: SharedPreferences.Editor?, key: String, value: Any) {
+    internal fun putAny(editor: SharedPreferences.Editor?, key: String, value: Any) {
         if (editor == null) return
         when (value) {
             is Boolean -> editor.putBoolean(key, value)

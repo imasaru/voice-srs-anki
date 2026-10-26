@@ -5,6 +5,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+import android.content.SharedPreferences
+
 class PrefsMapTest {
 
     private val plain = linkedMapOf<String, Any?>(
@@ -98,4 +100,48 @@ class PrefsMapTest {
         assertEquals("2026-11-07", state.date.toString())
         assertEquals(0.93, state.target!!, 1e-9)
     }
+
+    @Test
+    fun `importing tts_rate as a whole double stores a Float`() {
+        val editor = RecordingEditor()
+        // A whole-number Double (e.g. tts_rate=1.0 from an import) must be
+        // stored as Float so the later getFloat(KEY_TTS_RATE) reads it back.
+        Prefs.putAny(editor, "tts_rate", 1.0)
+        assertEquals("putFloat", editor.lastMethod)
+        assertEquals(1.0f, editor.floatVal!!, 1e-4f)
+    }
+}
+
+/** Records which SharedPreferences.Editor method was last called, for putAny tests. */
+private class RecordingEditor : SharedPreferences.Editor {
+    var lastMethod: String? = null
+    var floatVal: Float? = null
+
+    override fun putString(key: String, value: String?): SharedPreferences.Editor =
+        apply { lastMethod = "putString" }
+
+    override fun putInt(key: String, value: Int): SharedPreferences.Editor =
+        apply { lastMethod = "putInt" }
+
+    override fun putLong(key: String, value: Long): SharedPreferences.Editor =
+        apply { lastMethod = "putLong" }
+
+    override fun putBoolean(key: String, value: Boolean): SharedPreferences.Editor =
+        apply { lastMethod = "putBoolean" }
+
+    override fun putFloat(key: String, value: Float): SharedPreferences.Editor =
+        apply { lastMethod = "putFloat"; floatVal = value }
+
+    override fun putStringSet(key: String, values: Set<String>?): SharedPreferences.Editor =
+        apply { lastMethod = "putStringSet" }
+
+    override fun remove(key: String): SharedPreferences.Editor =
+        apply { lastMethod = "remove" }
+
+    override fun clear(): SharedPreferences.Editor =
+        apply { lastMethod = "clear" }
+
+    override fun commit(): Boolean = true
+
+    override fun apply() { }
 }
