@@ -2,6 +2,7 @@ package com.evan.voicesrs
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -62,5 +63,92 @@ class CardImagesTest {
     fun `cards without images match displayHtml`() {
         val html = "<p>What does the <b>bronze</b> layer hold?</p>"
         assertEquals(AnkiText.displayHtml(html), CardImages.displayHtml(html, emptyMap()))
+    }
+
+    // ---------- Forced-tap image-wait voice fallback ----------
+
+    @Test
+    fun `wait fallback speaks a prompt when the policy speaks`() {
+        val fb = CardImages.waitFallback(
+            CardImages.policy("<img src=\"a.png\">Sign?"),
+            autoAdvance = false
+        )
+        assertEquals("Say next or continue to move on.", fb.prompt)
+    }
+
+    @Test
+    fun `wait fallback has no prompt when the policy does not speak`() {
+        val fb = CardImages.waitFallback(
+            CardImages.Policy(speakPrompt = false, autoAdvance = false, voiceGrade = false),
+            autoAdvance = false
+        )
+        assertNull(fb.prompt)
+    }
+
+    @Test
+    fun `wait fallback resumes on next or continue, case-insensitive`() {
+        val fb = CardImages.waitFallback(
+            CardImages.Policy(speakPrompt = true, autoAdvance = false, voiceGrade = false),
+            autoAdvance = false
+        )
+        assertTrue(fb.resumes("next"))
+        assertTrue(fb.resumes("continue"))
+        assertTrue(fb.resumes("  NEXT  "))
+        assertTrue(fb.resumes("Continue"))
+        assertFalse(fb.resumes(""))
+        assertFalse(fb.resumes(null))
+        assertFalse(fb.resumes("good"))
+        assertFalse(fb.resumes("again"))
+    }
+
+    @Test
+    fun `wait fallback auto-advances only with a positive timeout`() {
+        val on = CardImages.waitFallback(
+            CardImages.Policy(speakPrompt = true, autoAdvance = true, voiceGrade = false),
+            autoAdvance = true, timeoutMs = 30_000L
+        )
+        assertEquals(30_000L, on.autoAdvanceTimeoutMs)
+
+        val off = CardImages.waitFallback(
+            CardImages.Policy(speakPrompt = true, autoAdvance = true, voiceGrade = false),
+            autoAdvance = false, timeoutMs = 30_000L
+        )
+        assertEquals(0L, off.autoAdvanceTimeoutMs)
+
+        val zero = CardImages.waitFallback(
+            CardImages.Policy(speakPrompt = true, autoAdvance = true, voiceGrade = false),
+            autoAdvance = true, timeoutMs = 0L
+        )
+        assertEquals(0L, zero.autoAdvanceTimeoutMs)
+    }
+
+    @Test
+    fun `wait fallback resumes on a heard word or after the timeout`() {
+        val fb = CardImages.waitFallback(
+            CardImages.Policy(speakPrompt = true, autoAdvance = true, voiceGrade = false),
+            autoAdvance = true, timeoutMs = 30_000L
+        )
+        // A heard word resumes immediately, regardless of elapsed time.
+        assertTrue(CardImages.shouldResume(fb, "next", 0L))
+        assertTrue(CardImages.shouldResume(fb, "continue", 1L))
+        // Before the timeout, silence keeps waiting.
+        assertFalse(CardImages.shouldResume(fb, null, 29_999L))
+        // At/after the timeout, silence auto-advances.
+        assertTrue(CardImages.shouldResume(fb, null, 30_000L))
+        assertTrue(CardImages.shouldResume(fb, null, 60_000L))
+    }
+
+    @Test
+    fun `wait fallback never auto-advances with a zero timeout`() {
+        val fb = CardImages.waitFallback(
+            CardImages.Policy(speakPrompt = true, autoAdvance = true, voiceGrade = false),
+            autoAdvance = true, timeoutMs = 0L
+        )
+        // Silence never auto-advances when the timeout is off...
+        assertFalse(CardImages.shouldResume(fb, null, 0L))
+        assertFalse(CardImages.shouldResume(fb, null, 10_000_000L))
+        // ...but a heard word still resumes.
+        assertTrue(CardImages.shouldResume(fb, "next", 0L))
+        assertFalse(CardImages.shouldResume(fb, "good", 10_000_000L))
     }
 }
