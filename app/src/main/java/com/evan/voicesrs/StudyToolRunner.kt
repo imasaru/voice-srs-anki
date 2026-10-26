@@ -5,24 +5,12 @@ import org.json.JSONObject
 import java.util.TimeZone
 
 /**
- * The slice of AnkiConnect that [StudyToolRunner] uses, exposed as an
- * interface so tests can supply a fake without a network. [cardReviewsTree]
- * returns reviews for [deck] and every subdeck (AnkiConnect's `cardReviews`
- * only covers the exact deck it is given).
- */
-interface StudyAnki {
-    fun cardReviewsTree(deck: String, startId: Long): List<StudyReview>
-    fun cardsInfo(ids: List<Long>): List<OfflineCard>
-    fun noteTags(ids: List<Long>): Map<Long, List<String>>
-}
-
-/**
  * Runs [StudyTools] against AnkiConnect. cardReviews for the window,
  * cardsInfo for questions, notesInfo for tags. Failures return an error
  * JSON object so a grade or chat turn is not aborted.
  */
 class StudyToolRunner(
-    private val anki: StudyAnki,
+    private val anki: AnkiConnect,
     private val defaultDeck: String,
     private val tz: TimeZone = TimeZone.getDefault(),
     private val timeLog: () -> List<AnswerTime> = { AnswerTimeLog.snapshot() }
@@ -67,26 +55,30 @@ class StudyToolRunner(
         )
 
     fun todayBundle(deck: String): String {
-        return try {
-            val day = StudyTools.today(tz)
-            val (rows, cards) = load(day, day, deck.ifBlank { defaultDeck })
-            StudyTools.formatBundle(
-                StudyTools.summary(rows),
-                StudyTools.categoryStats(rows, cards),
-                StudyTools.missed(rows, cards, StudyTools.DEFAULT_LIMIT)
-            )
-        } catch (e: Exception) {
-            JSONObject().put("error", e.javaClass.simpleName).toString()
-        }
+        val day = StudyTools.today(tz)
+        val (rows, cards) = load(day, day, deck.ifBlank { defaultDeck })
+        return StudyTools.formatBundle(
+            StudyTools.summary(rows),
+            StudyTools.categoryStats(rows, cards),
+            StudyTools.missed(rows, cards, StudyTools.DEFAULT_LIMIT)
+        )
     }
 
     fun load(from: String, to: String, deck: String): Pair<List<StudyReview>, Map<Long, StudyCard>> {
         val start = StudyTools.dayStartMs(from, tz)
         val end = StudyTools.dayEndMs(to, tz)
-        val raw = anki.cardReviewsTree(deck, start - 1L)
+        val raw = try {
+            anki.cardReviews(deck, start - 1L)
+        } catch (_: Exception) {
+            emptyList()
+        }
         val rows = raw.filter { it.atMs in start..end }
         val ids = rows.map { it.cardId }.distinct()
-        val info = if (ids.isEmpty()) emptyList() else anki.cardsInfo(ids)
+        val info = try {
+            if (ids.isEmpty()) emptyList() else anki.cardsInfo(ids)
+        } catch (_: Exception) {
+            emptyList()
+        }
         val noteIds = info.mapNotNull { it.noteId }.distinct()
         val tagsByNote = try {
             if (noteIds.isEmpty()) emptyMap() else anki.noteTags(noteIds)

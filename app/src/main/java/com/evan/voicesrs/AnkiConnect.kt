@@ -30,7 +30,7 @@ data class AnkiCard(
  * Every call is a POST of {"action","version":6,"key","params"}.
  * All methods block; call off the main thread.
  */
-class AnkiConnect(private val baseUrl: String, private val apiKey: String) : StudyAnki {
+class AnkiConnect(private val baseUrl: String, private val apiKey: String) {
 
     companion object {
         private const val TAG = "AnkiConnect"
@@ -185,34 +185,19 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) : Stu
     }
 
     /**
-     * Reviews for [deck] and every subdeck, after [startId] (exclusive).
-     * AnkiConnect's `cardReviews` only covers the exact deck it is given, so
-     * this lists all decks, keeps the ones matching [deck] (or a subdeck of
-     * it), unions their rows, and sorts by [StudyReview.atMs]. It throws on
-     * AnkiConnect failure so callers can surface the error.
-     */
-    override fun cardReviewsTree(deck: String, startId: Long): List<StudyReview> {
-        val names = deckNames()
-        val out = ArrayList<StudyReview>()
-        for (name in names) {
-            if (!StudyTools.deckMatches(name, deck)) continue
-            out.addAll(cardReviews(name, startId))
-        }
-        return out.sortedBy { it.atMs }
-    }
-
-    /**
      * Reviews after [startId] (exclusive). Each row is a 9-tuple from revlog.
-     * Returns an empty list only when the add-on returns no result; a
-     * connection failure throws so callers can surface the error.
+     * Empty when the add-on does not support the action.
      */
     fun cardReviews(deck: String, startId: Long): List<StudyReview> {
-        val r = post("cardReviews", mapOf("deck" to deck, "startID" to startId)) as? JSONArray
-            ?: return emptyList()
+        val r = try {
+            post("cardReviews", mapOf("deck" to deck, "startID" to startId)) as? JSONArray
+        } catch (_: Exception) {
+            null
+        } ?: return emptyList()
         return StudyTools.parseCardReviews(r)
     }
 
-    override fun noteTags(ids: List<Long>): Map<Long, List<String>> {
+    fun noteTags(ids: List<Long>): Map<Long, List<String>> {
         if (ids.isEmpty()) return emptyMap()
         val r = try {
             post("notesInfo", mapOf("notes" to ids)) as? JSONArray
@@ -237,7 +222,7 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) : Stu
         return out
     }
 
-    override fun cardsInfo(ids: List<Long>): List<OfflineCard> {
+    fun cardsInfo(ids: List<Long>): List<OfflineCard> {
         if (ids.isEmpty()) return emptyList()
         val r = post("cardsInfo", mapOf("cards" to ids)) as? JSONArray ?: return emptyList()
         val out = ArrayList<OfflineCard>(r.length())
