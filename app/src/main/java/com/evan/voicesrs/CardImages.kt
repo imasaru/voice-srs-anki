@@ -62,11 +62,22 @@ object CardImages {
      * the learner has been waiting ([elapsedMs]). A spoken "next"/"continue"
      * resumes immediately; otherwise auto-advance once
      * [WaitFallback.autoAdvanceTimeoutMs] has elapsed. A timeout of 0 never
-     * auto-advances. Pure so the same call path is unit-tested.
+     * auto-advances.
+     *
+     * [pausedMs] is the time the drill or chat was paused during [elapsedMs]; it
+     * is excluded from the auto-advance timer so a paused wait never counts toward
+     * the timeout. Defaults to 0 for the tap-only and silent paths. Pure so the
+     * same call path is unit-tested.
      */
-    fun shouldResume(fallback: WaitFallback, heard: String?, elapsedMs: Long): Boolean =
+    fun shouldResume(
+        fallback: WaitFallback,
+        heard: String?,
+        elapsedMs: Long,
+        pausedMs: Long = 0
+    ): Boolean =
         fallback.resumes(heard) ||
-            (fallback.autoAdvanceTimeoutMs > 0L && elapsedMs >= fallback.autoAdvanceTimeoutMs)
+            (fallback.autoAdvanceTimeoutMs > 0L &&
+                (elapsedMs - pausedMs).coerceAtLeast(0L) >= fallback.autoAdvanceTimeoutMs)
 
     fun waitForTap(html: String): Boolean =
         AnkiText.needsScreen(html) || AnkiText.isImageOcclusion(html)

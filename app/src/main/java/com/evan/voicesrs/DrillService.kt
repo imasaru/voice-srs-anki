@@ -88,8 +88,10 @@ class DrillService : Service(), VoiceIo {
         private const val NEXT_LISTEN_BACKOFF_MS = 1000L
         /** Forced-tap image wait auto-advances after this much silence. */
         private const val FORCED_TAP_ADVANCE_MS = 30_000L
-        /** Per-tick slice for the forced-tap voice wait (listen + latch). */
+        /** Per-tick slice for the forced-tap voice wait latch (tap/stop detection). */
         private const val FALLBACK_TICK_MS = 250L
+        /** One listen per forced-tap cycle: hear "next"/"continue" for this long. */
+        private const val FALLBACK_LISTEN_MS = 3_500L
 
         @Volatile var running = false
             private set
@@ -2490,12 +2492,17 @@ class DrillService : Service(), VoiceIo {
         fun hold(): Boolean = forceTap || sessionSilent
         val voiceWait = fallback != null && !sessionSilent
         var startedAt = 0L
+        // Wall-clock time the drill/chat was paused during this wait; excluded from
+        // the auto-advance timer so a paused wait never counts toward the timeout.
+        var pausedMs = 0L
         // We only want to catch "next" here, so suppress the listen start cue.
         if (voiceWait) quietListen = true
         try {
             while (!stopRequested.get() && !destroyed) {
                 if (chatPaused.get()) {
+                    val pausedAt = SystemClock.elapsedRealtime()
                     if (!awaitChatResume()) return ShowWait.STOPPED
+                    pausedMs += SystemClock.elapsedRealtime() - pausedAt
                     continue
                 }
                 if (showAnswerEarly.get()) {
@@ -2530,10 +2537,13 @@ class DrillService : Service(), VoiceIo {
                         if (!hold()) return ShowWait.RESUME_VOICE
                         // A spoken "next"/"continue" (non-silent) or the auto-advance
                         // timeout both break the hang; treat them like a shown answer.
+                        // One 3.5 s listen per cycle: the recognizer runs the full
+                        // window instead of restarting every tick, and is cancelled
+                        // immediately by a tap or Stop (finishListen / latch).
                         if (fallback != null) {
-                            val heard = if (voiceWait) listen(FALLBACK_TICK_MS) else null
+                            val heard = if (voiceWait) listen(FALLBACK_LISTEN_MS) else null
                             val elapsed = SystemClock.elapsedRealtime() - startedAt
-                            if (CardImages.shouldResume(fallback, heard, elapsed)) {
+                            if (CardImages.shouldResume(fallback, heard, elapsed, pausedMs)) {
                                 return ShowWait.RESUME_VOICE
                             }
                         }
