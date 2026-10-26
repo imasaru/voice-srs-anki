@@ -183,9 +183,12 @@ class SettingsActivity : AppCompatActivity() {
                     val state = Prefs.loadExam(this, deck)
                     val orig = state.origCfg
                     if (orig != null) {
-                        anki.setDeckConfigId(listOf(deck), orig)
-                        Prefs.saveExam(this, deck, state.copy(origCfg = null, cloneId = null))
-                        done = true
+                        val decision = ExamRestore.decide(anki.setDeckConfigId(listOf(deck), orig))
+                        if (decision.reportError) {
+                            Log.w("SettingsActivity", "exam restore did not complete for $deck; keeping saved config to retry")
+                        }
+                        Prefs.saveExam(this, deck, ExamRestore.newState(state, decision))
+                        done = !decision.reportError
                     }
                 } catch (e: Exception) {
                     Log.w("SettingsActivity", "exam restore failed: ${e.javaClass.simpleName}")

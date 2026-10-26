@@ -128,8 +128,10 @@ object ExamSync {
 
     /**
      * Reassign the deck's original preset and drop the saved config prefs when
-     * [ExamRestore.needsRestore] is true (exam date in the past). Best-effort:
-     * a failed reassignment is logged and swallowed so the run still returns.
+     * [ExamRestore.needsRestore] is true (exam date in the past). On a failed
+     * reassignment the saved prefs are kept (see [ExamRestore.decide]) so the next
+     * run retries, and the failure is surfaced via the existing Log path.
+     * Returns true when a restore was attempted.
      */
     private fun restoreIfNeeded(
         ctx: Context,
@@ -140,14 +142,17 @@ object ExamSync {
     ) {
         if (!ExamRestore.needsRestore(state, today)) return
         val orig = state.origCfg ?: return
-        try {
-            anki.setDeckConfigId(listOf(deck), orig)
+        val decision = try {
+            ExamRestore.decide(anki.setDeckConfigId(listOf(deck), orig))
         } catch (e: Exception) {
             Log.w(TAG, "restore setDeckConfigId failed: ${e.javaClass.simpleName}")
-            return
+            ExamRestore.decide(false)
+        }
+        if (decision.reportError) {
+            Log.w(TAG, "exam restore did not complete for $deck; keeping saved config to retry")
         }
         try {
-            Prefs.saveExam(ctx, deck, state.copy(origCfg = null, cloneId = null))
+            Prefs.saveExam(ctx, deck, ExamRestore.newState(state, decision))
         } catch (_: Exception) {
         }
     }
