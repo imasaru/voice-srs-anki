@@ -70,6 +70,7 @@ object GeneralChat {
             id = nextId++
             items = items + ChatRow.Ask(id, q, ExplState.Pending, name)
         }
+        val issuedAt = System.currentTimeMillis()
         dispatch()
         val app = context.applicationContext
         Thread({
@@ -104,7 +105,9 @@ object GeneralChat {
                         val shown = ThinkStrip.strip(partial).trim()
                         if (shown.isNotBlank()) {
                             lastPaint = now
-                            mark(id, ExplState.Streaming(shown))
+                            mark(id, ExplState.Streaming(
+                                if (injectReport) ReportHeader.prepend(issuedAt, shown) else shown
+                            ))
                         }
                     }
                 }
@@ -143,7 +146,10 @@ object GeneralChat {
                 if (shown.isBlank()) {
                     mark(id, ExplState.Error(ChatSend.visible(ChatSend.Fail.AI), retryable = true))
                 } else {
-                    mark(id, ExplState.Ready(shown, cached = false))
+                    mark(id, ExplState.Ready(
+                        if (injectReport) ReportHeader.prepend(issuedAt, shown) else shown,
+                        cached = false
+                    ))
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "general ask failed: ${e.javaClass.simpleName}")
