@@ -2,6 +2,7 @@ package com.evan.voicesrs
 
 import android.content.Context
 import android.util.Log
+import org.json.JSONObject
 import java.time.LocalDate
 
 /**
@@ -83,6 +84,8 @@ object ExamSync {
         coveragePct: Int
     ) {
         var cloneId = state.cloneId
+        var assignedId: Long? = null
+        var assigned = false
         if (plan.clone) {
             val from = plan.cloneFrom ?: return
             val name = plan.cloneName ?: ExamApply.cloneName(deck)
@@ -92,27 +95,53 @@ object ExamSync {
                 Prefs.saveExam(ctx, deck, state.copy(cloneId = newId))
             } catch (_: Exception) {
             }
-            anki.setDeckConfigId(listOf(deck), newId)
+            assigned = anki.setDeckConfigId(listOf(deck), newId)
+            if (assigned) assignedId = newId
         } else if (plan.assign) {
             val id = plan.assignId ?: cloneId ?: return
-            anki.setDeckConfigId(listOf(deck), id)
+            assigned = anki.setDeckConfigId(listOf(deck), id)
+            if (assigned) assignedId = id
         }
-        if (plan.save && plan.retention != null) {
-            val cfg = anki.getDeckConfig(deck)
-            val updated = DeckConfigRequest.withDesiredRetention(cfg, plan.retention)
-            anki.saveDeckConfig(updated)
+        if (plan.save && plan.retention != null && assigned && assignedId != null) {
+            val updated = retentionPresetToSave(
+                assignedId, true, anki.getDeckConfig(deck), plan.retention
+            )
+            if (updated != null) anki.saveDeckConfig(updated)
         }
         if (plan.sweep && plan.sweepRange != null) {
             val ids = anki.findCardIds(ExamApply.sweepQuery(deck, plan.daysLeft))
             if (ids.isNotEmpty()) anki.setDueDate(ids, plan.sweepRange)
         }
-        try {
-            Prefs.saveExam(
-                ctx,
-                deck,
-                state.copy(cloneId = cloneId, lastApplied = today, coverage = coveragePct)
-            )
-        } catch (_: Exception) {
+        if (assigned) {
+            try {
+                Prefs.saveExam(
+                    ctx,
+                    deck,
+                    state.copy(cloneId = cloneId, lastApplied = today, coverage = coveragePct)
+                )
+            } catch (_: Exception) {
+            }
         }
+    }
+
+    /**
+     * The retention preset to edit, or null when it must be skipped so the
+     * shared original preset can never be modified.
+     *
+     * The deck must be on the clone we just assigned ([assignedId]) and the
+     * assignment ([setOk]) must have succeeded. We only ever save a copy whose
+     * `id` equals the clone's, so a deck that is still on the shared preset is
+     * never written. A rejected `setDeckConfigId` returns null immediately.
+     */
+    internal fun retentionPresetToSave(
+        assignedId: Long?,
+        setOk: Boolean,
+        cfg: JSONObject,
+        retention: Double
+    ): JSONObject? {
+        if (!setOk) return null
+        if (assignedId == null) return null
+        if (cfg.optLong("id", 0L) != assignedId) return null
+        return DeckConfigRequest.withDesiredRetention(cfg, retention)
     }
 }
