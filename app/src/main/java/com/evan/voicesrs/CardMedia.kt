@@ -26,12 +26,18 @@ object CardMedia {
         }
     }
 
-    fun preload(html: String): Map<String, String> {
-        val c = synchronized(lock) { cache } ?: return emptyMap()
+    /**
+     * Fetch the bytes for every image referenced by [html] and return the resolved
+     * filename map. Runs off the main thread; this is the only place CardMedia does I/O.
+     * Prefetch before taking the grade gate so the network read never blocks on it.
+     *
+     * [fetcher] is an optional seam for tests; production uses the bound AnkiConnect.
+     */
+    fun preload(html: String, fetcher: (String) -> ByteArray? = boundFetcher()): Map<String, String> {
         val out = LinkedHashMap<String, String>()
         for (name in AnkiText.imageRefs(html)) {
             val bytes = try {
-                c.get(name)
+                fetcher(name)
             } catch (_: Exception) {
                 null
             } ?: continue
@@ -42,19 +48,43 @@ object CardMedia {
         return out
     }
 
+    /**
+     * Fetch image bytes for [html] and return the resolved filename map. Alias for
+     * [preload]; the name signals that this is the fetch step to run outside the gate.
+     */
+    fun prefetch(html: String): Map<String, String> = preload(html)
+
+    /**
+     * Render [html] using an already-fetched [resolved] map. Performs no fetch, so it is
+     * safe to call while holding the grade gate.
+     */
+    fun display(html: String, resolved: Map<String, String>): String =
+        CardImages.displayHtml(html, resolved)
+
+    /** Fetch then render. Callers holding a long lock should use [prefetch] + [display]. */
+    fun display(html: String): String = display(html, prefetch(html))
+
+    private fun boundFetcher(): (String) -> ByteArray? = { name ->
+        synchronized(lock) { cache }?.let { c ->
+            try {
+                c.get(name)
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
     fun bitmap(name: String): Bitmap? = synchronized(lock) { bitmaps[name] }
 
-    fun display(html: String): String = CardImages.displayHtml(html, preload(html))
-
-    private fun decode(bytes: ByteArray): Bitmap? {
+    private fun decode(bytes: ByteArray): Bitmap? = runCatching {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         val w = bounds.outWidth
         val h = bounds.outHeight
-        if (w <= 0 || h <= 0) return null
+        if (w <= 0 || h <= 0) return@runCatching null
         var sample = 1
         while (w / sample > MAX_EDGE || h / sample > MAX_EDGE) sample *= 2
         val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
-    }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+    }.getOrNull()
 }
