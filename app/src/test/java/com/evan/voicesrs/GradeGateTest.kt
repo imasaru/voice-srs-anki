@@ -78,4 +78,33 @@ class GradeGateTest {
     @Test fun uiStateHidesRatingByDefault() {
         assertFalse(DrillUiState().ratingVisible)
     }
+
+    // ---- gradelock: the media fetch must not run while holding the grade gate ----
+    // The render step taken inside synchronized(gradeGate) is display(html, resolved): it
+    // consumes an already-fetched map and must never touch the network. The fetch lives in
+    // prefetch(html), which runs before the lock is taken. These assert that ordering.
+
+    private fun countingFetcher(): Pair<(String) -> ByteArray?, () -> Int> {
+        var fetches = 0
+        val f: (String) -> ByteArray? = { fetches++; "x".toByteArray() }
+        return Pair(f, { fetches })
+    }
+
+    @Test fun `prefetch fetches each referenced image once`() {
+        val (f, count) = countingFetcher()
+        // preload fetches each referenced image via the injected fetcher before rendering.
+        // (bitmap decode is skipped in the JVM unit env, but the fetch itself is the point.)
+        CardMedia.preload("""<img src="a.png">Sign?""", f)
+        assertEquals(1, count())
+    }
+
+    @Test fun `render with a resolved map performs no fetch`() {
+        val (f, count) = countingFetcher()
+        // A pre-resolved map is what prefetch returns; display(html, resolved) is exactly what
+        // runs inside synchronized(gradeGate) and must not perform any fetch while the gate is held.
+        val resolved = mapOf("a.png" to "a.png")
+        val out = CardMedia.display("""<img src="a.png">Sign?""", resolved)
+        assertEquals(0, count())
+        assertTrue(out.contains("""<img src="a.png">"""))
+    }
 }

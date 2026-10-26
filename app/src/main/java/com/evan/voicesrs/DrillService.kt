@@ -899,82 +899,91 @@ class DrillService : Service(), VoiceIo {
         memoBack: String = "",
         memoAvailable: Boolean = false,
         memoHint: Boolean = false
-    ) = synchronized(gradeGate) {
-        synchronized(injectLock) {
-            pendingGrades.clear()
-            gradeGate.newCard()
-        }
-        tapGrade = false
-        tapTranscript = false
-        chosenLetter = null
-        val ordinal = cardIndex + 1
-        shownOrdinal = ordinal
-        screenReadyOrdinal = 0
-        val gate = synchronized(gateLock) { listenGate }
-        val silent = gate.silent
-        val pausedNow = chatPaused.get()
-        val waitForTap = CardImages.waitForTap(questionHtml)
-        val front = CardMedia.display(questionHtml)
-        runCatching {
-            DrillUi.update {
-                it.copy(
-                    status = if (silent || waitForTap) "Tap to show the answer" else "Reading the question",
-                    frontHtml = front,
-                    backHtml = "",
-                    showBack = false,
-                    ratingVisible = false,
-                    heard = "",
-                    ratingMicOpen = false,
-                    selectedEase = null,
-                    awaitingShowAnswer = true,
-                    silentSession = silent,
-                    silentGeneration = gate.epoch,
-                    questionOrdinal = ordinal,
-                    cardId = cardId,
-                    sessionStartedMs = sessionStartedMs,
-                    chosenLetter = null,
-                    suggestedEase = null,
-                    thinkSecondsLeft = null,
-                    chatPaused = pausedNow,
-                    questionLabel = QuestionLabel.of(questionHtml, ordinal).label,
-                    correctField = correct,
-                    noteId = noteId,
-                    memoFront = memoFront,
-                    memoBack = memoBack,
-                    memoAvailable = memoAvailable,
-                    memoHint = memoHint
-                )
+    ) {
+        // Prefetch media before taking the gate so the AnkiConnect fetch never blocks on it.
+        val resolved = CardMedia.prefetch(questionHtml)
+        synchronized(gradeGate) {
+            synchronized(injectLock) {
+                pendingGrades.clear()
+                gradeGate.newCard()
             }
+            tapGrade = false
+            tapTranscript = false
+            chosenLetter = null
+            val ordinal = cardIndex + 1
+            shownOrdinal = ordinal
+            screenReadyOrdinal = 0
+            val gate = synchronized(gateLock) { listenGate }
+            val silent = gate.silent
+            val pausedNow = chatPaused.get()
+            val waitForTap = CardImages.waitForTap(questionHtml)
+            val front = CardMedia.display(questionHtml, resolved)
+            runCatching {
+                DrillUi.update {
+                    it.copy(
+                        status = if (silent || waitForTap) "Tap to show the answer" else "Reading the question",
+                        frontHtml = front,
+                        backHtml = "",
+                        showBack = false,
+                        ratingVisible = false,
+                        heard = "",
+                        ratingMicOpen = false,
+                        selectedEase = null,
+                        awaitingShowAnswer = true,
+                        silentSession = silent,
+                        silentGeneration = gate.epoch,
+                        questionOrdinal = ordinal,
+                        cardId = cardId,
+                        sessionStartedMs = sessionStartedMs,
+                        chosenLetter = null,
+                        suggestedEase = null,
+                        thinkSecondsLeft = null,
+                        chatPaused = pausedNow,
+                        questionLabel = QuestionLabel.of(questionHtml, ordinal).label,
+                        correctField = correct,
+                        noteId = noteId,
+                        memoFront = memoFront,
+                        memoBack = memoBack,
+                        memoAvailable = memoAvailable,
+                        memoHint = memoHint
+                    )
+                }
+            }
+            LiveThread.open(
+                ChatTarget.Screen(cardId, ordinal, revealed = false),
+                noteId,
+                BubbleModel.fullQuestion(questionHtml).ifBlank { AnkiText.stripHtml(questionHtml) }
+            )
         }
-        LiveThread.open(
-            ChatTarget.Screen(cardId, ordinal, revealed = false),
-            noteId,
-            BubbleModel.fullQuestion(questionHtml).ifBlank { AnkiText.stripHtml(questionHtml) }
-        )
     }
 
-    private fun showAnswerUi(questionHtml: String, answerHtml: String) = synchronized(gradeGate) {
-        synchronized(injectLock) {
-            // Drop anything tapped while only the question was showing, then open grading.
-            pendingGrades.clear()
-            gradeGate.reveal()
-        }
-        runCatching {
-            DrillUi.update {
-                it.copy(
-                    status = "Answer",
-                    frontHtml = if (questionHtml.isBlank()) it.frontHtml else CardMedia.display(questionHtml),
-                    backHtml = CardMedia.display(answerHtml),
-                    showBack = true,
-                    ratingVisible = true,
-                    ratingMicOpen = false,
-                    awaitingShowAnswer = false,
-                    chosenLetter = chosenLetter,
-                    suggestedEase = null
-                )
+    private fun showAnswerUi(questionHtml: String, answerHtml: String) {
+        // Prefetch media before taking the gate so the AnkiConnect fetch never blocks on it.
+        val front = if (questionHtml.isBlank()) null else CardMedia.display(questionHtml)
+        val back = CardMedia.display(answerHtml)
+        synchronized(gradeGate) {
+            synchronized(injectLock) {
+                // Drop anything tapped while only the question was showing, then open grading.
+                pendingGrades.clear()
+                gradeGate.reveal()
             }
+            runCatching {
+                DrillUi.update {
+                    it.copy(
+                        status = "Answer",
+                        frontHtml = if (front == null) it.frontHtml else front,
+                        backHtml = back,
+                        showBack = true,
+                        ratingVisible = true,
+                        ratingMicOpen = false,
+                        awaitingShowAnswer = false,
+                        chosenLetter = chosenLetter,
+                        suggestedEase = null
+                    )
+                }
+            }
+            publishSuggestion()
         }
-        publishSuggestion()
     }
 
     // ---------- VoiceIo (blocking; called from the session thread) ----------
