@@ -153,9 +153,20 @@ class ExamApplyTest {
             ExamApply.coveredQuery(deck, 12)
         )
         assertEquals(
-            "deck:\"Licenses::Driving\" (is:new OR prop:due>=7)",
+            "deck:\"Licenses::Driving\" prop:due>=7",
             ExamApply.sweepQuery(deck, 7)
         )
+    }
+
+    @Test
+    fun `sweep query never sweeps new cards`() {
+        val q = ExamApply.sweepQuery(deck, 7)
+        assertFalse(
+            "sweep query must not include is:new",
+            q.contains("is:new")
+        )
+        assertTrue(q.startsWith("deck:\"$deck\""))
+        assertTrue(q.contains("prop:due>=7"))
     }
 
     @Test
