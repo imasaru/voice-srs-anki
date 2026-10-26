@@ -98,4 +98,40 @@ object MicRoute {
         if (input == current) return null
         return input
     }
+
+    /**
+     * android.media.AudioDeviceInfo TYPE_* int values, written as literal
+     * constants so this stays pure Kotlin (no android.* imports). See
+     * android.media.AudioDeviceInfo for the canonical values.
+     */
+    private object DeviceTypes {
+        const val TYPE_BUILTIN_MIC = 15
+        const val TYPE_BUILTIN_SPEAKER = 2
+        const val TYPE_BUILTIN_EARPIECE = 1
+        const val TYPE_WIRED_HEADSET = 3
+        const val TYPE_WIRED_HEADPHONES = 4
+        const val TYPE_BLUETOOTH_SCO = 7
+        const val TYPE_BLUETOOTH_A2DP = 8
+        const val TYPE_USB_HEADSET = 22
+        const val TYPE_BLE_HEADSET = 26
+        const val TYPE_BLE_SPEAKER = 27
+
+        /** Map a TYPE_* int to [AudioDevType]; unrecognised values fall to OTHER. */
+        fun typeOf(androidType: Int): AudioDevType = when (androidType) {
+            TYPE_BUILTIN_MIC -> AudioDevType.BUILTIN_MIC
+            TYPE_BUILTIN_SPEAKER -> AudioDevType.BUILTIN_SPEAKER
+            TYPE_BUILTIN_EARPIECE -> AudioDevType.BUILTIN_EARPIECE
+            TYPE_WIRED_HEADSET -> AudioDevType.WIRED_HEADSET
+            TYPE_WIRED_HEADPHONES -> AudioDevType.WIRED_HEADPHONES
+            TYPE_BLUETOOTH_SCO -> AudioDevType.BLUETOOTH_SCO
+            TYPE_BLUETOOTH_A2DP -> AudioDevType.BLUETOOTH_A2DP
+            TYPE_USB_HEADSET -> AudioDevType.USB_HEADSET
+            TYPE_BLE_HEADSET -> AudioDevType.BLE_HEADSET
+            TYPE_BLE_SPEAKER -> AudioDevType.BLE_SPEAKER
+            else -> AudioDevType.OTHER
+        }
+    }
+
+    /** Map an android.media.AudioDeviceInfo TYPE_* int to [AudioDevType]. */
+    fun typeOf(androidType: Int): AudioDevType = DeviceTypes.typeOf(androidType)
 }
