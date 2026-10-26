@@ -237,6 +237,65 @@ object Prefs {
         return ExamStore.read(plain.all, deck)
     }
 
+    fun exportText(ctx: Context, includeSecrets: Boolean): String {
+        val plain = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val secrets = openSecrets(ctx)
+        val snap = PrefsMap.snapshot(plain.all, secrets?.all ?: emptyMap<String, Any>())
+        return SettingsJson.export(snap, includeSecrets, BuildConfig.VERSION_NAME)
+    }
+
+    fun importText(ctx: Context, text: String): SettingsJson.ImportResult {
+        val plain = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val secrets = openSecrets(ctx)
+        val current = PrefsMap.snapshot(plain.all, secrets?.all ?: emptyMap<String, Any>())
+        val known = PrefsMap.knownForParse(current, text)
+        val parsed = SettingsJson.parse(text, known)
+        if (parsed !is SettingsJson.ImportResult.Ok) return parsed
+        writeDelta(plain, secrets, parsed.prefs)
+        try {
+            ExplainBatchSchedule.sync(ctx, load(ctx))
+        } catch (_: Exception) {
+        }
+        return parsed
+    }
+
+    private fun writeDelta(
+        plain: SharedPreferences,
+        secrets: SharedPreferences?,
+        delta: Map<String, Any?>
+    ) {
+        val plainEd = plain.edit()
+        val secretEd = secrets?.edit()
+        for ((key, value) in delta) {
+            if (value == null) continue
+            if (key in SettingsJson.SECRET_KEYS) putAny(secretEd, key, value)
+            else putAny(plainEd, key, value)
+        }
+        plainEd.apply()
+        secretEd?.apply()
+    }
+
+    private fun putAny(editor: SharedPreferences.Editor?, key: String, value: Any) {
+        if (editor == null) return
+        when (value) {
+            is Boolean -> editor.putBoolean(key, value)
+            is Int -> editor.putInt(key, value)
+            is Long -> editor.putLong(key, value)
+            is Float -> editor.putFloat(key, value)
+            is Double -> {
+                val asInt = value.toInt()
+                if (value == asInt.toDouble()) editor.putInt(key, asInt)
+                else editor.putFloat(key, value.toFloat())
+            }
+            is String -> editor.putString(key, value)
+            is Set<*> -> {
+                val strings = LinkedHashSet<String>()
+                for (item in value) strings += item.toString()
+                editor.putStringSet(key, strings)
+            }
+        }
+    }
+
     fun saveExam(ctx: Context, deck: String, state: ExamStore.State) {
         val editor = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
         fun put(key: String, value: String?) {

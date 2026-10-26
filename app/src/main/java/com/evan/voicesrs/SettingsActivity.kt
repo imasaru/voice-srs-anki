@@ -3,6 +3,7 @@ package com.evan.voicesrs
 import android.app.DatePickerDialog
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -16,8 +17,10 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.Filter
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.doAfterTextChanged
+import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.chip.Chip
 import com.google.android.material.materialswitch.MaterialSwitch
@@ -55,6 +58,17 @@ class SettingsActivity : AppCompatActivity() {
     private var checkGen = 0
     private lateinit var testResultView: TextView
     private val showSavedRunnable = Runnable { showSavedNotice() }
+    private var exportIncludeSecrets = false
+    private val exportDoc = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) writeExportedSettings(uri)
+    }
+    private val importDoc = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) readImportedSettings(uri)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -908,7 +922,22 @@ class SettingsActivity : AppCompatActivity() {
                 }
             }.start()
         }
+        val includeKeys = findViewById<MaterialCheckBox>(R.id.exportIncludeKeys)
+        includeKeys.isChecked = false
+        findViewById<Button>(R.id.exportSettingsButton).setOnClickListener {
+            if (ready) flushTexts()
+            exportIncludeSecrets = includeKeys.isChecked
+            exportDoc.launch("voice-srs-settings.json")
+        }
+        findViewById<Button>(R.id.importSettingsButton).setOnClickListener {
+            if (ready) flushTexts()
+            importDoc.launch(arrayOf("application/json", "text/plain", "*/*"))
+        }
         ready = true
+        if (intent.getBooleanExtra(EXTRA_IMPORTED, false)) {
+            intent.removeExtra(EXTRA_IMPORTED)
+            settingsSnack(getString(R.string.settings_imported))
+        }
     }
 
     override fun onPause() {
@@ -953,6 +982,66 @@ class SettingsActivity : AppCompatActivity() {
         val due = feedback.deadline() ?: return
         uiHandler.removeCallbacks(showSavedRunnable)
         uiHandler.postDelayed(showSavedRunnable, (due - now).coerceAtLeast(0L))
+    }
+
+    private fun writeExportedSettings(uri: Uri) {
+        val json = try {
+            Prefs.exportText(this, exportIncludeSecrets)
+        } catch (_: Exception) {
+            settingsSnack(getString(R.string.settings_export_failed, getString(R.string.settings_backup_io)))
+            return
+        }
+        val ok = try {
+            contentResolver.openOutputStream(uri)?.use { out ->
+                out.write(json.toByteArray(Charsets.UTF_8))
+            } != null
+        } catch (_: Exception) {
+            false
+        }
+        if (ok) {
+            settingsSnack(getString(R.string.settings_exported))
+        } else {
+            settingsSnack(getString(R.string.settings_export_failed, getString(R.string.settings_backup_io)))
+        }
+    }
+
+    private fun readImportedSettings(uri: Uri) {
+        val text = try {
+            contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+        } catch (_: Exception) {
+            null
+        }
+        if (text == null) {
+            settingsSnack(getString(R.string.settings_import_failed, getString(R.string.settings_backup_io)))
+            return
+        }
+        val result = try {
+            Prefs.importText(this, text)
+        } catch (_: Exception) {
+            settingsSnack(getString(R.string.settings_import_failed, getString(R.string.settings_backup_io)))
+            return
+        }
+        when (result) {
+            is SettingsJson.ImportResult.Ok -> {
+                intent.putExtra(EXTRA_IMPORTED, true)
+                recreate()
+            }
+            is SettingsJson.ImportResult.Error -> {
+                settingsSnack(getString(R.string.settings_import_failed, importReason(result.reason)))
+            }
+        }
+    }
+
+    private fun importReason(reason: String): String = when (reason) {
+        "schema version too new" -> "bad version"
+        "invalid JSON", "unexpected app", "missing prefs object" -> "parse error"
+        else -> reason
+    }
+
+    private fun settingsSnack(message: String) {
+        if (destroyed || isFinishing) return
+        val root = findViewById<View>(R.id.settingsScroll) ?: return
+        Snackbar.make(root, message, Snackbar.LENGTH_LONG).show()
     }
 
     private fun showSavedNotice() {
@@ -1168,6 +1257,10 @@ class SettingsActivity : AppCompatActivity() {
         try { tts?.shutdown() } catch (_: Exception) {}
         tts = null
         super.onDestroy()
+    }
+
+    companion object {
+        private const val EXTRA_IMPORTED = "imported"
     }
 
     private data class VoiceChoice(val label: String, val name: String)

@@ -218,6 +218,17 @@
     <string name="settings_exam_target">Target retention</string>
     <string name="settings_exam_target_help" formatted="false">Optional. 0.70–0.99, or 70–99. Blank ramps from 90% to 95% over the last 21 days.</string>
     <string name="settings_exam_target_error">Enter a retention from 0.70 to 0.99.</string>
+    <string name="section_backup">Backup</string>
+    <string name="settings_export">Export</string>
+    <string name="settings_import">Import</string>
+    <string name="settings_export_keys">Include API keys</string>
+    <string name="settings_export_keys_help">Off by default. The file is not encrypted.</string>
+    <string name="settings_exported">Settings exported</string>
+    <string name="settings_imported">Settings imported</string>
+    <string name="settings_export_failed">Export failed: %1$s</string>
+    <string name="settings_import_failed">Import failed: %1$s</string>
+    <string name="settings_backup_io">couldn\'t read or write the file</string>
+    <string name="settings_backup_parse">parse error</string>
     <string name="timer_title">Timer</string>
     <string name="timer_fewer">Fewer minutes</string>
     <string name="timer_more">More minutes</string>
