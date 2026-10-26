@@ -69,6 +69,24 @@ class StudyToolRunnerTest {
     }
 
     @Test
+    fun todayBundleErrorKeepsLocalAnswerTime() {
+        val day = "2026-10-26"
+        val at = StudyTools.dayStartMs(day, tz) + 60_000L
+        val log = listOf(AnswerTime(1L, "Parent", 3, 3000L, at))
+        val fake = FakeAnki(
+            mapOf("Parent" to emptyList<StudyReview>()),
+            crashDeck = "Parent"
+        )
+        val runner = StudyToolRunner(fake, "Parent", tz) { log }
+        val bundle = JSONObject(runner.todayBundle("Parent"))
+        assertTrue("expected an error key, got $bundle", bundle.has("error"))
+        assertEquals(
+            3000L,
+            bundle.getJSONObject("answer_time").getLong("total_answer_time_ms")
+        )
+    }
+
+    @Test
     fun cardReviewsTreeQueriesOnlyMatchingAndSortsByAtMs() {
         val fake = FakeAnki(
             mapOf(
