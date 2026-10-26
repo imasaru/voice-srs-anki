@@ -20,7 +20,10 @@ object ExamSync {
         }
         val exam = state.date ?: return ""
         val days = ExamPlan.daysLeft(today, exam)
-        if (days < 0) return ""
+        if (days < 0) {
+            restoreIfNeeded(ctx, anki, deck, state, today)
+            return ""
+        }
         val skip = state.lastApplied == today
         var configId: Long? = null
         val coveragePct = if (skip) {
@@ -86,13 +89,15 @@ object ExamSync {
         var cloneId = state.cloneId
         var assignedId: Long? = null
         var assigned = false
+        var origCfg = state.origCfg
         if (plan.clone) {
             val from = plan.cloneFrom ?: return
             val name = plan.cloneName ?: ExamApply.cloneName(deck)
             val newId = anki.cloneDeckConfigId(name, from) ?: return
             cloneId = newId
+            origCfg = from
             try {
-                Prefs.saveExam(ctx, deck, state.copy(cloneId = newId))
+                Prefs.saveExam(ctx, deck, state.copy(cloneId = newId, origCfg = from))
             } catch (_: Exception) {
             }
             assigned = anki.setDeckConfigId(listOf(deck), newId)
@@ -117,7 +122,12 @@ object ExamSync {
                 Prefs.saveExam(
                     ctx,
                     deck,
-                    state.copy(cloneId = cloneId, lastApplied = today, coverage = coveragePct)
+                    state.copy(
+                        cloneId = cloneId,
+                        origCfg = origCfg,
+                        lastApplied = today,
+                        coverage = coveragePct
+                    )
                 )
             } catch (_: Exception) {
             }
@@ -143,5 +153,36 @@ object ExamSync {
         if (assignedId == null) return null
         if (cfg.optLong("id", 0L) != assignedId) return null
         return DeckConfigRequest.withDesiredRetention(cfg, retention)
+    }
+
+    /**
+     * Reassign the deck's original preset and drop the saved config prefs when
+     * [ExamRestore.needsRestore] is true (exam date in the past). On a failed
+     * reassignment the saved prefs are kept (see [ExamRestore.decide]) so the next
+     * run retries, and the failure is surfaced via the existing Log path.
+     * Returns true when a restore was attempted.
+     */
+    private fun restoreIfNeeded(
+        ctx: Context,
+        anki: AnkiConnect,
+        deck: String,
+        state: ExamStore.State,
+        today: LocalDate
+    ) {
+        if (!ExamRestore.needsRestore(state, today)) return
+        val orig = state.origCfg ?: return
+        val decision = try {
+            ExamRestore.decide(anki.setDeckConfigId(listOf(deck), orig))
+        } catch (e: Exception) {
+            Log.w(TAG, "restore setDeckConfigId failed: ${e.javaClass.simpleName}")
+            ExamRestore.decide(false)
+        }
+        if (decision.reportError) {
+            Log.w(TAG, "exam restore did not complete for $deck; keeping saved config to retry")
+        }
+        try {
+            Prefs.saveExam(ctx, deck, ExamRestore.newState(state, decision))
+        } catch (_: Exception) {
+        }
     }
 }
