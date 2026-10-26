@@ -1,5 +1,7 @@
 package com.evan.voicesrs
 
+import java.util.Locale
+
 /**
  * Image-card display HTML and the speak / no-auto-advance policy.
  * Fetching bytes is [CardMedia]; this object stays pure.
@@ -16,6 +18,44 @@ object CardImages {
         val autoAdvance: Boolean,
         val voiceGrade: Boolean
     )
+
+    /**
+     * Forced-tap image-wait voice fallback. Built from a [Policy] so the same
+     * decision is unit-testable:
+     *
+     *  - [speakPrompt] speaks a prompt telling the learner to say "next".
+     *  - [autoAdvance] resumes automatically after [timeoutMs] of silence.
+     *    A spoken "next" or "continue" always resumes.
+     *
+     * [autoAdvance] / [timeoutMs] are the forced-tap resume settings, distinct
+     * from [Policy.autoAdvance] (which means the card needs no forced tap).
+     */
+    data class WaitFallback(
+        val speakPrompt: Boolean,
+        val autoAdvance: Boolean,
+        val timeoutMs: Long
+    ) {
+        /** Prompt to speak, or null when [speakPrompt] is false. */
+        val prompt: String?
+            get() = if (speakPrompt) "Say next or continue to move on." else null
+
+        /** Auto-advance timeout in ms; 0 when auto-advance is off. */
+        val autoAdvanceTimeoutMs: Long
+            get() = if (autoAdvance && timeoutMs > 0L) timeoutMs else 0L
+
+        /** True when [heard] should resume the forced-tap wait. */
+        fun resumes(heard: String?): Boolean {
+            val text = heard?.trim()?.lowercase(Locale.US).orEmpty()
+            return text == "next" || text == "continue"
+        }
+    }
+
+    /**
+     * The forced-tap image-wait fallback for [policy]. [autoAdvance] and
+     * [timeoutMs] are the resume settings; a timeout of 0 disables auto-advance.
+     */
+    fun waitFallback(policy: Policy, autoAdvance: Boolean, timeoutMs: Long = 0L): WaitFallback =
+        WaitFallback(policy.speakPrompt, autoAdvance, timeoutMs)
 
     fun waitForTap(html: String): Boolean =
         AnkiText.needsScreen(html) || AnkiText.isImageOcclusion(html)
