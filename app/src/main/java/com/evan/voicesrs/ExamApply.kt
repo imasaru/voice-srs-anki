@@ -47,7 +47,7 @@ object ExamApply {
         "deck:\"$deck\" -is:new prop:due<$daysLeft"
 
     fun sweepQuery(deck: String, daysLeft: Int): String =
-        "deck:\"$deck\" (is:new OR prop:due>=$daysLeft)"
+        "deck:\"$deck\" prop:due>=$daysLeft"
 
     fun retentionOf(daysLeft: Int, override: Double?): Double {
         val raw = override ?: ExamPlan.targetRetention(daysLeft)
