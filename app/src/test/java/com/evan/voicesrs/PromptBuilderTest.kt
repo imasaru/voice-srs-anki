@@ -90,7 +90,7 @@ class PromptBuilderTest {
 
     @Test
     fun `general chat names study tools and drill prompts do not`() {
-        val general = PromptBuilder.generalSystem()
+        val general = PromptBuilder.generalSystem(true)
         assertTrue(general.contains("get_study_summary"))
         assertTrue(general.contains("get_category_stats"))
         assertTrue(general.contains("get_missed_cards"))
@@ -100,5 +100,32 @@ class PromptBuilderTest {
         val withData = PromptBuilder.generalMessages("Deck", "How did I do?", "{\"cards\":1}")
         assertTrue(withData.single().content.contains("Study data:"))
         assertTrue(withData.single().content.contains("{\"cards\":1}"))
+    }
+
+    @Test
+    fun `generalSystem gates the tool call on toolsAvailable`() {
+        val withTools = PromptBuilder.generalSystem(true)
+        val withoutTools = PromptBuilder.generalSystem(false)
+        assertTrue(withTools.contains("get_study_summary"))
+        assertTrue(withTools.contains("get_category_stats"))
+        assertTrue(withTools.contains("get_missed_cards"))
+        assertFalse(withoutTools.contains("get_study_summary"))
+        assertFalse(withoutTools.contains("get_category_stats"))
+        assertFalse(withoutTools.contains("get_missed_cards"))
+        assertTrue(withoutTools.contains("Study data is provided below; use only it."))
+        assertTrue(withoutTools.contains("Do not call tools."))
+        assertTrue(withoutTools.contains("If it shows zero reviews, say so."))
+        // The injected-data prompt keeps the base tutor framing.
+        assertTrue(withoutTools.contains("There is no specific card."))
+    }
+
+    @Test
+    fun `stripLeftover removes a leftover tool block and keeps the rest`() {
+        val wrapped =
+            "\u003ctool_call\u003e\u003cfunction=get_study_summary\u003e\u003cparameter=deck\u003eLeaf\u003e\u003c/function\u003e\u003c/tool_call\u003e\n\nThe answer is here."
+        val cleaned = TextToolCalls.stripLeftover(wrapped)
+        assertFalse(cleaned.contains("tool_call"))
+        assertFalse(cleaned.contains("get_study_summary"))
+        assertTrue(cleaned.contains("The answer is here."))
     }
 }

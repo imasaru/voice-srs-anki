@@ -328,11 +328,15 @@ class AiClient {
     ): String {
         val budget = AiTimeouts.budget(maxTokens)
         return try {
-            completeOnce(baseUrl, apiKey, model, messages, budget, stream = true, cancelled, onThinking, onDelta)
+            TextToolCalls.stripLeftover(
+                completeOnce(baseUrl, apiKey, model, messages, budget, stream = true, cancelled, onThinking, onDelta)
+            )
         } catch (e: Exception) {
             if (e !is StreamRejected && e !is EmptyStream) throw e
             if (cancelled()) throw AiCancelled()
-            completeOnce(baseUrl, apiKey, model, messages, budget, stream = false, cancelled, onThinking, onDelta)
+            TextToolCalls.stripLeftover(
+                completeOnce(baseUrl, apiKey, model, messages, budget, stream = false, cancelled, onThinking, onDelta)
+            )
         }
     }
 
