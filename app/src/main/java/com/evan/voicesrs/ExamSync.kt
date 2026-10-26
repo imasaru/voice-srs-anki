@@ -11,15 +11,24 @@ import java.time.LocalDate
 object ExamSync {
     private const val TAG = "ExamSync"
 
-    fun run(ctx: Context, anki: AnkiConnect, deck: String, today: LocalDate = LocalDate.now()): String {
+    /**
+     * Outcome of an exam apply. [error] is set only when the apply could not
+     * complete, so the caller can surface a user-visible failure.
+     */
+    data class Result(
+        val spoken: String,
+        val error: String? = null
+    )
+
+    fun run(ctx: Context, anki: AnkiConnect, deck: String, today: LocalDate = LocalDate.now()): Result {
         val state = try {
             Prefs.loadExam(ctx, deck)
         } catch (_: Exception) {
-            return ""
+            return Result(spoken = "")
         }
-        val exam = state.date ?: return ""
+        val exam = state.date ?: return Result(spoken = "")
         val days = ExamPlan.daysLeft(today, exam)
-        if (days < 0) return ""
+        if (days < 0) return Result(spoken = "")
         val skip = state.lastApplied == today
         var configId: Long? = null
         val coveragePct = if (skip) {
@@ -55,8 +64,9 @@ object ExamSync {
         if (!plan.skipWrites) {
             try {
                 execute(ctx, anki, deck, plan, state, today, coveragePct)
+                return Result(spoken = plan.spoken)
             } catch (e: Exception) {
-                Log.w(TAG, "apply failed: ${e.javaClass.simpleName}")
+                return Result(spoken = plan.spoken, error = ExamError.format(e))
             }
         } else if (!skip && coveragePct != state.coverage) {
             try {
@@ -64,7 +74,7 @@ object ExamSync {
             } catch (_: Exception) {
             }
         }
-        return plan.spoken
+        return Result(spoken = plan.spoken)
     }
 
     fun coverage(anki: AnkiConnect, deck: String, daysLeft: Int): ExamPlan.Coverage {
