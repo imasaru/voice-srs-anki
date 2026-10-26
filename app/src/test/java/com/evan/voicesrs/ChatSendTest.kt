@@ -23,7 +23,7 @@ class ChatSendTest {
 
     @Test
     fun `a general prompt names the deck and says there is no card`() {
-        val system = PromptBuilder.generalSystem()
+        val system = PromptBuilder.generalSystem(true)
         assertFalse(system == PromptBuilder.SYSTEM)
         assertEquals(2, PromptBuilder.PROMPT_VERSION)
         assertTrue(system.contains("no specific card"))

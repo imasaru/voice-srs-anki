@@ -22,6 +22,7 @@ object AiRequest {
             .put("messages", messages)
             .put("stop", stop)
         if (tools != null && tools.length() > 0) body.put("tools", tools)
+        if (stream) body.put("stream_options", JSONObject().put("include_usage", true))
         return body
     }
 

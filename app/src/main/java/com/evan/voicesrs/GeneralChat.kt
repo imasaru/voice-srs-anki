@@ -113,7 +113,7 @@ object GeneralChat {
                         baseUrl = cfg.aiBaseUrl,
                         apiKey = cfg.aiApiKey,
                         model = cfg.aiModel,
-                        system = PromptBuilder.generalSystem(),
+                        system = PromptBuilder.generalSystem(!injectReport),
                         messages = PromptBuilder.generalMessages(name, q, contextBlob),
                         cancelled = { false },
                         tools = tools,
@@ -127,7 +127,7 @@ object GeneralChat {
                         baseUrl = cfg.aiBaseUrl,
                         apiKey = cfg.aiApiKey,
                         model = cfg.aiModel,
-                        system = PromptBuilder.generalSystem(),
+                        system = PromptBuilder.generalSystem(false),
                         messages = PromptBuilder.generalMessages(name, q),
                         cancelled = { false },
                         onDelta = paint

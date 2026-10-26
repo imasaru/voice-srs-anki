@@ -28,14 +28,23 @@ object PromptBuilder {
     }
 
     /**
-     * A question with no card on screen. [SYSTEM] and [PROMPT_VERSION] stay as they are.
+     * System prompt for a general question with no card on screen. When
+     * [toolsAvailable] the model may ask for study data; otherwise the data is
+     * injected and the model must not call tools. [SYSTEM] and [PROMPT_VERSION]
+     * stay as they are.
      */
-    fun generalSystem(): String =
-        "You are a concise tutor for the Databricks Certified Data Engineer Associate exam. " +
-            "The learner asked a general question about the selected deck. There is no specific card. " +
-            "Stay under 120 words. No preamble. " +
-            "For questions about this learner's study history, accuracy, missed cards, or today's progress, " +
-            "use get_study_summary, get_category_stats, and get_missed_cards. Do not guess those numbers."
+    fun generalSystem(toolsAvailable: Boolean): String =
+        if (toolsAvailable)
+            "You are a concise tutor for the Databricks Certified Data Engineer Associate exam. " +
+                "The learner asked a general question about the selected deck. There is no specific card. " +
+                "Stay under 120 words. No preamble. " +
+                "For questions about this learner's study history, accuracy, missed cards, or today's progress, " +
+                "use get_study_summary, get_category_stats, and get_missed_cards. Do not guess those numbers."
+        else
+            "You are a concise tutor for the Databricks Certified Data Engineer Associate exam. " +
+                "The learner asked a general question about the selected deck. There is no specific card. " +
+                "Stay under 120 words. No preamble. " +
+                "Study data is provided below; use only it. Do not call tools. If it shows zero reviews, say so."
 
     fun generalMessages(deck: String, question: String, toolContext: String = ""): List<ChatMsg> {
         val extra = toolContext.trim()

@@ -34,4 +34,24 @@ class SelfTalkTest {
         assertEquals(SelfTalk.STOP, values)
         assertFalse(body.toString().contains("Learner said: hi"))
     }
+
+    @Test
+    fun `stream body carries stream_options when streaming`() {
+        val streaming = AiRequest.completionBody(
+            model = "m",
+            messages = JSONArray(),
+            maxTokens = 16,
+            stream = true
+        )
+        val usage = streaming.getJSONObject("stream_options")
+        assertTrue(usage.getBoolean("include_usage"))
+
+        val nonStreaming = AiRequest.completionBody(
+            model = "m",
+            messages = JSONArray(),
+            maxTokens = 16,
+            stream = false
+        )
+        assertFalse(nonStreaming.has("stream_options"))
+    }
 }
