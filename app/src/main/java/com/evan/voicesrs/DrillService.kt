@@ -784,6 +784,12 @@ class DrillService : Service(), VoiceIo {
                 return
             }
             DrillUi.update { it.copy(showError = false, errorMessage = "") }
+            val examSpoken = try {
+                ExamSync.run(this, anki, cfg.deck)
+            } catch (_: Exception) {
+                ""
+            }
+            if (examSpoken.isNotBlank()) speak(examSpoken)
             unsuspendSkipped(anki, store)
             val pendingLeft = GradeSync.sync(filesDir, anki, attempts = 2)
             DrillUi.update { it.copy(pendingSync = pendingLeft) }

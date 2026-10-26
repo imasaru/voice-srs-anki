@@ -210,6 +210,14 @@
     <string name="settings_ai_clear">Clear AI cache</string>
     <string name="settings_ai_cleared">AI cache cleared.</string>
     <string name="settings_ai_clear_failed">Could not clear the AI cache.</string>
+    <string name="section_exam">Exam date</string>
+    <string name="settings_exam_help">Per deck. Voice SRS clones this deck\'s preset, raises retention as the exam nears, and pulls unreviewed cards into the last week.</string>
+    <string name="settings_exam_date">Set exam date</string>
+    <string name="settings_exam_date_set">Exam: %1$s</string>
+    <string name="settings_exam_clear">Clear</string>
+    <string name="settings_exam_target">Target retention</string>
+    <string name="settings_exam_target_help" formatted="false">Optional. 0.70–0.99, or 70–99. Blank ramps from 90% to 95% over the last 21 days.</string>
+    <string name="settings_exam_target_error">Enter a retention from 0.70 to 0.99.</string>
     <string name="timer_title">Timer</string>
     <string name="timer_fewer">Fewer minutes</string>
     <string name="timer_more">More minutes</string>

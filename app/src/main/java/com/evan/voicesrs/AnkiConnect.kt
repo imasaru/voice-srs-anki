@@ -166,19 +166,22 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) {
         }
     }
 
-    /** Due and new card ids, capped at [limit]. */
-    fun dueCardIds(deckName: String, limit: Int): List<Long> {
-        val r = post(
-            "findCards",
-            mapOf("query" to "deck:\"$deckName\" (is:due OR is:new)")
-        ) as? JSONArray ?: return emptyList()
-        val n = minOf(r.length(), limit.coerceAtLeast(0))
-        val ids = ArrayList<Long>(n)
-        for (i in 0 until n) {
+    /** Card ids matching an Anki search, uncapped. */
+    fun findCardIds(query: String): List<Long> {
+        val r = post("findCards", mapOf("query" to query)) as? JSONArray ?: return emptyList()
+        val ids = ArrayList<Long>(r.length())
+        for (i in 0 until r.length()) {
             val id = r.optLong(i, 0L)
             if (id != 0L) ids += id
         }
         return ids
+    }
+
+    /** Due and new card ids, capped at [limit]. */
+    fun dueCardIds(deckName: String, limit: Int): List<Long> {
+        val ids = findCardIds("deck:\"$deckName\" (is:due OR is:new)")
+        if (limit <= 0) return emptyList()
+        return ids.take(limit)
     }
 
     /**

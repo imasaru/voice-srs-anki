@@ -1,5 +1,6 @@
 package com.evan.voicesrs
 
+import android.app.DatePickerDialog
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Bundle
@@ -26,6 +27,9 @@ import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import android.widget.TextView
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -112,11 +116,90 @@ class SettingsActivity : AppCompatActivity() {
         keyStatus.text = getString(
             if (held.apiKey.isNotBlank()) R.string.settings_key_saved else R.string.settings_key_missing
         )
+        val examDateButton: Button = findViewById(R.id.examDateButton)
+        val examClearButton: Button = findViewById(R.id.examClearButton)
+        val examTargetLayout: TextInputLayout = findViewById(R.id.examTargetLayout)
+        val examTargetInput: TextInputEditText = findViewById(R.id.examTargetInput)
+        val examDateFmt = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US)
+        fun examDeckName(): String =
+            deckView.text?.toString()?.trim().orEmpty().ifBlank { held.deck }
+        fun showExam() {
+            val state = try {
+                Prefs.loadExam(this, examDeckName())
+            } catch (_: Exception) {
+                ExamStore.State()
+            }
+            if (state.date == null) {
+                examDateButton.text = getString(R.string.settings_exam_date)
+                examClearButton.isEnabled = false
+            } else {
+                examDateButton.text = getString(R.string.settings_exam_date_set, state.date.format(examDateFmt))
+                examClearButton.isEnabled = true
+            }
+            val shown = ExamStore.formatTarget(state.target).orEmpty()
+            if (examTargetInput.text?.toString() != shown) examTargetInput.setText(shown)
+        }
+        fun persistExam(transform: (ExamStore.State) -> ExamStore.State) {
+            if (destroyed) return
+            val deck = examDeckName()
+            val before = try {
+                Prefs.loadExam(this, deck)
+            } catch (_: Exception) {
+                return
+            }
+            val next = transform(before)
+            if (next == before) return
+            try {
+                Prefs.saveExam(this, deck, next)
+            } catch (_: Exception) {
+                return
+            }
+            armSaved()
+            showExam()
+        }
         val deckSeed = held.deck.ifBlank { Prefs.DEFAULT_DECK }
         bindChoices(deckView, listOf(deckSeed), deckSeed) { label ->
             val deck = label.trim().ifBlank { Prefs.DEFAULT_DECK }
             persist { it.copy(deck = deck) }
+            showExam()
         }
+        fun commitExamTarget() {
+            val raw = examTargetInput.text?.toString().orEmpty()
+            if (raw.isBlank()) {
+                examTargetLayout.error = null
+                persistExam { it.copy(target = null, lastApplied = null) }
+                return
+            }
+            val parsed = ExamStore.parseTarget(raw)
+            if (parsed == null) {
+                examTargetLayout.error = getString(R.string.settings_exam_target_error)
+                return
+            }
+            examTargetLayout.error = null
+            persistExam { it.copy(target = parsed, lastApplied = null) }
+        }
+        examDateButton.setOnClickListener {
+            val current = try {
+                Prefs.loadExam(this, examDeckName()).date
+            } catch (_: Exception) {
+                null
+            } ?: LocalDate.now()
+            DatePickerDialog(
+                this,
+                { _, year, month, day ->
+                    persistExam {
+                        it.copy(date = LocalDate.of(year, month + 1, day), lastApplied = null)
+                    }
+                },
+                current.year,
+                current.monthValue - 1,
+                current.dayOfMonth
+            ).show()
+        }
+        examClearButton.setOnClickListener {
+            persistExam { ExamStore.disable(it) }
+        }
+        showExam()
         neuralUrlView.setText(held.neuralUrl)
         neuralTokenView.setText("")
         tokenStatus.text = getString(
@@ -463,6 +546,7 @@ class SettingsActivity : AppCompatActivity() {
             if (typed.isBlank() && deckView.text?.toString() != deck) deckView.setText(deck, false)
             if (!AutoSave.decide(held.deck, deck).save) return
             persist { it.copy(deck = deck) }
+            showExam()
         }
         var batchClampedText: String? = null
         fun commitBatch() {
@@ -533,6 +617,7 @@ class SettingsActivity : AppCompatActivity() {
         track(urlView) { commitUrl() }
         track(keyView) { commitKey() }
         track(deckView) { commitDeck() }
+        track(examTargetInput) { commitExamTarget() }
         track(batchSizeView) { commitBatch() }
         track(goalAmountView) { commitGoalAmount() }
         track(neuralUrlView) { commitNeuralUrl() }
@@ -699,6 +784,7 @@ class SettingsActivity : AppCompatActivity() {
             commitUrl()
             commitKey()
             commitDeck()
+            commitExamTarget()
             commitBatch()
             commitGoalAmount()
             commitNeuralUrl()

@@ -30,6 +30,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import android.widget.Toast
+import java.time.LocalDate
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -44,6 +45,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var deckPathView: TextView
     private lateinit var deckNameView: TextView
     private lateinit var dueCountView: TextView
+    private var examCountdown: TextView? = null
     private lateinit var stateText: TextView
     private var currentCard: MaterialCardView? = null
     private var frontLabel: TextView? = null
@@ -147,6 +149,7 @@ class MainActivity : AppCompatActivity() {
         deckPathView = findViewById(R.id.deckPath)
         deckNameView = findViewById(R.id.deckName)
         dueCountView = findViewById(R.id.dueCount)
+        examCountdown = findViewById(R.id.examCountdown)
         stateText = findViewById(R.id.stateText)
         currentCard = findViewById(R.id.currentCard)
         frontLabel = findViewById(R.id.frontLabel)
@@ -528,20 +531,89 @@ class MainActivity : AppCompatActivity() {
     private fun refreshCounts() {
         val cfg = Prefs.load(this)
         bindDeckTitle(cfg.deck)
+        paintExamCountdown(cfg)
         dueCountView.text = "Checking Anki…"
         Thread {
+            val anki = try {
+                AnkiConnect(cfg.url, cfg.apiKey)
+            } catch (_: Exception) {
+                null
+            }
             val text = try {
-                val due = AnkiConnect(cfg.url, cfg.apiKey).dueCount(cfg.deck)
+                val due = anki?.dueCount(cfg.deck)
+                    ?: throw IllegalStateException("AnkiConnect unavailable")
                 getString(R.string.due_format, due)
             } catch (e: Exception) {
                 "Anki unreachable: ${e.message}"
             }
-            runOnUiThread { if (!isDestroyed) dueCountView.text = text }
+            val coverage = if (anki != null) {
+                try {
+                    refreshExamCoverage(anki, cfg)
+                } catch (_: Exception) {
+                    null
+                }
+            } else {
+                null
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                dueCountView.text = text
+                paintExamCountdown(Prefs.load(this), coverage)
+            }
         }.start()
+    }
+
+    private fun refreshExamCoverage(anki: AnkiConnect, cfg: AnkiConfig): Int? {
+        val state = Prefs.loadExam(this, cfg.deck)
+        val exam = state.date ?: return null
+        val days = ExamPlan.daysLeft(LocalDate.now(), exam)
+        if (days < 0) return null
+        val cov = ExamSync.coverage(anki, cfg.deck, days)
+        try {
+            Prefs.saveExam(this, cfg.deck, state.copy(coverage = cov.percent))
+        } catch (_: Exception) {
+        }
+        return cov.percent
+    }
+
+    private fun paintExamCountdown(cfg: AnkiConfig, coverage: Int? = null) {
+        val view = examCountdown ?: return
+        val state = try {
+            Prefs.loadExam(this, cfg.deck)
+        } catch (_: Exception) {
+            view.visibility = View.GONE
+            view.text = ""
+            return
+        }
+        val exam = state.date
+        if (exam == null) {
+            view.visibility = View.GONE
+            view.text = ""
+            return
+        }
+        val days = ExamPlan.daysLeft(LocalDate.now(), exam)
+        if (days < 0) {
+            view.visibility = View.GONE
+            view.text = ""
+            return
+        }
+        val line = ExamApply.countdownLine(
+            days,
+            ExamApply.retentionOf(days, state.target),
+            coverage ?: state.coverage ?: 0
+        )
+        if (line.isBlank()) {
+            view.visibility = View.GONE
+            view.text = ""
+        } else {
+            view.visibility = View.VISIBLE
+            view.text = line
+        }
     }
 
     private fun render(state: DrillUiState) {
         val cfg = Prefs.load(this)
+        paintExamCountdown(cfg)
         val drillingNow = state.drillRunning || DrillService.running
         crossfadeStatus(
             InfoCard.compose(state.heard, state.status, drillingNow)

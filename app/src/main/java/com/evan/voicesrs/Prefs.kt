@@ -232,6 +232,24 @@ object Prefs {
             .apply()
     }
 
+    fun loadExam(ctx: Context, deck: String): ExamStore.State {
+        val plain = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        return ExamStore.read(plain.all, deck)
+    }
+
+    fun saveExam(ctx: Context, deck: String, state: ExamStore.State) {
+        val editor = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+        fun put(key: String, value: String?) {
+            if (value.isNullOrEmpty()) editor.remove(key) else editor.putString(key, value)
+        }
+        put(ExamStore.dateKey(deck), state.date?.toString())
+        put(ExamStore.targetKey(deck), ExamStore.formatTarget(state.target))
+        put(ExamStore.cloneKey(deck), state.cloneId?.toString())
+        put(ExamStore.appliedKey(deck), state.lastApplied?.toString())
+        put(ExamStore.coverageKey(deck), state.coverage?.toString())
+        editor.apply()
+    }
+
     fun save(ctx: Context, cfg: AnkiConfig) {
         val plain = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
         write(plain, cfg)
