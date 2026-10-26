@@ -616,7 +616,8 @@ class MainActivity : AppCompatActivity() {
         paintExamCountdown(cfg)
         val drillingNow = state.drillRunning || DrillService.running
         crossfadeStatus(
-            InfoCard.compose(state.heard, state.status, drillingNow)
+            InfoCard.compose(state.heard, state.status, drillingNow,
+                silent = state.silentSession, micOpen = state.ratingMicOpen)
                 .ifBlank { getString(R.string.state_ready) }
         )
         val frontView = cardFront

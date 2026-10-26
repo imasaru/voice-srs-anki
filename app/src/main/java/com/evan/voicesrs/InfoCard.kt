@@ -1,8 +1,10 @@
 package com.evan.voicesrs
 
 /**
- * Status / info card. Heard is always the first line while a drill is running,
- * then the current pipeline stage. Listening for an answer names an example.
+ * Status / info card. The Heard line shows only while the mic is actually
+ * open (or right after a capture while listening / reporting what was heard),
+ * then the current pipeline stage. It is hidden while TTS reads, while paused,
+ * and in silent mode.
  */
 object InfoCard {
     const val HEARD_EMPTY = "Heard …"
@@ -34,10 +36,16 @@ object InfoCard {
         return s
     }
 
-    fun compose(heard: String?, status: String, drilling: Boolean): String {
+    fun compose(heard: String?, status: String, drilling: Boolean, silent: Boolean = false, micOpen: Boolean = false): String {
         if (!drilling) return status.trim().ifBlank { "Ready" }
+        val showHeard = !silent && (
+            micOpen ||
+            status.contains("Listening", ignoreCase = true) ||
+            status.startsWith("Heard", ignoreCase = true) ||
+            status.startsWith("I heard", ignoreCase = true)
+        )
         val lines = ArrayList<String>()
-        lines += heardLine(heard)
+        if (showHeard) lines += heardLine(heard)
         val stage = stage(status)
         if (stage.isNotBlank()) lines += stage
         return lines.joinToString("\n")
