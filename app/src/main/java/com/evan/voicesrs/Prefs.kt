@@ -275,6 +275,12 @@ object Prefs {
         secretEd?.apply()
     }
 
+    /**
+     * Keys read back with getFloat. A whole-number Double (e.g. tts_rate=1.0 from
+     * an import) must still be stored as Float, or the later getFloat misreads it.
+     */
+    private val FLOAT_PREF_KEYS = setOf(KEY_TTS_RATE)
+
     internal fun putAny(editor: SharedPreferences.Editor?, key: String, value: Any) {
         if (editor == null) return
         when (value) {
@@ -284,7 +290,7 @@ object Prefs {
             is Float -> editor.putFloat(key, value)
             is Double -> {
                 val asInt = value.toInt()
-                if (value == asInt.toDouble()) editor.putInt(key, asInt)
+                if (value == asInt.toDouble() && key !in FLOAT_PREF_KEYS) editor.putInt(key, asInt)
                 else editor.putFloat(key, value.toFloat())
             }
             is String -> editor.putString(key, value)
