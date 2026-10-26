@@ -79,6 +79,12 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 kotlin {
@@ -97,4 +103,8 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     // org.json on the JVM for unit tests:
     testImplementation("org.json:json:20240303")
+    // Robolectric smoke tests: render real layouts on the JVM (no emulator).
+    // 4.14.1 is the latest that supports the app's target SDK (35); 4.13 caps at 34.
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
 }
