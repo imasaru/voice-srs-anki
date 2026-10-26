@@ -92,3 +92,77 @@ class MediaCacheTest {
         assertEquals(12, k.substringAfter('#').length)
     }
 }
+
+class ByteLruCacheTest {
+
+    private data class Item(val bytes: Int)
+
+    private fun cache(max: Long) =
+        ByteLruCache<String, Item>(max) { _, it -> it.bytes }
+
+    @Test
+    fun `evicts least recently used by byte count`() {
+        val c = cache(100L)
+        c.put("a", Item(40))
+        c.put("b", Item(40))
+        c.put("c", Item(40))
+        assertEquals(80L, c.sizeBytes)
+        assertEquals(2, c.size)
+        assertFalse(c.contains("a"))
+        assertTrue(c.contains("b"))
+        assertTrue(c.contains("c"))
+    }
+
+    @Test
+    fun `putting a bigger item evicts older entries until it fits`() {
+        val c = cache(100L)
+        c.put("a", Item(30))
+        c.put("b", Item(30))
+        c.put("big", Item(90))
+        assertEquals(90L, c.sizeBytes)
+        assertEquals(1, c.size)
+        assertFalse(c.contains("a"))
+        assertFalse(c.contains("b"))
+        assertTrue(c.contains("big"))
+    }
+
+    @Test
+    fun `get refreshes recency so a later put evicts a different entry`() {
+        val c = cache(100L)
+        c.put("a", Item(40))
+        c.put("b", Item(40))
+        c.get("a")
+        c.put("c", Item(40))
+        assertTrue(c.contains("a"))
+        assertFalse(c.contains("b"))
+        assertTrue(c.contains("c"))
+    }
+
+    @Test
+    fun `size bytes tracks the cached total`() {
+        val c = cache(1000L)
+        assertEquals(0L, c.sizeBytes)
+        c.put("a", Item(30))
+        c.put("b", Item(30))
+        assertEquals(60L, c.sizeBytes)
+        c.clear()
+        assertEquals(0L, c.sizeBytes)
+    }
+
+    @Test
+    fun `replacing a key keeps only the new size`() {
+        val c = cache(1000L)
+        c.put("a", Item(30))
+        c.put("a", Item(50))
+        assertEquals(50L, c.sizeBytes)
+    }
+
+    @Test
+    fun `remove frees the bytes it held`() {
+        val c = cache(1000L)
+        c.put("a", Item(30))
+        c.remove("a")
+        assertEquals(0L, c.sizeBytes)
+        assertNull(c.get("a"))
+    }
+}

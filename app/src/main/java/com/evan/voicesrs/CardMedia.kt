@@ -12,7 +12,13 @@ object CardMedia {
     private const val MAX_EDGE = 1280
     private val lock = Any()
     private var cache: MediaCache? = null
-    private val bitmaps = LinkedHashMap<String, Bitmap>(16, 0.75f, true)
+    /**
+     * Byte-count-bounded LRU of decoded bitmaps (pure Kotlin, unit-tested in
+     * ByteLruCacheTest). Replaces the previous unbounded LinkedHashMap so a
+     * large deck can no longer hold every decoded image in memory; entries are
+     * evicted by byte count once total exceeds ~1/8 of the process max memory.
+     */
+    private val bitmaps = ByteLruCache<String, Bitmap>(Runtime.getRuntime().maxMemory() / 8) { _, bmp -> bmp.byteCount }
 
     fun bind(anki: AnkiConnect) {
         synchronized(lock) {
@@ -36,13 +42,13 @@ object CardMedia {
                 null
             } ?: continue
             val bmp = decode(bytes) ?: continue
-            synchronized(lock) { bitmaps[name] = bmp }
+            synchronized(lock) { bitmaps.put(name, bmp) }
             out[name] = name
         }
         return out
     }
 
-    fun bitmap(name: String): Bitmap? = synchronized(lock) { bitmaps[name] }
+    fun bitmap(name: String): Bitmap? = synchronized(lock) { bitmaps.get(name) }
 
     fun display(html: String): String = CardImages.displayHtml(html, preload(html))
 
