@@ -73,8 +73,10 @@ class AnswerTimeLogTest {
         val runner = StudyToolRunner(AnkiConnect("http://anki.example.invalid:1", ""), "Jp", tz) { log }
         val args = "{\"from\":\"$day\",\"to\":\"$day\"}"
         for (tool in listOf(StudyTools.GET_STUDY_SUMMARY, StudyTools.GET_CATEGORY_STATS)) {
-            val time = JSONObject(runner.invoke(tool, args)).getJSONObject("answer_time")
+            val obj = JSONObject(runner.invoke(tool, args))
+            val time = obj.getJSONObject("answer_time")
             assertEquals(3000L, time.getLong("total_answer_time_ms"))
+            assertTrue("expected an error key, got $obj", obj.has("error"))
         }
     }
 }
