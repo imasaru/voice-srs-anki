@@ -2181,6 +2181,8 @@ class DrillService : Service(), VoiceIo {
         val question = BubbleModel.fullQuestion(questionHtml).ifBlank {
             AnkiText.stripHtml(questionHtml)
         }
+        var raw: String? = null
+        var failReason: String? = null
         val verdict = try {
             val body = OwnWordsJudge.requestBody(
                 cfg.decisionModel,
@@ -2188,11 +2190,12 @@ class DrillService : Service(), VoiceIo {
                 correctAnswer,
                 transcript
             )
-            val raw = AiClient().postDecision(decisionBase, cfg.aiApiKey, body) {
+            raw = AiClient().postDecision(decisionBase, cfg.aiApiKey, body) {
                 stopRequested.get() || destroyed
             }
             OwnWordsJudge.result(raw, null)
         } catch (e: Exception) {
+            failReason = OwnWordsJudge.fallbackReason(null, e)
             OwnWordsJudge.result(null, e)
         }
         when (verdict) {
@@ -2205,6 +2208,8 @@ class DrillService : Service(), VoiceIo {
                 speak(line)
             }
             OwnWordsJudge.Verdict.Fallback -> {
+                val reason = failReason ?: OwnWordsJudge.fallbackReason(raw, null)
+                if (reason != null) Log.w(TAG, "own-words judge fallback: $reason")
                 val line = getString(R.string.own_words_fallback)
                 showStatus(line)
                 speak(line)
