@@ -11,7 +11,12 @@ object SectionFormat {
 
     data class Run(val text: String, val code: Boolean)
 
-    data class Block(val kind: Kind, val text: String, val runs: List<Run>)
+    data class Block(
+        val kind: Kind,
+        val text: String,
+        val runs: List<Run>,
+        val gapBefore: Boolean = false,
+    )
 
     data class Doc(val blocks: List<Block>, val footer: String, val spoken: String)
 
@@ -27,6 +32,7 @@ object SectionFormat {
         val foot = ArrayList<String>()
         val raw = clean.split('\n')
         var i = 0
+        var sawBlank = false
         while (i < raw.size) {
             if (raw[i].trim().startsWith("```")) {
                 val code = StringBuilder()
@@ -39,13 +45,17 @@ object SectionFormat {
                 if (i < raw.size) i++
                 val text = code.toString().trim('\n')
                 if (text.isNotEmpty()) {
-                    blocks += Block(Kind.CODE, text, listOf(Run(text, code = true)))
+                    addBlock(blocks, Kind.CODE, text, listOf(Run(text, code = true)), sawBlank)
+                    sawBlank = false
                 }
                 continue
             }
             val line = raw[i].trim()
             i++
-            if (line.isEmpty()) continue
+            if (line.isEmpty()) {
+                sawBlank = true
+                continue
+            }
             if (isFooter(line)) {
                 foot += line
                 continue
@@ -59,27 +69,43 @@ object SectionFormat {
             val heading = headingText(kept)
             if (heading != null) {
                 val runs = inlineRuns(heading)
-                blocks += Block(Kind.HEADING, runs.joinToString("") { it.text }, runs)
+                addBlock(blocks, Kind.HEADING, runs.joinToString("") { it.text }, runs, sawBlank)
+                sawBlank = false
                 continue
             }
             val item = bullet.matchEntire(kept)
             if (item != null) {
                 val runs = inlineRuns(item.groupValues[1])
-                blocks += Block(Kind.BULLET, runs.joinToString("") { it.text }, runs)
+                addBlock(blocks, Kind.BULLET, runs.joinToString("") { it.text }, runs, sawBlank)
+                sawBlank = false
                 continue
             }
             val runs = inlineRuns(kept)
-            blocks += Block(Kind.BODY, runs.joinToString("") { it.text }, runs)
+            addBlock(blocks, Kind.BODY, runs.joinToString("") { it.text }, runs, sawBlank)
+            sawBlank = false
         }
         val footer = foot.joinToString("\n")
         if (footer.isNotEmpty()) {
-            blocks += Block(Kind.FOOTER, footer, listOf(Run(footer, code = false)))
+            blocks += Block(Kind.FOOTER, footer, listOf(Run(footer, code = false)), gapBefore = false)
         }
         val spoken = blocks.filter { it.kind != Kind.FOOTER }
             .joinToString(" ") { it.text }
             .replace(Regex("\\s+"), " ")
             .trim()
         return Doc(blocks, footer, spoken)
+    }
+
+    /** Adds a block, marking gapBefore when a blank line was skipped, the block is CODE,
+     *  or the previous block was CODE. Callers reset sawBlank after the block is added. */
+    private fun addBlock(
+        blocks: ArrayList<Block>,
+        kind: Kind,
+        text: String,
+        runs: List<Run>,
+        sawBlank: Boolean,
+    ) {
+        val gap = blocks.isNotEmpty() && (sawBlank || kind == Kind.CODE || blocks.last().kind == Kind.CODE)
+        blocks += Block(kind, text, runs, gap)
     }
 
     fun spoken(src: String): String = parse(src).spoken
