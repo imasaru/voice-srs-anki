@@ -440,8 +440,9 @@ class MainActivity : AppCompatActivity() {
             override fun afterTextChanged(s: Editable?) {
                 paintShell()
                 if (!s.isNullOrEmpty()) {
+                    val wasEmpty = !hadComposerText
                     hadComposerText = true
-                    hint?.visibility = View.GONE
+                    if (wasEmpty) hint?.visibility = View.GONE
                     DrillService.pauseForChat(ChatPause.Trigger.TYPING)
                     DrillService.noteChatReengage()
                 } else if (hadComposerText) {
