@@ -82,4 +82,42 @@ class SectionFormatTest {
         assertFalse(license.spoken.contains("http"))
         assertTrue(license.footer.contains("License: Apache-2.0"))
     }
+
+    @Test
+    fun `gapBefore marks paragraph breaks and code fences`() {
+        val src = """
+            Use INSERT OVERWRITE to replace data.
+
+            It rewrites the whole table.
+            ```sql
+            INSERT OVERWRITE TABLE sales
+            SELECT * FROM staging_sales;
+            ```
+            After the fence.
+            Next line.
+        """.trimIndent()
+
+        val blocks = SectionFormat.parse(src).blocks
+
+        // the first block of any doc has gapBefore = false
+        assertFalse(blocks[0].gapBefore)
+        assertEquals(SectionFormat.Kind.BODY, blocks[0].kind)
+
+        // a blank line came before this paragraph
+        assertEquals(SectionFormat.Kind.BODY, blocks[1].kind)
+        assertTrue(blocks[1].gapBefore)
+
+        // the fenced code block carries its text and gets a gap
+        val code = blocks.single { it.kind == SectionFormat.Kind.CODE }
+        assertEquals("INSERT OVERWRITE TABLE sales\nSELECT * FROM staging_sales;", code.text)
+        assertTrue(code.gapBefore)
+
+        // a body block immediately after a code block gets a gap
+        assertEquals(SectionFormat.Kind.BODY, blocks[3].kind)
+        assertTrue(blocks[3].gapBefore)
+
+        // consecutive lines with no blank between them get no gap
+        assertEquals(SectionFormat.Kind.BODY, blocks[4].kind)
+        assertFalse(blocks[4].gapBefore)
+    }
 }
