@@ -1478,7 +1478,7 @@ class DrillService : Service(), VoiceIo {
         }
         val progress = SessionProgress(due)
         val started = SystemClock.elapsedRealtime()
-        elapsedStartMs = started
+        elapsedStartMs = StudyBlockStore.chipStartMs(block, System.currentTimeMillis(), started)
         elapsedPausedTotalMs = 0L
         elapsedPausedSinceMs = 0L
         publish(progress, store)
@@ -1644,7 +1644,7 @@ class DrillService : Service(), VoiceIo {
         announceRecognition()
         val progress = SessionProgress(cards.size)
         val started = SystemClock.elapsedRealtime()
-        elapsedStartMs = started
+        elapsedStartMs = StudyBlockStore.chipStartMs(block, System.currentTimeMillis(), started)
         elapsedPausedTotalMs = 0L
         elapsedPausedSinceMs = 0L
         publish(progress, store)
