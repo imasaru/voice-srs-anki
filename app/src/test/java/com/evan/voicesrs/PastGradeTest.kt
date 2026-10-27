@@ -76,4 +76,44 @@ class PastGradeTest {
         assertEquals("A", PastGrade.cancel(previousLetter = "A"))
         assertNull(PastGrade.cancel(previousLetter = null))
     }
+
+    @Test
+    fun `previewEase maps each ease to its rating prompt`() {
+        val again = PastGrade.previewEase(ease = 1, currentCard = false, rated = true)!!
+        assertEquals("", again.letter)
+        assertFalse(again.correct)
+        assertEquals(1, again.ease)
+        assertEquals("Change rating to Again?", again.prompt)
+
+        val hard = PastGrade.previewEase(ease = 2, currentCard = false, rated = true)!!
+        assertFalse(hard.correct)
+        assertEquals(2, hard.ease)
+        assertEquals("Change rating to Hard?", hard.prompt)
+
+        val good = PastGrade.previewEase(ease = 3, currentCard = false, rated = true)!!
+        assertTrue(good.correct)
+        assertEquals(3, good.ease)
+        assertEquals("Change rating to Good?", good.prompt)
+
+        val easy = PastGrade.previewEase(ease = 4, currentCard = false, rated = true)!!
+        assertTrue(easy.correct)
+        assertEquals(4, easy.ease)
+        assertEquals("Change rating to Easy?", easy.prompt)
+    }
+
+    @Test
+    fun `previewEase is null off-range, on the current card, or unrated`() {
+        assertNull(PastGrade.previewEase(ease = 0, currentCard = false, rated = true))
+        assertNull(PastGrade.previewEase(ease = 5, currentCard = false, rated = true))
+        assertNull(PastGrade.previewEase(ease = 3, currentCard = true, rated = true))
+        assertNull(PastGrade.previewEase(ease = 3, currentCard = false, rated = false))
+    }
+
+    @Test
+    fun `commitEase keeps transcript and never regenerates`() {
+        val c = PastGrade.commitEase("B because Delta Sharing", 2)
+        assertEquals("B because Delta Sharing", c.transcript)
+        assertEquals(2, c.ease)
+        assertFalse(c.regenerate)
+    }
 }

@@ -19,7 +19,11 @@ object GradeFix {
             ).options.map { it.letter }.toSet()
         )
         val hasExplanation = turn.explanation !is ExplState.None
-        val commit = PastGrade.commit(oldLetter, preview.letter, preview.ease, hasExplanation)
+        val commit = if (preview.letter.isBlank()) {
+            PastGrade.commitEase(turn.transcript, preview.ease)
+        } else {
+            PastGrade.commit(oldLetter, preview.letter, preview.ease, hasExplanation)
+        }
         ReviewLog.updateGrade(turn.turnId, commit.transcript, commit.ease)
         Thread({
             try {

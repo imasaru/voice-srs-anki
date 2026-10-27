@@ -143,6 +143,7 @@ class ChatAdapter(
             val live = DrillUi.state
             val currentCard = live.drillRunning && live.cardId == turn.cardId && live.frontHtml.isNotBlank()
             val canCorrect = turn.ease != null && parsed.mcq && !currentCard
+            val onRegrade: (() -> Unit)? = if (turn.ease != null) { { offerRegrade(turn) } } else null
             val mcq = CardFaceBinder.bindQuestion(
                 questionLabel,
                 cardStem,
@@ -172,7 +173,7 @@ class ChatAdapter(
                 cardStem.maxLines = if (expanded) Integer.MAX_VALUE else BubbleModel.COLLAPSED_LINES
                 cardStem.ellipsize = if (expanded) null else TextUtils.TruncateAt.END
             }
-            CardFaceBinder.bindPills(userAnswer, userPill, turn.transcript, turn.ease, userLabel)
+            CardFaceBinder.bindPills(userAnswer, userPill, turn.transcript, turn.ease, onRegrade, userLabel)
             val shown = BubbleModel.displayAi(turn.explanation, turn.frontText, turn.backText, turn.unread)
             val showExplain = AutoExplain.showButton(turn.explanation)
             body.visibility = View.GONE
@@ -253,6 +254,19 @@ class ChatAdapter(
                     pendingPick.remove(turn.turnId)
                     notifyTurn(turn.turnId)
                 }
+                .show()
+        }
+
+        private fun offerRegrade(turn: ReviewTurn) {
+            val live = DrillUi.state
+            val currentCard = live.drillRunning && live.cardId == turn.cardId && live.frontHtml.isNotBlank()
+            val choices = arrayOf("Again", "Hard", "Good", "Easy")
+            MaterialAlertDialogBuilder(itemView.context)
+                .setItems(choices) { _, index ->
+                    PastGrade.previewEase(index + 1, currentCard, rated = turn.ease != null)
+                        ?.let { GradeFix.apply(itemView.context, turn, it) }
+                }
+                .setNegativeButton(android.R.string.cancel) { _, _ -> }
                 .show()
         }
 

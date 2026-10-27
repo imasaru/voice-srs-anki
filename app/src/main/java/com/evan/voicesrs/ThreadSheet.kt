@@ -199,7 +199,7 @@ class ThreadSheet : BottomSheetDialogFragment() {
             root.findViewById(R.id.threadRatingPill),
             turn.transcript,
             turn.ease,
-            root.findViewById(R.id.threadAnswerLabel)
+            heading = root.findViewById(R.id.threadAnswerLabel)
         )
         val expl = BubbleModel.displayAi(turn.explanation, turn.frontText, turn.backText, unread = false)
         CardFaceBinder.fillSections(

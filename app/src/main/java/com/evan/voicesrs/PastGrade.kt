@@ -45,6 +45,24 @@ object PastGrade {
         return Preview(clean, right, ease, prompt)
     }
 
+    /**
+     * Re-grade the user's own rating pill. Unlike [preview] this is not
+     * letter- or mcq-specific: the ease is chosen directly, so it works for
+     * any rated turn. Returns null when the turn is the live card, was never
+     * rated, or the ease is out of range.
+     */
+    fun previewEase(ease: Int, currentCard: Boolean, rated: Boolean): Preview? {
+        if (currentCard || !rated || ease !in 1..4) return null
+        val right = ease >= 3
+        val prompt = when (ease) {
+            1 -> "Change rating to Again?"
+            2 -> "Change rating to Hard?"
+            3 -> "Change rating to Good?"
+            else -> "Change rating to Easy?"
+        }
+        return Preview("", right, ease, prompt)
+    }
+
     /** This path does not pause, speak, or advance the live card. */
     fun touchesCurrentCard(): Boolean = false
 
@@ -80,4 +98,10 @@ object PastGrade {
     }
 
     fun cancel(previousLetter: String?): String? = previousLetter
+
+    /**
+     * Commit for a rating-only regrade (previewEase, blank letter): keep the
+     * spoken transcript as-is and do not regenerate the explanation.
+     */
+    fun commitEase(transcript: String, ease: Int): Commit = Commit(transcript, ease, regenerate = false)
 }
