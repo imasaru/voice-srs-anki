@@ -180,4 +180,70 @@ class StudyBlockStoreTest {
         val s = StudyBlockStore.State(1, 34 * 60_000L, 90, "2026-10-27", null, false)
         assertEquals(1L, StudyBlockStore.chipStartMs(s, at(10, 0), 1_000L))
     }
+
+    @Test
+    fun `historyEntry_format`() {
+        val s = StudyBlockStore.State(2, 2040000, 90, "2026-10-27", null, true)
+        assertEquals("2026-10-27|2|2040000|90", StudyBlockStore.historyEntry(s))
+    }
+
+    @Test
+    fun `appendHistory_notDone_unchanged`() {
+        val s = StudyBlockStore.State(1, 0, 0, "x", null, false)
+        assertEquals("x|1|0|0", StudyBlockStore.appendHistory("x|1|0|0", s))
+    }
+
+    @Test
+    fun `appendHistory_empty_and_order`() {
+        val b1 = StudyBlockStore.State(1, 5400000, 90, "2026-10-27", null, true)
+        val b2 = StudyBlockStore.State(2, 2040000, 90, "2026-10-27", null, true)
+        val h1 = StudyBlockStore.appendHistory("", b1)
+        assertEquals("2026-10-27|1|5400000|90", h1)
+        val h2 = StudyBlockStore.appendHistory(h1, b2)
+        assertEquals("2026-10-27|1|5400000|90;2026-10-27|2|2040000|90", h2)
+    }
+
+    @Test
+    fun `appendHistory_replaces_same_block`() {
+        val b1a = StudyBlockStore.State(1, 60000, 90, "2026-10-27", null, true)
+        val h1 = StudyBlockStore.appendHistory("", b1a)
+        val b1b = StudyBlockStore.State(1, 120000, 90, "2026-10-27", null, true)
+        val h2 = StudyBlockStore.appendHistory(h1, b1b)
+        assertEquals(listOf("2026-10-27|1|120000|90"), h2.split(";"))
+
+        val b10 = StudyBlockStore.State(10, 100000, 90, "2026-10-27", null, true)
+        val h3 = StudyBlockStore.appendHistory(h2, b10)
+        val b1c = StudyBlockStore.State(1, 200000, 90, "2026-10-27", null, true)
+        val h4 = StudyBlockStore.appendHistory(h3, b1c)
+        val entries = h4.split(";")
+        assertTrue(entries.contains("2026-10-27|1|200000|90"))
+        assertTrue(entries.contains("2026-10-27|10|100000|90"))
+    }
+
+    @Test
+    fun `appendHistory_caps_at_50`() {
+        var h = ""
+        for (i in 1..55) {
+            val s = StudyBlockStore.State(i, i.toLong() * 60_000L, 90, "2026-10-27", null, true)
+            h = StudyBlockStore.appendHistory(h, s)
+        }
+        val entries = h.split(";")
+        assertEquals(50, entries.size)
+        assertTrue(entries.first().startsWith("2026-10-27|6|"))
+    }
+
+    @Test
+    fun `reportLines_filters_day_sorts_and_formats`() {
+        val history = "2026-10-27|2|2040000|90;2026-10-26|1|5400000|90;2026-10-27|1|5400000|90;2026-10-27|3|59999|0"
+        val lines = StudyBlockStore.reportLines(history, "2026-10-27")
+        assertEquals(listOf("Block 1: 90 of 90 min", "Block 2: 34 of 90 min", "Block 3: 0 min"), lines)
+    }
+
+    @Test
+    fun `reportLines_skips_malformed`() {
+        val history = "garbage;2026-10-27|x|1|90;2026-10-27|1|2|3|4;;2026-10-27|1|60000|0"
+        val lines = StudyBlockStore.reportLines(history, "2026-10-27")
+        assertEquals(listOf("Block 1: 1 min"), lines)
+        assertTrue(StudyBlockStore.reportLines("", "2026-10-27").isEmpty())
+    }
 }

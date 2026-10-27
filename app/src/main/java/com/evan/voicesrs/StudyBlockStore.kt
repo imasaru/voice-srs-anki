@@ -12,6 +12,8 @@ object StudyBlockStore {
     const val KEY_RUN_START = "block_run_start_ms" // Long; key ABSENT when not running
     const val KEY_DONE = "block_done"            // Boolean
     const val DAY_START_HOUR = 4                 // Anki day starts at 04:00 local time
+    const val KEY_HISTORY = "block_history"      // String, see appendHistory
+    const val HISTORY_MAX = 50                   // keep only the newest 50 entries
 
     data class State(
         val index: Int,          // 1-based block number within the Anki day
@@ -116,5 +118,39 @@ object StudyBlockStore {
     fun tick(s: State, nowMs: Long): State {
         if (s.goalMin > 0 && elapsedAt(s, nowMs) >= s.goalMin * 60_000L) return finish(s, nowMs)
         return s
+    }
+
+    /** "dayKey|index|elapsedMs|goalMin" */
+    fun historyEntry(s: State): String = "${s.dayKey}|${s.index}|${s.elapsedMs}|${s.goalMin}"
+
+    /**
+     * Returns history with s added. If !s.done return history unchanged.
+     * Removes any existing entry with the same dayKey and index first (no duplicates), appends historyEntry(s) at the end,
+     * then keeps only the last HISTORY_MAX entries. Empty pieces are dropped.
+     */
+    fun appendHistory(history: String, s: State): String {
+        if (!s.done) return history
+        val prefix = "${s.dayKey}|${s.index}|"
+        val kept = history.split(";").filter { it.isNotBlank() && !it.startsWith(prefix) }
+        return (kept + historyEntry(s)).takeLast(HISTORY_MAX).joinToString(";")
+    }
+
+    /**
+     * Report lines for one Anki day, sorted by block index ascending.
+     * Minutes = elapsedMs / 60_000 (rounded down). goalMin > 0: "Block 2: 34 of 90 min"; goalMin == 0: "Block 2: 34 min".
+     * Entries for other days and malformed entries (not exactly 4 parts, or numbers that don't parse) are skipped.
+     */
+    fun reportLines(history: String, dayKey: String): List<String> {
+        val rows = history.split(";").mapNotNull { e ->
+            val p = e.split("|")
+            if (p.size != 4 || p[0] != dayKey) return@mapNotNull null
+            val idx = p[1].toIntOrNull() ?: return@mapNotNull null
+            val ms = p[2].toLongOrNull() ?: return@mapNotNull null
+            val goal = p[3].toIntOrNull() ?: return@mapNotNull null
+            Triple(idx, ms / 60_000L, goal)
+        }
+        return rows.sortedBy { it.first }.map { (idx, min, goal) ->
+            if (goal > 0) "Block $idx: $min of $goal min" else "Block $idx: $min min"
+        }
     }
 }
