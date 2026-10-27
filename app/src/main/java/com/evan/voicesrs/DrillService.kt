@@ -74,6 +74,8 @@ class DrillService : Service(), VoiceIo {
         const val ACTION_TEST_GRADE = "com.evan.voicesrs.TEST_GRADE"
         const val ACTION_TEST_SHOW_ANSWER = "com.evan.voicesrs.TEST_SHOW_ANSWER"
         const val EXTRA_GRADE = "grade"
+        /** Boolean extra on the start Intent: true starts a new study block, false/absent continues today's block. */
+        const val EXTRA_NEW_BLOCK = "newBlock"
         const val CHANNEL_ID = "drill"
         const val NOTIF_ID = 1
         private const val TAG = "DrillService"
@@ -294,6 +296,8 @@ class DrillService : Service(), VoiceIo {
     @Volatile private var destroyed = false
     /** Captured once in [onStartCommand], before the session thread starts. */
     @Volatile private var sessionSilent = false
+    /** Set from [EXTRA_NEW_BLOCK] in [onStartCommand]; consumed (reset to false) by [blockStart]. */
+    @Volatile private var newBlockRequested = false
     private val gateLock = Any()
     /** Epoch advances only when Silent flips. A posted start keeps its epoch. */
     private var listenGate = ListenGate.State(silent = false, epoch = 0)
@@ -563,6 +567,7 @@ class DrillService : Service(), VoiceIo {
                 listenGate = ListenGate.State(silent = prefsSilent, epoch = epoch)
             }
             sessionSilent = prefsSilent
+            newBlockRequested = intent?.getBooleanExtra(EXTRA_NEW_BLOCK, false) == true
         }
         try {
             startForegroundWithNotification()
@@ -1368,12 +1373,14 @@ class DrillService : Service(), VoiceIo {
     private fun blockGoalMin(cfg: AnkiConfig): Int =
         if (GoalModes.normalize(cfg.goalMode) == GoalModes.MINUTES) cfg.goalMinutes else 0
 
-    /** Resumes today's unfinished block or starts a new one. The Continue/New choice UI is a later item. */
+    /** Resumes today's unfinished block, or starts a new one when the start Intent asked for it (EXTRA_NEW_BLOCK). The flag is used once. */
     private fun blockStart(cfg: AnkiConfig) {
+        val wantNew = newBlockRequested
+        newBlockRequested = false
         runCatching {
             val s = StudyBlockPrompt.choose(
                 Prefs.loadStudyBlock(this), System.currentTimeMillis(), ZoneId.systemDefault(),
-                blockGoalMin(cfg), continueChosen = true
+                blockGoalMin(cfg), continueChosen = !wantNew
             )
             block = s
             Prefs.saveStudyBlock(this, s)
