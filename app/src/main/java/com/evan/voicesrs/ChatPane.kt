@@ -63,6 +63,9 @@ class ChatPane(
     private var followView = ChatFollow.View()
     private var lastKeys = emptyList<String>()
     private var lastOrdinal = 0
+    private var lastRows: List<ChatRow>? = null
+    private var lastPaused: Boolean? = null
+    private var lastSilent: Boolean? = null
 
     private val tick = object : Runnable {
         override fun run() {
@@ -162,6 +165,7 @@ class ChatPane(
         if (!attached) return
         attached = false
         resumed = false
+        lastRows = null
         handler.removeCallbacks(tick)
         list.removeOnScrollListener(scroller)
         ReviewLog.removeListener(listener)
@@ -199,6 +203,10 @@ class ChatPane(
         } else {
             unreadView.context.getString(R.string.chat_unread_n, n)
         }
+        val paused = DrillUi.state.chatPaused
+        val silent = DrillUi.state.silentSession
+        if (anchored && ChatRenderGate.unchanged(lastRows, rows, lastPaused, paused, lastSilent, silent)) return
+        lastRows = rows; lastPaused = paused; lastSilent = silent
         val live = rows.lastOrNull() as? ChatRow.Live
         val ordinal = live?.questionOrdinal ?: 0
         val keys = rows.map { it.key }
