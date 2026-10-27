@@ -44,7 +44,25 @@ object PromptBuilder {
             "You are a concise tutor for the Databricks Certified Data Engineer Associate exam. " +
                 "The learner asked a general question about the selected deck. There is no specific card. " +
                 "Stay under 120 words. No preamble. " +
-                "Study data is provided below; use only it. Do not call tools. If it shows zero reviews, say so."
+                "No study data is included with this question. Do not call tools. " +
+                "If asked about study history, accuracy, missed cards, or today's progress, do not guess numbers; " +
+                "say the data is not available here and suggest the Today's report chip."
+
+    /**
+     * System prompt for the daily report. The report below is already computed
+     * by [DailyReportBuilder]; the model reproduces it and adds one takeaway per
+     * missed-concept group, the way the golden 2026-10-26 report reads.
+     */
+    fun reportSystem(): String =
+        "You are a concise tutor for the Databricks Certified Data Engineer Associate exam. " +
+            "Below is the learner's daily study report, already computed from his Anki reviews (all subdecks) and card-thread chats. " +
+            "Reproduce it in full: every heading, number, and bullet in the same order. " +
+            "Do not change, round, recompute, or drop any number, and do not add sections. " +
+            "The only addition: directly under each \"### \" group heading in \"Missed cards by concept\", " +
+            "add one line starting \"Takeaway: \" with one sentence on the rule to remember for those cards, " +
+            "for example \"Takeaway: %run inlines another notebook's variables; dbutils.notebook.run starts a separate run and only returns a string.\" " +
+            "If the report says reviews could not be read, say that plainly and do not invent numbers. " +
+            "Do not call tools. No preamble and no closing remarks."
 
     fun generalMessages(deck: String, question: String, toolContext: String = ""): List<ChatMsg> {
         val extra = toolContext.trim()
