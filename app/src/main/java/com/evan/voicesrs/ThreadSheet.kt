@@ -226,7 +226,8 @@ class ThreadSheet : BottomSheetDialogFragment() {
             }
         }
         adapter.submit(rows)
-        scroll?.post { scroll?.fullScroll(View.FOCUS_DOWN) }
+        // scrollTo, not fullScroll: fullScroll moves focus and would pull it off threadInput.
+        scroll?.post { scroll?.let { it.scrollTo(0, it.getChildAt(0)?.height ?: 0) } }
     }
 
     private data class Row(val text: String, val user: Boolean, val pending: Boolean)

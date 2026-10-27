@@ -15,11 +15,7 @@ class ThreadSheetLayoutTest {
     private val idNs = "http://schemas.android.com/apk/res/android"
 
     private fun loadDoc(): org.w3c.dom.Document {
-        var p = File("src/main/res/layout/sheet_thread.xml")
-        val root = p.absoluteFile
-        while (!p.isFile && root.parentFile != null) {
-            root.parentFile?.let { p = File(it, "src/main/res/layout/sheet_thread.xml") }
-        }
+        val p = File("src/main/res/layout/sheet_thread.xml")
         assertTrue("sheet_thread.xml not found at ${p.absolutePath}", p.isFile)
         val factory = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = true
