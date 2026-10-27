@@ -78,7 +78,34 @@ object GeneralChat {
         startAsk(context, deck, context.getString(R.string.today_report_prompt), injectReport = true)
     }
 
-    private fun startAsk(context: Context, deck: String, question: String, injectReport: Boolean) {
+    /** True only for the built-in Today's report chip left at its defaults: it keeps the exact report path. */
+    fun usesReportPath(chip: PromptChip): Boolean =
+        chip.id == PromptChips.REPORT_ID &&
+            chip.source == ChipSource.TODAY_REVIEWS &&
+            chip.prompt.trim() == PromptChips.REPORT_PROMPT
+
+    /**
+     * Runs a one-tap prompt chip. The unedited report chip runs [todayReport].
+     * Every other chip sends its prompt with its data fenced by [ChipContext.build],
+     * using [PromptBuilder.chipSystem] and no tools. The caller supplies the card and chat blobs.
+     */
+    fun runChip(context: Context, deck: String, chip: PromptChip, cardBlob: String = "", chatsBlob: String = "") {
+        if (usesReportPath(chip)) {
+            todayReport(context, deck)
+            return
+        }
+        startAsk(context, deck, chip.prompt, injectReport = false, chip = chip, cardBlob = cardBlob, chatsBlob = chatsBlob)
+    }
+
+    private fun startAsk(
+        context: Context,
+        deck: String,
+        question: String,
+        injectReport: Boolean,
+        chip: PromptChip? = null,
+        cardBlob: String = "",
+        chatsBlob: String = ""
+    ) {
         val q = question.trim()
         if (q.isEmpty()) {
             showNotice(ChatSend.visible(ChatSend.Fail.EMPTY))
@@ -102,23 +129,15 @@ object GeneralChat {
                 val tools: JSONArray?
                 val onTool: ((String, String) -> String)?
                 val contextBlob: String
-                if (injectReport) {
+                if (injectReport || chip != null) {
                     tools = null
                     onTool = null
-                    contextBlob = try {
-                        val anki = AnkiConnect(cfg.url, cfg.apiKey)
-                        val threads = try {
-                            val f = ThreadStore.file(app.filesDir)
-                            if (f.isFile) f.readText() else ""
-                        } catch (_: Exception) {
-                            ""
-                        }
-                        StudyToolRunner(anki, cfg.deck, pending = { LocalQueueStore(app.filesDir).readGrades() })
-                            .dailyReport(cfg.deck, issuedAt, threads, Prefs.loadBlockHistory(app))
-                    } catch (e: Exception) {
-                        Log.w(TAG, "today report failed: ${e.javaClass.simpleName}")
-                        "Error: could not build today's report (${e.javaClass.simpleName})."
+                    val reviews = if (injectReport || chip?.source == ChipSource.TODAY_REVIEWS) {
+                        reportBlob(app, cfg, issuedAt)
+                    } else {
+                        ""
                     }
+                    contextBlob = if (chip != null) ChipContext.build(chip.source, reviews, cardBlob, chatsBlob) else reviews
                 } else {
                     contextBlob = ""
                     tools = StudyTools.schemas()
@@ -144,8 +163,12 @@ object GeneralChat {
                         baseUrl = cfg.aiBaseUrl,
                         apiKey = cfg.aiApiKey,
                         model = cfg.aiModel,
-                        system = if (injectReport) PromptBuilder.reportSystem() else PromptBuilder.generalSystem(true),
-                        messages = PromptBuilder.generalMessages(name, q, contextBlob),
+                        system = when {
+                            chip != null -> PromptBuilder.chipSystem()
+                            injectReport -> PromptBuilder.reportSystem()
+                            else -> PromptBuilder.generalSystem(true)
+                        },
+                        messages = if (chip != null) PromptBuilder.chipMessages(name, q, contextBlob) else PromptBuilder.generalMessages(name, q, contextBlob),
                         cancelled = { false },
                         tools = tools,
                         onTool = onTool,
@@ -164,7 +187,7 @@ object GeneralChat {
                         onDelta = paint
                     )
                 }
-                if (!injectReport &&
+                if (!injectReport && chip == null &&
                     StudyTools.needsFallbackChip(true, client.lastSawToolCalls, false) &&
                     StudyTools.looksLikeStudyAsk(q)
                 ) {
@@ -184,6 +207,22 @@ object GeneralChat {
                 mark(id, ExplState.Error(ChatSend.visible(ChatSend.kindOf(e)), retryable = true))
             }
         }, "general-ask").start()
+    }
+
+    /** Today's study report blob, same as the Today's report path. Never throws. */
+    private fun reportBlob(app: Context, cfg: AnkiConfig, issuedAt: Long): String = try {
+        val anki = AnkiConnect(cfg.url, cfg.apiKey)
+        val threads = try {
+            val f = ThreadStore.file(app.filesDir)
+            if (f.isFile) f.readText() else ""
+        } catch (_: Exception) {
+            ""
+        }
+        StudyToolRunner(anki, cfg.deck, pending = { LocalQueueStore(app.filesDir).readGrades() })
+            .dailyReport(cfg.deck, issuedAt, threads, Prefs.loadBlockHistory(app))
+    } catch (e: Exception) {
+        Log.w(TAG, "today report failed: ${e.javaClass.simpleName}")
+        "Error: could not build today's report (${e.javaClass.simpleName})."
     }
 
     /** The builder title carries date + issue time; add [ReportHeader] only if the model dropped it. */
