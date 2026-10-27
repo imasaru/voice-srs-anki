@@ -54,4 +54,28 @@ object ImeLayoutDecision {
         } else {
             Visibility(headerMeta = true, timerRow = timerRowWanted, bottomBar = true)
         }
+
+    /**
+     * Which of the wide-layout (unfolded / w600dp) rows to hide while the IME is
+     * up so the tall right chat pane clears the keyboard. The only rows that free
+     * vertical space here are the toolbar and the session cue; the status card
+     * lives in a side column and is irrelevant to chat height. Pure (no Android
+     * types) so it is unit-testable on the JVM.
+     */
+    data class WideVisibility(
+        val toolbar: Boolean,
+        val sessionCue: Boolean,
+    )
+
+    /**
+     * @param imeVisible whether the keyboard is currently shown.
+     * @param cueWanted when the IME is hidden, whether the session cue should
+     *   stay visible (false keeps it hidden). Ignored while the IME is visible.
+     */
+    fun decideWide(imeVisible: Boolean, cueWanted: Boolean): WideVisibility =
+        if (imeVisible) {
+            WideVisibility(toolbar = false, sessionCue = false)
+        } else {
+            WideVisibility(toolbar = true, sessionCue = cueWanted)
+        }
 }

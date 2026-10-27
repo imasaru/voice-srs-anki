@@ -101,6 +101,8 @@ class MainActivity : AppCompatActivity() {
     private var appliedHintRes = 0
     /** Timer-row visibility captured before the IME opens; restored when it closes. */
     private var timerRowWantedVisible = false
+    /** Session-cue visibility captured before the wide-layout IME opens; restored when it closes. */
+    private var cueWantedVisible = false
     /** Last IME state we acted on, so visibility only changes when it flips. */
     private var lastImeVisible = false
 
@@ -954,6 +956,18 @@ class MainActivity : AppCompatActivity() {
     private fun applyImeLayout(imeVisible: Boolean) {
         if (imeVisible == lastImeVisible) return
         lastImeVisible = imeVisible
+        // Wide (unfolded / w600dp) layout has no bottomBar; the chat clears the
+        // keyboard by hiding the toolbar and session cue instead. The chat stays
+        // visible either way.
+        if (findViewById<View>(R.id.bottomBar) == null) {
+            if (imeVisible) {
+                cueWantedVisible = findViewById<View>(R.id.sessionCue)?.visibility == View.VISIBLE
+            }
+            val w = ImeLayoutDecision.decideWide(imeVisible, cueWantedVisible)
+            findViewById<View>(R.id.toolbar)?.visibility = if (w.toolbar) View.VISIBLE else View.GONE
+            findViewById<View>(R.id.sessionCue)?.visibility = if (w.sessionCue) View.VISIBLE else View.GONE
+            return
+        }
         if (imeVisible) {
             timerRowWantedVisible = findViewById<View>(R.id.timerRowInclude)?.visibility == View.VISIBLE
         }
