@@ -79,14 +79,17 @@ object DrillUi {
 
     fun update(block: (DrillUiState) -> DrillUiState) {
         val next = synchronized(lock) {
+            val previous = state
             val updated = block(state)
             state = updated
-            updated
+            if (updated == previous) null else updated
         }
-        for (listener in listeners) {
-            try {
-                listener(next)
-            } catch (_: Exception) {
+        if (next != null) {
+            for (listener in listeners) {
+                try {
+                    listener(next)
+                } catch (_: Exception) {
+                }
             }
         }
     }
