@@ -117,6 +117,7 @@ object Prefs {
     private const val KEY_DETECT_CODE = "detect_code"
     private const val KEY_GENERATED_DECK = "generated_deck"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
+    private const val KEY_PROMPT_CHIPS = "prompt_chips"
 
     val DEFAULT_URL: String get() = BuildConfig.DEFAULT_ANKI_URL
     const val DEFAULT_DECK = "VoiceSRS-Test"
@@ -341,6 +342,18 @@ object Prefs {
     /** Finished-block history string (see StudyBlockStore.appendHistory); "" when none. */
     fun loadBlockHistory(ctx: Context): String =
         ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(StudyBlockStore.KEY_HISTORY, "") ?: ""
+
+    fun loadPromptChips(ctx: Context): List<PromptChip> =
+        PromptChips.fromJson(ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(KEY_PROMPT_CHIPS, "") ?: "")
+
+    fun savePromptChips(ctx: Context, chips: List<PromptChip>) {
+        ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putString(KEY_PROMPT_CHIPS, PromptChips.toJson(chips)).apply()
+    }
+
+    /** Back to the built-in list (Today's report only). */
+    fun resetPromptChips(ctx: Context) {
+        ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().remove(KEY_PROMPT_CHIPS).apply()
+    }
 
     fun save(ctx: Context, cfg: AnkiConfig) {
         val plain = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)

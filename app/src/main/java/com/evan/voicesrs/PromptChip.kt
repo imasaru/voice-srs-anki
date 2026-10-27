@@ -31,5 +31,31 @@ object PromptChips {
         return chips.map { if (it.id == REPORT_ID) def else it }
     }
 
-    // Step 2 adds toJson / fromJson here.
+    /** JSON array of {"id","name","prompt","source"(enum name),"builtIn"}; order kept. */
+    fun toJson(chips: List<PromptChip>): String {
+        val arr = JSONArray()
+        for (c in chips) arr.put(JSONObject()
+            .put("id", c.id).put("name", c.name).put("prompt", c.prompt)
+            .put("source", c.source.name).put("builtIn", c.builtIn))
+        return arr.toString()
+    }
+
+    /** Blank or unparseable text -> defaults(). "[]" -> empty list (the user deleted everything).
+     *  An entry with a missing/blank id or name, or an unknown source, is skipped; the rest are kept in order. */
+    fun fromJson(text: String): List<PromptChip> {
+        if (text.isBlank()) return defaults()
+        val arr = try { JSONArray(text) } catch (_: Exception) { return defaults() }
+        val out = ArrayList<PromptChip>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val id = o.optString("id", "")
+            val name = o.optString("name", "")
+            if (id.isBlank() || name.isBlank()) continue
+            val prompt = o.optString("prompt", "")
+            val source = ChipSource.values().firstOrNull { it.name == o.optString("source") } ?: continue
+            val builtIn = o.optBoolean("builtIn", false)
+            out.add(PromptChip(id, name, prompt, source, builtIn))
+        }
+        return out
+    }
 }
