@@ -25,6 +25,7 @@ class StudyToolRunner(
     private val anki: StudyAnki,
     private val defaultDeck: String,
     private val tz: TimeZone = TimeZone.getDefault(),
+    private val pending: () -> List<PendingGrade> = { emptyList() },
     private val timeLog: () -> List<AnswerTime> = { AnswerTimeLog.snapshot() }
 ) {
     fun invoke(name: String, argsJson: String): String {
@@ -42,10 +43,11 @@ class StudyToolRunner(
             buildToolResponse(name, from, to, deck, limit, rows, cards)
         } catch (e: Exception) {
             // Anki unreachable: surface the error but keep the local answer
-            // times for the requested range so a report is never silent.
+            // times for the requested range so a grade or chat turn is not aborted.
             JSONObject()
                 .put("error", e.javaClass.simpleName)
                 .put("answer_time", answerTime(from, to, deck, 0))
+                .put("pending_sync", pendingSync(from, to))
                 .toString()
         }
     }
@@ -61,6 +63,7 @@ class StudyToolRunner(
     ): String = when (name) {
         StudyTools.GET_STUDY_SUMMARY -> StudyTools.summary(rows)
             .put("answer_time", answerTime(from, to, deck, rows.size))
+            .put("pending_sync", pendingSync(from, to))
             .toString()
         StudyTools.GET_CATEGORY_STATS -> JSONObject()
             .put("categories", StudyTools.categoryStats(rows, cards))
@@ -81,22 +84,34 @@ class StudyToolRunner(
             reviews
         )
 
+    /** Grades still waiting in the local queue for [from]..[to]. Anki's review
+     *  counts miss these, so the report shows them alongside. Any failure is 0
+     *  so a report is never aborted by the local read. */
+    fun pendingSync(from: String, to: String): Int = try {
+        val start = StudyTools.dayStartMs(from, tz)
+        val end = StudyTools.dayEndMs(to, tz)
+        pending().count { it.queuedAtMs in start..end }
+    } catch (_: Exception) {
+        0
+    }
+
     fun todayBundle(deck: String): String {
         val day = StudyTools.today(tz)
         val target = deck.ifBlank { defaultDeck }
         return try {
             val (rows, cards) = load(day, day, target)
-            StudyTools.formatBundle(
+            JSONObject(StudyTools.formatBundle(
                 StudyTools.summary(rows),
                 StudyTools.categoryStats(rows, cards),
                 StudyTools.missed(rows, cards, StudyTools.DEFAULT_LIMIT)
-            )
+            )).put("pending_sync", pendingSync(day, day)).toString()
         } catch (e: Exception) {
             // Anki unreachable: surface the error but keep the local answer
             // times for the requested range so today's report is never silent.
             JSONObject()
                 .put("error", e.javaClass.simpleName)
                 .put("answer_time", answerTime(day, day, target, 0))
+                .put("pending_sync", pendingSync(day, day))
                 .toString()
         }
     }
