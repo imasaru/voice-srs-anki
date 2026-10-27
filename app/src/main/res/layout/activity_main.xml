@@ -282,17 +282,6 @@
             android:orientation="horizontal">
 
             <Button
-                android:id="@+id/stopButton"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:enabled="false"
-                android:minHeight="40dp"
-                android:text="@string/app_stop"
-                android:textSize="13sp" />
-
-            <Button
                 android:id="@+id/settingsButton"
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="0dp"

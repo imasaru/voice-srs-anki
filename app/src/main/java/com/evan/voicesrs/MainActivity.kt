@@ -80,7 +80,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var errorCard: MaterialCardView
     private lateinit var errorText: TextView
     private lateinit var startButton: Button
-    private lateinit var stopButton: Button
     private var showAnswerButton: Button? = null
     private var silentSwitch: com.google.android.material.materialswitch.MaterialSwitch? = null
     private var timerMinus: Button? = null
@@ -232,7 +231,6 @@ class MainActivity : AppCompatActivity() {
         errorCard = findViewById(R.id.errorCard)
         errorText = findViewById(R.id.errorText)
         startButton = findViewById(R.id.startButton)
-        stopButton = findViewById(R.id.stopButton)
         showAnswerButton = findViewById(R.id.showAnswerButton)
         showAnswerButton?.setOnClickListener { DrillService.submitShowAnswer() }
         silentSwitch = findViewById(R.id.drillSilentSwitch)
@@ -251,9 +249,12 @@ class MainActivity : AppCompatActivity() {
         chipHard?.setOnClickListener { if (ratingOpen()) DrillService.submitTestGrade("hard") }
         chipGood?.setOnClickListener { if (ratingOpen()) DrillService.submitTestGrade("good") }
         chipEasy?.setOnClickListener { if (ratingOpen()) DrillService.submitTestGrade("easy") }
-        startButton.setOnClickListener { ensurePermissionsAndStart() }
-        stopButton.setOnClickListener {
-            stopService(Intent(this, DrillService::class.java))
+        startButton.setOnClickListener {
+            if (PlaybackControl.drillButtonStops(DrillUi.state.drillRunning, DrillService.running)) {
+                stopService(Intent(this, DrillService::class.java))
+            } else {
+                ensurePermissionsAndStart()
+            }
         }
         findViewById<Button>(R.id.settingsButton).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -864,11 +865,11 @@ class MainActivity : AppCompatActivity() {
         RatingSuggest.apply(chipHard, 2, sel, suggested)
         RatingSuggest.apply(chipGood, 3, sel, suggested)
         RatingSuggest.apply(chipEasy, 4, sel, suggested)
-        startButton.isEnabled = !state.drillRunning
-        if (headerMeta != null) {
-            startButton.visibility = if (drilling) View.GONE else View.VISIBLE
-        }
-        stopButton.isEnabled = state.drillRunning
+        startButton.isEnabled = true
+        startButton.visibility = View.VISIBLE
+        startButton.setText(
+            if (PlaybackControl.drillButtonStops(state.drillRunning, DrillService.running)) R.string.app_stop else R.string.app_start
+        )
         showAnswerButton?.visibility = if (controls.showAnswer) View.VISIBLE else View.GONE
         renderCue(state, drilling, silentOn)
         paintPlayback(PlaybackUi.state)
@@ -891,14 +892,12 @@ class MainActivity : AppCompatActivity() {
         pause.visibility = if (PlaybackControl.pauseVisible()) View.VISIBLE else View.GONE
         val drillPaused = DrillUi.state.chatPaused
         pause.isEnabled = PlaybackControl.pauseEnabled(snap, drilling, drillPaused)
-        val stopButton = findViewById<Button>(R.id.stopButton)
         if (pauseBaseTint == null) pauseBaseTint = pause.backgroundTintList
         if (pauseBaseText == null) pauseBaseText = pause.textColors
-        if (PlaybackControl.pauseIconOnly(snap, drilling, drillPaused)) {
-            pause.text = ""
-            mb?.setIconResource(R.drawable.ic_drill_pause)
-            mb?.iconPadding = 0
-            pause.contentDescription = getString(R.string.drill_pause_cd)
+        if (PlaybackControl.pauseShowsDrillPause(snap, drilling, drillPaused)) {
+            mb?.icon = null
+            pause.text = getString(R.string.drill_pause)
+            pause.contentDescription = null
             pause.backgroundTintList = pauseBaseTint
             pauseBaseText?.let { pause.setTextColor(it) }
         } else if (drilling && drillPaused && snap.state == PlaybackControl.State.IDLE) {
@@ -920,19 +919,6 @@ class MainActivity : AppCompatActivity() {
                 getString(R.string.playback_resume)
             } else {
                 getString(R.string.playback_pause)
-            }
-        }
-        val sb = stopButton as? com.google.android.material.button.MaterialButton
-        if (sb != null) {
-            if (drilling) {
-                stopButton.text = ""
-                sb.setIconResource(R.drawable.ic_drill_stop)
-                sb.iconPadding = 0
-                stopButton.contentDescription = getString(R.string.drill_stop_cd)
-            } else {
-                sb.icon = null
-                stopButton.text = getString(R.string.app_stop)
-                stopButton.contentDescription = null
             }
         }
         val status = findViewById<TextView>(R.id.playbackStatus)

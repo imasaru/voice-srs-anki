@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Voice SRS</string>
-    <string name="app_start">Start drill</string>
-    <string name="app_stop">Stop drill</string>
+    <string name="app_start">▶ Start drill</string>
+    <string name="app_stop">⏹ Stop drill</string>
     <string name="app_settings">Settings</string>
     <string name="app_sync">Sync</string>
     <string name="pending_sync">%1$d pending sync</string>
@@ -166,8 +166,7 @@
     <string name="chat_paused">Paused, asking AI</string>
     <string name="chat_resume">Resume</string>
     <string name="drill_resume">▶ Resume</string>
-    <string name="drill_pause_cd">Pause drill</string>
-    <string name="drill_stop_cd">Stop drill</string>
+    <string name="drill_pause">⏸ Pause</string>
     <string name="playback_pause">Pause</string>
     <string name="playback_resume">Resume reading</string>
     <string name="playback_read_section">Read this section</string>
