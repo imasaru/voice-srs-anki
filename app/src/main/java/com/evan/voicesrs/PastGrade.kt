@@ -98,4 +98,10 @@ object PastGrade {
     }
 
     fun cancel(previousLetter: String?): String? = previousLetter
+
+    /**
+     * Commit for a rating-only regrade (previewEase, blank letter): keep the
+     * spoken transcript as-is and do not regenerate the explanation.
+     */
+    fun commitEase(transcript: String, ease: Int): Commit = Commit(transcript, ease, regenerate = false)
 }

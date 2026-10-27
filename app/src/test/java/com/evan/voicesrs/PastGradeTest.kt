@@ -108,4 +108,12 @@ class PastGradeTest {
         assertNull(PastGrade.previewEase(ease = 3, currentCard = true, rated = true))
         assertNull(PastGrade.previewEase(ease = 3, currentCard = false, rated = false))
     }
+
+    @Test
+    fun `commitEase keeps transcript and never regenerates`() {
+        val c = PastGrade.commitEase("B because Delta Sharing", 2)
+        assertEquals("B because Delta Sharing", c.transcript)
+        assertEquals(2, c.ease)
+        assertFalse(c.regenerate)
+    }
 }
