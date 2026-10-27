@@ -14,6 +14,10 @@ import java.util.TimeZone
 class StudyToolRunnerTest {
     private val tz = TimeZone.getTimeZone("UTC")
 
+    /** Today in [tz]; todayBundle reads the real clock, so a fixed date rots at midnight. */
+    private fun today(): String =
+        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply { timeZone = tz }.format(java.util.Date())
+
     private class FakeAnki(
         private val rowsByDeck: Map<String, List<StudyReview>>,
         private val crashDeck: String? = null,
@@ -42,7 +46,7 @@ class StudyToolRunnerTest {
 
     @Test
     fun todayBundleIncludesSubdeckReviews() {
-        val day = "2026-10-26"
+        val day = today()
         val at = StudyTools.dayStartMs(day, tz) + 60_000L
         val fake = FakeAnki(
             mapOf(
@@ -57,7 +61,7 @@ class StudyToolRunnerTest {
 
     @Test
     fun todayBundleReturnsErrorWhenCardsInfoThrows() {
-        val day = "2026-10-26"
+        val day = today()
         val at = StudyTools.dayStartMs(day, tz) + 60_000L
         val fake = FakeAnki(
             mapOf("Parent" to listOf(StudyReview(at, 100L, 3, 5000L))),
@@ -70,7 +74,7 @@ class StudyToolRunnerTest {
 
     @Test
     fun todayBundleErrorKeepsLocalAnswerTime() {
-        val day = "2026-10-26"
+        val day = today()
         val at = StudyTools.dayStartMs(day, tz) + 60_000L
         val log = listOf(AnswerTime(1L, "Parent", 3, 3000L, at))
         val fake = FakeAnki(
