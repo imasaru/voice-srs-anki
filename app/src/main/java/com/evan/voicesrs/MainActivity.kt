@@ -74,6 +74,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var syncChip: Chip
     /** Last pending-sync count applied by [render]; drives menu invalidation. */
     private var renderedPendingSync = -1
+    /** Deck the running drill was started against; null when no drill has run here. */
+    private var drillDeck: String? = null
     private lateinit var errorCard: MaterialCardView
     private lateinit var errorText: TextView
     private lateinit var startButton: Button
@@ -378,6 +380,12 @@ class MainActivity : AppCompatActivity() {
             DrillUi.update { it.copy(pendingSync = pending) }
         }
         refreshCounts()
+        val now = Prefs.load(this).deck
+        if (DeckName.changedMidDrill(drillDeck, now, DrillService.running)) {
+            Toast.makeText(this, "Deck changed to " + DeckName.split(now).second.ifBlank { now } + ". Stop and start the drill to switch.", Toast.LENGTH_LONG).show()
+            drillDeck = now
+        }
+        if (!DrillService.running) drillDeck = null
         render(DrillUi.state)
         refreshTimerRow()
         elapsedResumed = true
@@ -1142,6 +1150,7 @@ class MainActivity : AppCompatActivity() {
     private fun startDrillService() {
         try {
             ContextCompat.startForegroundService(this, Intent(this, DrillService::class.java))
+            drillDeck = Prefs.load(this).deck
             Toast.makeText(this, "Drill starting…", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Log.e("MainActivity", "startForegroundService failed", e)
