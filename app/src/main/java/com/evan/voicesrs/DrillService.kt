@@ -363,11 +363,11 @@ class DrillService : Service(), VoiceIo {
     /** Chat pause blocks the session thread on this card. It does not end the drill. */
     private val chatPaused = AtomicBoolean(false)
     /** Goal-clock base for the elapsed chip; mirrors the [started] used by finishGoal. */
-    private var elapsedStartMs = 0L
+    @Volatile private var elapsedStartMs = 0L
     /** Cumulative paused time already subtracted from the elapsed chip. */
-    private var elapsedPausedTotalMs = 0L
+    @Volatile private var elapsedPausedTotalMs = 0L
     /** SystemClock.elapsedRealtime the drill last paused; 0 while running. */
-    private var elapsedPausedSinceMs = 0L
+    @Volatile private var elapsedPausedSinceMs = 0L
     private val chatPauseLatch = AtomicReference<CountDownLatch?>(null)
     @Volatile private var thinkDeadlineMs = 0L
     /** Remaining think time frozen by a chat pause. Negative means the timer is not frozen. */

@@ -112,6 +112,10 @@ class MainActivity : AppCompatActivity() {
     private val elapsedHandler = Handler(Looper.getMainLooper())
     /** Ticks the elapsed chip once a second while a drill runs. Never touches the chat pane. */
     private val elapsedRunnable: Runnable = Runnable { tickElapsed() }
+    /** True between onResume and onPause; the ticker only runs while resumed. */
+    private var elapsedResumed = false
+    /** True while the ticker is scheduled, so render() can start it when a drill begins. */
+    private var elapsedTicking = false
 
     private fun tickElapsed() {
         val chip = elapsedChip ?: return
@@ -129,17 +133,20 @@ class MainActivity : AppCompatActivity() {
             elapsedHandler.postDelayed(elapsedRunnable, 1_000L)
         } else {
             elapsedHandler.removeCallbacks(elapsedRunnable)
+            elapsedTicking = false
             chip.visibility = View.GONE
             chip.text = ""
         }
     }
 
     private fun startElapsedTicker() {
+        elapsedTicking = true
         elapsedHandler.removeCallbacks(elapsedRunnable)
         elapsedHandler.post(elapsedRunnable)
     }
 
     private fun stopElapsedTicker() {
+        elapsedTicking = false
         elapsedHandler.removeCallbacks(elapsedRunnable)
     }
 
@@ -365,11 +372,13 @@ class MainActivity : AppCompatActivity() {
         refreshCounts()
         render(DrillUi.state)
         refreshTimerRow()
+        elapsedResumed = true
         startElapsedTicker()
     }
 
     override fun onPause() {
         chatPane?.setResumed(false)
+        elapsedResumed = false
         stopElapsedTicker()
         super.onPause()
     }
@@ -668,6 +677,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun render(state: DrillUiState) {
+        // A drill that starts after onResume must start the elapsed ticker too.
+        if (elapsedResumed && !elapsedTicking && ElapsedChip.visible(state.drillRunning)) startElapsedTicker()
         val cfg = Prefs.load(this)
         paintExamCountdown(cfg)
         val drillingNow = state.drillRunning || DrillService.running
