@@ -122,6 +122,7 @@ object CardFaceBinder {
         rating: TextView,
         transcript: String,
         ease: Int?,
+        onRegrade: (() -> Unit)? = null,
         heading: TextView? = null
     ) {
         heading?.text = TapAnswer.heading(transcript)
@@ -144,6 +145,13 @@ object CardFaceBinder {
         bg.cornerRadius = 12f * rating.resources.displayMetrics.density
         bg.setColor(colors.background)
         rating.background = bg
+        if (onRegrade != null) {
+            rating.isClickable = true
+            rating.setOnClickListener { onRegrade() }
+        } else {
+            rating.isClickable = false
+            rating.setOnClickListener(null)
+        }
         spoken.contentDescription = "Your answer ${bubble.answer}. Rating ${bubble.rating}."
     }
 
