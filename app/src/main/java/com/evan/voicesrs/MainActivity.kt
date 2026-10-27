@@ -196,8 +196,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // Fold/unfold recreates the activity; keep the drill's deck so the notice still works.
+        outState.putString(KEY_DRILL_DECK, drillDeck)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        drillDeck = savedInstanceState?.getString(KEY_DRILL_DECK)
         runCatching { ChatHistoryStore.load(filesDir) }
         runCatching { AnswerTimeLog.init(filesDir) }
         setContentView(R.layout.activity_main)
@@ -1156,5 +1163,8 @@ class MainActivity : AppCompatActivity() {
             Log.e("MainActivity", "startForegroundService failed", e)
             Toast.makeText(this, "Could not start drill: ${e.message}", Toast.LENGTH_LONG).show()
         }
+    }
+    private companion object {
+        const val KEY_DRILL_DECK = "drillDeck"
     }
 }
