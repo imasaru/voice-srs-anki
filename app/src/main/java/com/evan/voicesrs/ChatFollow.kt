@@ -55,7 +55,12 @@ class ChatFollow {
     }
 
     fun onPill(view: View): Decision {
-        if (view.holdingOrdinal == 0) return decide(view, Scroll.NONE, moved = false)
+        if (view.holdingOrdinal == 0) {
+            if (view.liveOrdinal > 0) {
+                return decide(view.copy(atBottom = true), Scroll.TO_LIVE, moved = true)
+            }
+            return decide(view, Scroll.NONE, moved = false)
+        }
         return decide(view.copy(holdingOrdinal = 0, atBottom = true), Scroll.TO_LIVE, moved = true)
     }
 
@@ -84,7 +89,7 @@ class ChatFollow {
         return Decision(
             view = view,
             scroll = scroll,
-            showPill = holding,
+            showPill = holding || (view.liveOrdinal > 0 && !view.liveVisible),
             mayBegin = mayBegin,
             maySpeak = maySpeak,
             mayStartTiming = maySpeak,

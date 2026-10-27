@@ -13,7 +13,7 @@ class ChatFollowTest {
         val asked = follow.onQuestion(ChatFollow.View(atBottom = true), 3)
         assertEquals(ChatFollow.Scroll.TO_LIVE, asked.scroll)
         assertTrue(asked.movedScroll)
-        assertFalse(asked.showPill)
+        assertTrue(asked.showPill)
         assertFalse(asked.mayBegin)
         assertFalse(asked.mayStartTiming)
         val seen = follow.onVisible(asked.view, true)
@@ -29,7 +29,7 @@ class ChatFollowTest {
         val asked = follow.onQuestion(ChatFollow.View(atBottom = false), 4)
         assertEquals(ChatFollow.Scroll.TO_LIVE, asked.scroll)
         assertTrue(asked.movedScroll)
-        assertFalse(asked.showPill)
+        assertTrue(asked.showPill)
         assertEquals(0, asked.view.holdingOrdinal)
         val seen = follow.onVisible(asked.view.copy(liveVisible = true), true)
         assertTrue(seen.mayBegin)
@@ -43,7 +43,7 @@ class ChatFollowTest {
         assertEquals(ChatFollow.Scroll.TO_LIVE, pill.scroll)
         assertEquals(0, pill.view.holdingOrdinal)
         assertTrue(pill.view.atBottom)
-        assertFalse(pill.showPill)
+        assertTrue(pill.showPill)
         assertFalse(pill.mayStartTiming)
         val seen = follow.onVisible(pill.view, true)
         assertTrue(seen.mayBegin)
@@ -62,7 +62,7 @@ class ChatFollowTest {
         assertEquals(0, back.view.holdingOrdinal)
         assertEquals(ChatFollow.Scroll.TO_LIVE, back.scroll)
         assertTrue(back.movedScroll)
-        assertFalse(back.showPill)
+        assertTrue(back.showPill)
         val seen = follow.onVisible(back.view, true)
         assertTrue(seen.mayStartTiming)
     }
@@ -136,5 +136,22 @@ class ChatFollowTest {
         val idle = follow.onPill(ChatFollow.View())
         assertFalse(idle.autoAdvance)
         assertFalse(idle.stoleFocus)
+    }
+
+    @Test
+    fun `a live question off-screen shows the pill and the pill reveals it`() {
+        val asked = follow.onQuestion(ChatFollow.View(atBottom = true), 3)
+        val notSeen = follow.onVisible(asked.view, false)
+        assertTrue(notSeen.showPill)
+        assertFalse(notSeen.mayBegin)
+        val revealed = follow.onPill(notSeen.view)
+        assertEquals(ChatFollow.Scroll.TO_LIVE, revealed.scroll)
+        assertEquals(0, revealed.view.holdingOrdinal)
+        val seen = follow.onVisible(revealed.view, true)
+        assertFalse(seen.showPill)
+        assertTrue(seen.mayBegin)
+
+        val none = follow.onVisible(ChatFollow.View(liveOrdinal = 0, liveVisible = false), false)
+        assertFalse(none.showPill)
     }
 }
