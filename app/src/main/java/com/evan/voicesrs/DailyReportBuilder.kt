@@ -143,5 +143,59 @@ object DailyReportBuilder {
     }
     fun pct(d: Double): String = String.format(java.util.Locale.ROOT, "%.1f%%", d)  // 75.0%
     private fun pad5(t: String): String = if (t.length == 5) t + ":00" else t
-    fun render(r: DailyReport): String = TODO()
+    fun render(r: DailyReport): String {
+        val sb = StringBuilder()
+        sb.append("# Daily study report — ").append(r.date).append('\n')
+
+        sb.append("## Time span\n")
+        val span = if (r.firstTime != null && r.lastTime != null) "${r.firstTime}–${r.lastTime}" else "–"
+        sb.append(span).append('\n')
+        if (r.zeroMsReviews > 0) {
+            sb.append("Note: ").append(r.zeroMsReviews)
+                .append(" of ").append(r.reviews)
+                .append(" answer times were recorded as 0 ms, so time-per-card is not reliable.")
+                .append('\n')
+        }
+
+        sb.append("## Volume & accuracy\n")
+        sb.append(r.cards).append(" cards, ").append(r.reviews).append(" reviews, ")
+            .append(pct(r.accuracyPct)).append(" accuracy, ")
+            .append(pct(r.firstTryPct)).append(" first-try\n")
+        sb.append("Again ").append(r.again).append(" / Hard ").append(r.hard)
+            .append(" / Good ").append(r.good).append(" / Easy ").append(r.easy).append('\n')
+        sb.append(r.newCards).append(" new, ").append(r.reviewCards).append(" review\n")
+
+        sb.append("## By deck\n")
+        for (row in r.byDeck) {
+            sb.append("- ").append(row.name).append(": ").append(pct(row.pct))
+                .append(" (").append(row.total).append(" reviews)").append('\n')
+        }
+
+        sb.append("## Weakest domains\n")
+        for (row in r.byDomain) {
+            sb.append("- ").append(row.name).append(": ").append(pct(row.pct))
+                .append(" (").append(row.correct).append("/").append(row.total).append(")").append('\n')
+        }
+
+        sb.append("## Missed cards by concept\n")
+        for ((group, cards) in r.missedByConcept) {
+            sb.append("### ").append(group).append(" (").append(cards.size).append(")\n")
+            for (c in cards) {
+                val stem = if (c.stem.length > 100) c.stem.substring(0, 100) else c.stem
+                sb.append("- ").append(stem).append(" → ").append(c.correctText).append('\n')
+            }
+        }
+
+        sb.append("## Focus next\n")
+        for (row in r.byDomain.take(3)) {
+            sb.append("- ").append(row.name).append('\n')
+        }
+        for (row in r.byDeck) {
+            if (row.pct < 60.0) {
+                sb.append("- Redo ").append(row.name).append('\n')
+            }
+        }
+
+        return sb.toString()
+    }
 }
