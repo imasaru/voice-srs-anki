@@ -43,6 +43,7 @@ import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 /** Deck, due count, current card, and Start / Stop / Settings. */
@@ -828,23 +829,21 @@ class MainActivity : AppCompatActivity() {
             chatInputView?.hint = getString(hintRes)
             appliedHintRes = hintRes
         }
-        val reportChip = findViewById<Chip>(R.id.todayReportChip)
-        if (reportChip != null) {
-            val showReport = !hasQuestion && cfg.aiEnabled
-            reportChip.visibility = if (showReport) View.VISIBLE else View.GONE
-            if (showReport && reportChip.tag == null) {
-                reportChip.tag = "wired"
-                reportChip.setOnClickListener {
-                    val fullDeck = try {
-                        Prefs.load(this).deck
-                    } catch (_: Exception) {
-                        ""
-                    }
-                    if (fullDeck.isBlank()) {
-                        GeneralChat.showNotice(ChatSend.visible(ChatSend.Fail.NO_DECK))
-                    } else {
-                        GeneralChat.todayReport(this, fullDeck)
-                    }
+        val chipScroll = findViewById<View>(R.id.promptChipScroll)
+        val chipRow = findViewById<ChipGroup>(R.id.promptChipRow)
+        if (chipScroll != null && chipRow != null) {
+            val showChips = !hasQuestion && cfg.aiEnabled
+            val promptChips = if (showChips) Prefs.loadPromptChips(this) else emptyList()
+            chipScroll.visibility = if (showChips && promptChips.isNotEmpty()) View.VISIBLE else View.GONE
+            val sig = PromptChips.toJson(promptChips)
+            if (showChips && chipRow.tag != sig) {
+                chipRow.tag = sig
+                chipRow.removeAllViews()
+                for (pc in promptChips) {
+                    val chipView = layoutInflater.inflate(R.layout.item_prompt_chip, chipRow, false) as Chip
+                    chipView.text = pc.name
+                    chipView.setOnClickListener { runPromptChip(pc) }
+                    chipRow.addView(chipView)
                 }
             }
         }
@@ -928,6 +927,36 @@ class MainActivity : AppCompatActivity() {
             PlaybackControl.State.PAUSED -> getString(R.string.playback_resume)
             PlaybackControl.State.IDLE -> ""
         }
+    }
+
+    /** One-tap prompt chip tap: the card on screen and saved card chats are sent only when the chip asks for them. */
+    private fun runPromptChip(pc: PromptChip) {
+        val fullDeck = try {
+            Prefs.load(this).deck
+        } catch (_: Exception) {
+            ""
+        }
+        if (fullDeck.isBlank()) {
+            GeneralChat.showNotice(ChatSend.visible(ChatSend.Fail.NO_DECK))
+            return
+        }
+        val cardBlob = if (pc.source == ChipSource.CURRENT_CARD) {
+            PromptChipRow.cardBlob(renderedFront, renderedBack)
+        } else {
+            ""
+        }
+        val chatsBlob = if (pc.source == ChipSource.CARD_CHATS) {
+            val text = try {
+                val f = ThreadStore.file(filesDir)
+                if (f.isFile) f.readText() else ""
+            } catch (_: Exception) {
+                ""
+            }
+            PromptChipRow.chatsBlob(text)
+        } else {
+            ""
+        }
+        GeneralChat.runChip(this, fullDeck, pc, cardBlob = cardBlob, chatsBlob = chatsBlob)
     }
 
     /** Countdown while thinking. The pause row replaces it and stays until Resume or a rating. */

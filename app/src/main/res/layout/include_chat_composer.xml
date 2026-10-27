@@ -19,15 +19,20 @@
         android:textSize="11sp"
         android:visibility="gone" />
 
-    <com.google.android.material.chip.Chip
-        android:id="@+id/todayReportChip"
-        style="@style/Widget.Material3.Chip.Suggestion"
-        android:layout_width="wrap_content"
+    <HorizontalScrollView
+        android:id="@+id/promptChipScroll"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="4dp"
-        android:text="@string/today_report"
-        android:visibility="gone"
-        app:checkedIconVisible="false" />
+        android:scrollbars="none"
+        android:visibility="gone">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/promptChipRow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:singleLine="true" />
+    </HorizontalScrollView>
 
     <TextView
         android:id="@+id/chatDictateHint"
