@@ -17,13 +17,15 @@ class LogSafetyTest {
     private val logMethods = listOf("Log.v(", "Log.d(", "Log.i(", "Log.w(", "Log.e(", "Log.wtf(")
 
     private val secretWords = listOf(
-        "apikey", "aiaiapikey", "neuraltoken", "token",
+        "apikey", "aiapikey", "neuraltoken", "token",
         "secret", "password", "authorization", "bearer"
     )
 
     private val sourceRoot = File("src/main/java/com/evan/voicesrs")
 
     private val stringLiteral = Regex("\"(?:[^\"\\\\]|\\\\.)*\"")
+
+    private val template = Regex("\\$\\{[^}]*\\}|\\$[A-Za-z_][A-Za-z0-9_]*")
 
     private data class LogCall(val path: String, val lineNo: Int, val raw: String)
 
@@ -43,7 +45,12 @@ class LogSafetyTest {
 
     private fun codePart(line: String): String {
         // Strip quoted string literals so the TAG arg and literal text are ignored.
-        return stringLiteral.replace(line, "").lowercase()
+        // But keep string-template expressions ($x / ${x}) inside literals,
+        // since that is how a secret would get interpolated into log text.
+        val templates = stringLiteral.findAll(line).flatMap { lit ->
+            template.findAll(lit.value).map { it.value }
+        }.joinToString(" ")
+        return (stringLiteral.replace(line, "") + " " + templates).lowercase()
     }
 
     @Test
@@ -60,6 +67,12 @@ class LogSafetyTest {
             "These Log call site(s) reference a secret:\n" + violations.joinToString("\n"),
             violations.isEmpty()
         )
+    }
+
+    @Test
+    fun templateInsideLiteralIsStillChecked() {
+        val code = codePart("Log.d(TAG, \"key=\${prefs.apiKey} t=\$neuralToken\")")
+        assertTrue(code, code.contains("apikey") && code.contains("neuraltoken"))
     }
 
     @Test
