@@ -66,6 +66,8 @@ class ChatPane(
     private var lastRows: List<ChatRow>? = null
     private var lastPaused: Boolean? = null
     private var lastSilent: Boolean? = null
+    /** Extra re-pin attempts after a new question's scroll lands short on a long history. */
+    private var pinRetries = 0
 
     private val tick = object : Runnable {
         override fun run() {
@@ -242,6 +244,7 @@ class ChatPane(
         val first = if (preserve) lm?.findFirstVisibleItemPosition() ?: -1 else -1
         val top = if (first >= 0) lm?.findViewByPosition(first)?.top ?: 0 else 0
         applyFollow(decision, scrollNow = false)
+        if (decision.scroll == ChatFollow.Scroll.TO_LIVE) pinRetries = 1
         adapter.submitList(rows) {
             if (preserve && first >= 0) {
                 lm?.scrollToPositionWithOffset(first, top)
@@ -257,6 +260,13 @@ class ChatPane(
         if (!attached) return
         val visible = liveRowVisible()
         val bottom = isAtBottom()
+        if (!visible && pinRetries > 0 && followView.liveOrdinal > 0 && followView.holdingOrdinal == 0) {
+            pinRetries--
+            pinLiveToTop()
+            list.post { publishVisibility() }
+            return
+        }
+        if (visible) pinRetries = 0
         val view = followView.copy(atBottom = bottom, liveVisible = visible)
         val decision = if (view.holdingOrdinal != 0 && bottom) {
             follow.onScroll(view, true)

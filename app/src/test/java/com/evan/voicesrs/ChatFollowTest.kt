@@ -137,4 +137,22 @@ class ChatFollowTest {
         assertFalse(idle.autoAdvance)
         assertFalse(idle.stoleFocus)
     }
+
+    @Test
+    fun `a live question off-screen shows the pill and the pill reveals it`() {
+        val asked = follow.onQuestion(ChatFollow.View(atBottom = true), 3)
+        val notSeen = follow.onVisible(asked.view, false)
+        assertTrue(notSeen.showPill)
+        assertFalse(notSeen.mayBegin)
+        val revealed = follow.onPill(notSeen.view)
+        assertEquals(ChatFollow.Scroll.TO_LIVE, revealed.scroll)
+        assertEquals(0, revealed.view.holdingOrdinal)
+        assertFalse(revealed.showPill)
+        val seen = follow.onVisible(revealed.view, true)
+        assertFalse(seen.showPill)
+        assertTrue(seen.mayBegin)
+
+        val none = follow.onVisible(ChatFollow.View(liveOrdinal = 0, liveVisible = false), false)
+        assertFalse(none.showPill)
+    }
 }
