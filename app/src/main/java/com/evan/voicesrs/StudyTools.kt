@@ -12,7 +12,11 @@ data class StudyReview(
     val atMs: Long,
     val cardId: Long,
     val ease: Int,
-    val timeMs: Long
+    val timeMs: Long,
+    /** revlog type (0 learn, 1 review, 2 relearn, 3 filtered); -1 when unknown. */
+    val type: Int = -1,
+    /** Deck the review was fetched from; blank when unknown. */
+    val deck: String = ""
 )
 
 data class StudyCard(
@@ -82,7 +86,7 @@ object StudyTools {
             val at = row.optLong(0, 0L)
             val cid = row.optLong(1, 0L)
             if (at == 0L || cid == 0L) continue
-            out += StudyReview(at, cid, row.optInt(3, 0), row.optLong(7, 0L))
+            out += StudyReview(at, cid, row.optInt(3, 0), row.optLong(7, 0L), row.optInt(8, -1))
         }
         return out
     }

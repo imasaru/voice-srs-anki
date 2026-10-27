@@ -14,6 +14,8 @@ interface StudyAnki {
     fun cardReviewsTree(deck: String, startId: Long): List<StudyReview>
     fun cardsInfo(ids: List<Long>): List<OfflineCard>
     fun noteTags(ids: List<Long>): Map<Long, List<String>>
+    /** Deck, Domain, Stem and CorrectText per card for the daily report. */
+    fun reportFields(ids: List<Long>): Map<Long, ReportFields> = emptyMap()
 }
 
 /**
