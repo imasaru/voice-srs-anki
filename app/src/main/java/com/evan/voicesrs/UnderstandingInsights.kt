@@ -141,4 +141,46 @@ object UnderstandingInsights {
         }
         return out
     }
+
+    /**
+     * "## Where understanding broke" for messages with `at` in [startMs]..[endMs]:
+     * one bullet per card that had questions (report requests excluded) or a
+     * bookmark in the window, most questions first. [labels] names a card when
+     * the thread has no "Core concept" line.
+     */
+    fun whereBroke(json: String, startMs: Long, endMs: Long, labels: Map<Long, String> = emptyMap()): String {
+        val rows = ArrayList<Triple<Int, Boolean, String>>()
+        for ((cardId, all) in parse(json)) {
+            val today = all.filter { it.at in startMs..endMs }
+            val users = today.filter { it.role == "user" }
+            val bookmarked = users.any { it.text.startsWith(BOOKMARK) }
+            val asked = users.filter { !it.text.startsWith(BOOKMARK) }
+                .map { AskedQuestion(it.text, classify(it.text), it.at) }
+                .filter { it.type != QuestionType.REPORT_REQUEST }
+            if (asked.isEmpty() && !bookmarked) continue
+            val name = concept(all).ifBlank { labels[cardId].orEmpty() }.ifBlank { "Card $cardId" }
+            val line = StringBuilder("- ").append(oneLine(name, 110))
+            if (asked.isNotEmpty()) {
+                val main = CardInsight(cardId, asked, "", false).mainType
+                line.append(": ").append(asked.size).append(if (asked.size == 1) " question" else " questions")
+                    .append(" (mostly ").append(main.name.lowercase().replace('_', ' ')).append(")")
+                line.append(" — \"").append(oneLine(asked.first().text, 90)).append("\"")
+            }
+            if (bookmarked) line.append(if (asked.isEmpty()) ": bookmarked" else "; bookmarked")
+            rows += Triple(asked.size, bookmarked, line.toString())
+        }
+        val sb = StringBuilder("## Where understanding broke\n")
+        if (rows.isEmpty()) {
+            sb.append("- No card-thread questions or bookmarks today.\n")
+        } else {
+            rows.sortedWith(compareByDescending<Triple<Int, Boolean, String>> { it.first }.thenByDescending { it.second })
+                .forEach { sb.append(it.third).append('\n') }
+        }
+        return sb.toString()
+    }
+
+    private fun oneLine(t: String, max: Int): String {
+        val flat = t.replace(Regex("\\s+"), " ").trim()
+        return if (flat.length > max) flat.substring(0, max - 1).trimEnd() + "…" else flat
+    }
 }

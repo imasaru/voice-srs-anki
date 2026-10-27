@@ -118,6 +118,39 @@ class StudyToolRunner(
         }
     }
 
+    /**
+     * Today's full report as markdown from [DailyReportBuilder], for the
+     * parent deck and every subdeck, plus "Where understanding broke" from
+     * [threadsJson] (thread-history.json). Anki unreachable → an error report,
+     * never a zero report.
+     */
+    fun dailyReport(deck: String, issuedAtMs: Long, threadsJson: String = ""): String {
+        val day = StudyTools.today(tz)
+        val target = deck.ifBlank { defaultDeck }
+        val start = StudyTools.dayStartMs(day, tz)
+        val end = StudyTools.dayEndMs(day, tz)
+        val issued = java.text.SimpleDateFormat("HH:mm z", java.util.Locale.US).apply { timeZone = tz }.format(issuedAtMs)
+        val pending = pendingSync(day, day)
+        return try {
+            val rows = anki.cardReviewsTree(target, start - 1L).filter { it.atMs in start..end }
+            val ids = rows.map { it.cardId }.distinct()
+            val fields = try {
+                anki.reportFields(ids)
+            } catch (_: Exception) {
+                emptyMap()
+            }
+            val cards = ReportData.dumpCards(rows, fields, tz)
+            val labels = cards.associate { it.cid to it.stem }
+            val broke = if (threadsJson.isBlank()) "" else UnderstandingInsights.whereBroke(threadsJson, start, end, labels)
+            val md = DailyReportBuilder.render(DailyReportBuilder.build(day, cards), issued, broke)
+            if (pending > 0) "$md\nNote: $pending grades are queued offline and not yet in Anki, so they are not counted above.\n" else md
+        } catch (e: Exception) {
+            "# Daily study report — $day · issued $issued\n" +
+                "Error: could not read reviews from Anki (${e.javaClass.simpleName}). These are not zero reviews.\n" +
+                (if (pending > 0) "$pending grades are queued offline.\n" else "")
+        }
+    }
+
     fun load(from: String, to: String, deck: String): Pair<List<StudyReview>, Map<Long, StudyCard>> {
         val start = StudyTools.dayStartMs(from, tz)
         val end = StudyTools.dayEndMs(to, tz)
