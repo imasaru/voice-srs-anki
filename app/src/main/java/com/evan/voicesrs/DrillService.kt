@@ -228,6 +228,7 @@ class DrillService : Service(), VoiceIo {
             val svc = active ?: return
             if (!ChatPause.pauses(running, trigger)) return
             svc.enterChatPause()
+            runCatching { DrillUi.update { it.copy(manualPause = trigger == ChatPause.Trigger.MANUAL) } }
             if (ChatPause.triggerReengages(trigger)) svc.cancelAutoResume(showButton = true)
         }
 
@@ -879,6 +880,7 @@ class DrillService : Service(), VoiceIo {
                         memoHint = false,
                         chatShowResume = false,
                         chatResumePulse = false,
+                        manualPause = false,
                         heard = ""
                     )
                     when {
@@ -2427,6 +2429,7 @@ class DrillService : Service(), VoiceIo {
     private fun leaveChatPause(action: ChatPause.Action) {
         if (!ChatPause.accepts(action)) return
         if (!chatPaused.compareAndSet(true, false)) return
+        runCatching { DrillUi.update { it.copy(manualPause = false) } }
         val now = SystemClock.elapsedRealtime()
         if (elapsedPausedSinceMs > 0L) {
             elapsedPausedTotalMs += now - elapsedPausedSinceMs
