@@ -89,7 +89,8 @@ class ChatFollow {
         return Decision(
             view = view,
             scroll = scroll,
-            showPill = holding || (view.liveOrdinal > 0 && !view.liveVisible),
+            // Off-screen live question shows the pill, but not while a scroll to it is in flight (no flash per question).
+            showPill = holding || (scroll == Scroll.NONE && view.liveOrdinal > 0 && !view.liveVisible),
             mayBegin = mayBegin,
             maySpeak = maySpeak,
             mayStartTiming = maySpeak,
