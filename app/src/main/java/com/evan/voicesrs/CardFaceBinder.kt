@@ -370,7 +370,20 @@ object CardFaceBinder {
                     }
                 }
                 SectionFormat.Kind.CODE -> {
-                    sb.append(block.text)
+                    for (line in block.text.split('\n')) {
+                        val lineStart = sb.length
+                        sb.append(CodeIndent.expand(line))
+                        val depth = CodeIndent.depth(line)
+                        if (depth > 0) {
+                            val restPx = (view.paint.measureText(" ") * depth).toInt()
+                            sb.setSpan(
+                                android.text.style.LeadingMarginSpan.Standard(0, restPx),
+                                lineStart,
+                                sb.length,
+                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                            )
+                        }
+                    }
                     if (sb.length > start) {
                         sb.setSpan(TypefaceSpan("monospace"), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                         sb.setSpan(
