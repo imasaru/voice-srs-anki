@@ -4,7 +4,7 @@ import java.net.SocketTimeoutException
 import java.util.Locale
 
 /**
- * One line for Settings "Test connection" and the AI Test button.
+ * One line for Settings "Test Anki" and the AI Test button.
  * Never includes a deck list or a stack trace.
  */
 object ConnectionSummary {
