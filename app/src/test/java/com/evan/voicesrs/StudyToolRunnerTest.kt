@@ -108,4 +108,66 @@ class StudyToolRunnerTest {
         // Rows from every matching deck merged and sorted by atMs.
         assertEquals(listOf(2L, 3L, 1L), tree.map { it.cardId })
     }
+
+    @Test
+    fun todayBundleReportsPendingSyncCount() {
+        val day = today()
+        val start = StudyTools.dayStartMs(day, tz)
+        val fake = FakeAnki(
+            mapOf("Parent" to emptyList<StudyReview>())
+        )
+        val pending = listOf(
+            PendingGrade(1L, 3, start + 60_000L),
+            PendingGrade(2L, 3, start + 120_000L),
+            PendingGrade(3L, 3, start - 60_000L)
+        )
+        val runner = StudyToolRunner(fake, "Parent", tz, pending = { pending })
+        val bundle = JSONObject(runner.todayBundle("Parent"))
+        assertEquals(2, bundle.getInt("pending_sync"))
+    }
+
+    @Test
+    fun invokeSummaryReportsPendingSyncCount() {
+        val start = StudyTools.dayStartMs(today(), tz)
+        val fake = FakeAnki(
+            mapOf("Parent" to listOf(StudyReview(start + 60_000L, 100L, 3, 5000L)))
+        )
+        val pending = listOf(
+            PendingGrade(1L, 3, start + 60_000L),
+            PendingGrade(2L, 3, start + 120_000L),
+            PendingGrade(3L, 3, start - 60_000L)
+        )
+        val runner = StudyToolRunner(fake, "Parent", tz, pending = { pending })
+        val result = JSONObject(runner.invoke(StudyTools.GET_STUDY_SUMMARY, "{}"))
+        assertEquals(2, result.getInt("pending_sync"))
+    }
+
+    @Test
+    fun todayBundleErrorStillReportsPendingSyncCount() {
+        val day = today()
+        val start = StudyTools.dayStartMs(day, tz)
+        val fake = FakeAnki(
+            mapOf("Parent" to emptyList<StudyReview>()),
+            crashDeck = "Parent"
+        )
+        val pending = listOf(
+            PendingGrade(1L, 3, start + 60_000L),
+            PendingGrade(2L, 3, start + 120_000L),
+            PendingGrade(3L, 3, start - 60_000L)
+        )
+        val runner = StudyToolRunner(fake, "Parent", tz, pending = { pending })
+        val bundle = JSONObject(runner.todayBundle("Parent"))
+        assertTrue("expected an error key, got $bundle", bundle.has("error"))
+        assertEquals(2, bundle.getInt("pending_sync"))
+    }
+
+    @Test
+    fun todayBundleReportsZeroPendingSyncWhenEmpty() {
+        val fake = FakeAnki(
+            mapOf("Parent" to emptyList<StudyReview>())
+        )
+        val runner = StudyToolRunner(fake, "Parent", tz, pending = { emptyList() })
+        val bundle = JSONObject(runner.todayBundle("Parent"))
+        assertEquals(0, bundle.getInt("pending_sync"))
+    }
 }

@@ -86,7 +86,7 @@ object GeneralChat {
                     onTool = null
                     contextBlob = try {
                         val anki = AnkiConnect(cfg.url, cfg.apiKey)
-                        StudyToolRunner(anki, cfg.deck).todayBundle(cfg.deck)
+                        StudyToolRunner(anki, cfg.deck, pending = { LocalQueueStore(app.filesDir).readGrades() }).todayBundle(cfg.deck)
                     } catch (e: Exception) {
                         Log.w(TAG, "today report tools failed: ${e.javaClass.simpleName}")
                         """{"error":"${e.javaClass.simpleName}"}"""
@@ -96,7 +96,7 @@ object GeneralChat {
                     tools = StudyTools.schemas()
                     onTool = { toolName, args ->
                         val anki = AnkiConnect(cfg.url, cfg.apiKey)
-                        StudyToolRunner(anki, cfg.deck).invoke(toolName, args)
+                        StudyToolRunner(anki, cfg.deck, pending = { LocalQueueStore(app.filesDir).readGrades() }).invoke(toolName, args)
                     }
                 }
                 val paint: (String) -> Unit = { partial ->
