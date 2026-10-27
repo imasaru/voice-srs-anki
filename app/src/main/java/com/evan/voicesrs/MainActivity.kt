@@ -34,6 +34,8 @@ import java.time.LocalDate
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.chip.Chip
@@ -97,6 +99,10 @@ class MainActivity : AppCompatActivity() {
     private var chatDictation: ChatDictation? = null
     private var chatInputView: EditText? = null
     private var appliedHintRes = 0
+    /** Timer-row visibility captured before the IME opens; restored when it closes. */
+    private var timerRowWantedVisible = false
+    /** Last IME state we acted on, so visibility only changes when it flips. */
+    private var lastImeVisible = false
 
     private val reviewListener: (List<ReviewTurn>) -> Unit = {
         runOnUiThread {
@@ -213,6 +219,14 @@ class MainActivity : AppCompatActivity() {
             ).also { it.attach() }
         }
         applyAiChrome()
+        // Hide the header meta + timer row + bottom bar while the IME is up so
+        // the chat clears the keyboard. The deck line stays visible.
+        val imeRoot = findViewById<View>(android.R.id.content)
+        ViewCompat.setOnApplyWindowInsetsListener(imeRoot) { _, insets ->
+            applyImeLayout(insets.isVisible(WindowInsetsCompat.Type.ime()))
+            insets
+        }
+        ViewCompat.requestApplyInsets(imeRoot)
         refreshTimerRow()
     }
 
@@ -930,6 +944,23 @@ class MainActivity : AppCompatActivity() {
         }
         Prefs.save(this, TimerRowModel.setEnabled(cfg, checked))
         refreshTimerRow()
+    }
+
+    /**
+     * Hide the header meta line, timer row, and bottom bar while the IME is up
+     * so the chat clears the keyboard. The deck line stays visible. Called only
+     * when the IME state flips; the timer row is restored to its pre-IME state.
+     */
+    private fun applyImeLayout(imeVisible: Boolean) {
+        if (imeVisible == lastImeVisible) return
+        lastImeVisible = imeVisible
+        if (imeVisible) {
+            timerRowWantedVisible = findViewById<View>(R.id.timerRowInclude)?.visibility == View.VISIBLE
+        }
+        val d = ImeLayoutDecision.decide(imeVisible, timerRowWantedVisible)
+        headerMeta?.visibility = if (d.headerMeta) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.timerRowInclude)?.visibility = if (d.timerRow) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.bottomBar)?.visibility = if (d.bottomBar) View.VISIBLE else View.GONE
     }
 
     private fun refreshTimerRow() {

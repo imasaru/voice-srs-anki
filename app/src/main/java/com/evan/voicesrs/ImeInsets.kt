@@ -24,3 +24,34 @@ object ImeInsets {
      */
     fun inputRect(width: Int, height: Int): IntArray = intArrayOf(0, 0, width, height)
 }
+
+/**
+ * Decides which header rows to hide while the IME is up so the chat clears the
+ * keyboard. Pure (no Android types) so it is unit-testable on the JVM. The deck
+ * line (deckName/dueCount) is never touched and stays visible either way.
+ */
+object ImeLayoutDecision {
+    /**
+     * @param headerMeta hide the narrow-header meta line.
+     * @param timerRow hide the timer row (only when false; otherwise keep whatever
+     *   visibility it already had).
+     * @param bottomBar hide the Again/Hard/Good/Easy + Stop/Settings bar.
+     */
+    data class Visibility(
+        val headerMeta: Boolean,
+        val timerRow: Boolean,
+        val bottomBar: Boolean,
+    )
+
+    /**
+     * @param imeVisible whether the keyboard is currently shown.
+     * @param timerRowWanted when the IME is hidden, whether the timer row should
+     *   stay visible (false keeps it hidden). Ignored while the IME is visible.
+     */
+    fun decide(imeVisible: Boolean, timerRowWanted: Boolean): Visibility =
+        if (imeVisible) {
+            Visibility(headerMeta = false, timerRow = false, bottomBar = false)
+        } else {
+            Visibility(headerMeta = true, timerRow = timerRowWanted, bottomBar = true)
+        }
+}
