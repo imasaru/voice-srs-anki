@@ -82,7 +82,7 @@
                 android:padding="8dp"
                 android:scaleType="centerInside"
                 android:src="@drawable/ic_mic"
-                android:tint="@color/chat_accent" />
+                app:tint="@color/chat_accent" />
         </FrameLayout>
 
         <ImageButton
@@ -95,6 +95,6 @@
             android:padding="10dp"
             android:scaleType="centerInside"
             android:src="@drawable/ic_send"
-            android:tint="@color/chat_send_icon" />
+            app:tint="@color/chat_send_icon" />
     </LinearLayout>
 </LinearLayout>
