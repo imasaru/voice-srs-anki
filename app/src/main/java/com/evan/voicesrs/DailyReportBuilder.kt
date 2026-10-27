@@ -148,8 +148,9 @@ object DailyReportBuilder {
     /**
      * [issued] ("21:56 JST") is appended to the title when set; [beforeFocus]
      * (e.g. the "Where understanding broke" section) is inserted before Focus next.
+     * [blocks] (e.g. "Block 1: 45 of 90 min") become a "## Study blocks" section after Time span; omitted when empty.
      */
-    fun render(r: DailyReport, issued: String? = null, beforeFocus: String = ""): String {
+    fun render(r: DailyReport, issued: String? = null, beforeFocus: String = "", blocks: List<String> = emptyList()): String {
         val sb = StringBuilder()
         sb.append("# Daily study report — ").append(r.date)
         if (!issued.isNullOrBlank()) sb.append(" · issued ").append(issued.trim())
@@ -163,6 +164,11 @@ object DailyReportBuilder {
                 .append(" of ").append(r.reviews)
                 .append(" answer times were recorded as 0 ms, so time-per-card is not reliable.")
                 .append('\n')
+        }
+
+        if (blocks.isNotEmpty()) {
+            sb.append("## Study blocks\n")
+            for (b in blocks) sb.append("- ").append(b).append('\n')
         }
 
         sb.append("## Volume & accuracy\n")

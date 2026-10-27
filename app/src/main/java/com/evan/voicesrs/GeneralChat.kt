@@ -114,7 +114,7 @@ object GeneralChat {
                             ""
                         }
                         StudyToolRunner(anki, cfg.deck, pending = { LocalQueueStore(app.filesDir).readGrades() })
-                            .dailyReport(cfg.deck, issuedAt, threads)
+                            .dailyReport(cfg.deck, issuedAt, threads, Prefs.loadBlockHistory(app))
                     } catch (e: Exception) {
                         Log.w(TAG, "today report failed: ${e.javaClass.simpleName}")
                         "Error: could not build today's report (${e.javaClass.simpleName})."

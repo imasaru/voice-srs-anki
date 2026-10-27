@@ -124,7 +124,7 @@ class StudyToolRunner(
      * [threadsJson] (thread-history.json). Anki unreachable → an error report,
      * never a zero report.
      */
-    fun dailyReport(deck: String, issuedAtMs: Long, threadsJson: String = ""): String {
+    fun dailyReport(deck: String, issuedAtMs: Long, threadsJson: String = "", blockHistory: String = ""): String {
         val day = StudyTools.today(tz)
         val target = deck.ifBlank { defaultDeck }
         val start = StudyTools.dayStartMs(day, tz)
@@ -142,7 +142,7 @@ class StudyToolRunner(
             val cards = ReportData.dumpCards(rows, fields, tz)
             val labels = cards.associate { it.cid to it.stem }
             val broke = if (threadsJson.isBlank()) "" else UnderstandingInsights.whereBroke(threadsJson, start, end, labels)
-            val md = DailyReportBuilder.render(DailyReportBuilder.build(day, cards), issued, broke)
+            val md = DailyReportBuilder.render(DailyReportBuilder.build(day, cards), issued, broke, StudyBlockStore.reportLines(blockHistory, day))
             if (pending > 0) "$md\nNote: $pending grades are queued offline and not yet in Anki, so they are not counted above.\n" else md
         } catch (e: Exception) {
             "# Daily study report — $day · issued $issued\n" +
