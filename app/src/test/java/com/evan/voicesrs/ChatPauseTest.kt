@@ -87,4 +87,14 @@ class ChatPauseTest {
         assertTrue(ChatPause.accepts(ChatPause.Action.RATING))
         assertTrue(ChatPause.accepts(ChatPause.Action.RESUME))
     }
+
+    @Test
+    fun `manual pause uses the short label and hides the inline resume`() {
+        assertEquals("Paused", ChatPause.label(manual = true))
+        assertEquals("Paused, asking AI", ChatPause.label(manual = false))
+        assertFalse(ChatPause.showsInlineResume(manual = true, chatShowResume = true))
+        assertFalse(ChatPause.showsInlineResume(manual = true, chatShowResume = false))
+        assertTrue(ChatPause.showsInlineResume(manual = false, chatShowResume = true))
+        assertFalse(ChatPause.showsInlineResume(manual = false, chatShowResume = false))
+    }
 }
