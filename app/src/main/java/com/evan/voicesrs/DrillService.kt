@@ -24,6 +24,7 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import java.time.ZoneId
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -374,6 +375,8 @@ class DrillService : Service(), VoiceIo {
     @Volatile private var elapsedPausedTotalMs = 0L
     /** SystemClock.elapsedRealtime the drill last paused; 0 while running. */
     @Volatile private var elapsedPausedSinceMs = 0L
+    /** Study block (item 20B), persisted in Prefs so it survives app restarts. null when no drill is running. */
+    @Volatile private var block: StudyBlockStore.State? = null
     private val chatPauseLatch = AtomicReference<CountDownLatch?>(null)
     @Volatile private var thinkDeadlineMs = 0L
     /** Remaining think time frozen by a chat pause. Negative means the timer is not frozen. */
@@ -1357,6 +1360,54 @@ class DrillService : Service(), VoiceIo {
             }
             SystemClock.sleep(200)
         }
+    }
+
+    private fun blockGoalMin(cfg: AnkiConfig): Int =
+        if (GoalModes.normalize(cfg.goalMode) == GoalModes.MINUTES) cfg.goalMinutes else 0
+
+    /** Resumes today's unfinished block or starts a new one. The Continue/New choice UI is a later item. */
+    private fun blockStart(cfg: AnkiConfig) {
+        runCatching {
+            val s = StudyBlockPrompt.choose(
+                Prefs.loadStudyBlock(this), System.currentTimeMillis(), ZoneId.systemDefault(),
+                blockGoalMin(cfg), continueChosen = true
+            )
+            block = s
+            Prefs.saveStudyBlock(this, s)
+        }.onFailure { Log.w(TAG, "study block start failed", it) }
+    }
+
+    /** Banks the running stretch (drill paused or stopped). */
+    private fun blockPause() {
+        val s = block ?: return
+        runCatching {
+            val p = StudyBlockStore.pause(s, System.currentTimeMillis())
+            block = p
+            Prefs.saveStudyBlock(this, p)
+        }.onFailure { Log.w(TAG, "study block pause failed", it) }
+    }
+
+    /** Restarts the running stretch after a pause. A finished block is left alone. */
+    private fun blockResume() {
+        val s = block ?: return
+        if (s.done) return
+        runCatching {
+            val r = StudyBlockStore.start(s, System.currentTimeMillis(), ZoneId.systemDefault(), s.goalMin, newBlock = false)
+            block = r
+            Prefs.saveStudyBlock(this, r)
+        }.onFailure { Log.w(TAG, "study block resume failed", it) }
+    }
+
+    /** Marks the block done once its goal minutes are reached. Saves only when something changed. */
+    private fun blockTick() {
+        val s = block ?: return
+        runCatching {
+            val t = StudyBlockStore.tick(s, System.currentTimeMillis())
+            if (t != s) {
+                block = t
+                Prefs.saveStudyBlock(this, t)
+            }
+        }.onFailure { Log.w(TAG, "study block tick failed", it) }
     }
 
     private fun finishGoal(progress: SessionProgress, startedElapsed: Long) {
