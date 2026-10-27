@@ -25,7 +25,7 @@
     <string name="settings_token_missing">No neural token yet. Neural speech needs one, or switch to on-device.</string>
     <string name="settings_deck">Deck</string>
     <string name="settings_saved">Saved</string>
-    <string name="settings_test">Test connection</string>
+    <string name="settings_test">Test Anki</string>
     <string name="settings_tts_rate">TTS speed</string>
     <string name="settings_tts_rate_value">TTS speed: %1$.1fx</string>
     <string name="settings_tts_rate_custom">TTS speed: %1$.1fx (custom)</string>
