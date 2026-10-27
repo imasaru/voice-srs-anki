@@ -76,4 +76,16 @@ class TapAnswerTest {
         assertEquals(QuestionCard.ANSWER_RATING, TapAnswer.heading("a filter on the table"))
         assertEquals(QuestionCard.ANSWER_RATING, TapAnswer.heading(""))
     }
+
+    @Test
+    fun `cutsSpeech only when the drill runs and speech is not paused or silent`() {
+        assertTrue(TapAnswer.cutsSpeech(drillRunning = true, chatPaused = false, silentSession = false))
+        assertFalse(TapAnswer.cutsSpeech(drillRunning = false, chatPaused = false, silentSession = false))
+        assertFalse(TapAnswer.cutsSpeech(drillRunning = true, chatPaused = true, silentSession = false))
+        assertFalse(TapAnswer.cutsSpeech(drillRunning = true, chatPaused = false, silentSession = true))
+        assertFalse(TapAnswer.cutsSpeech(drillRunning = false, chatPaused = true, silentSession = false))
+        assertFalse(TapAnswer.cutsSpeech(drillRunning = false, chatPaused = false, silentSession = true))
+        assertFalse(TapAnswer.cutsSpeech(drillRunning = true, chatPaused = true, silentSession = true))
+        assertFalse(TapAnswer.cutsSpeech(drillRunning = false, chatPaused = true, silentSession = true))
+    }
 }

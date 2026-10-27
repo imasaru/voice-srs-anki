@@ -153,6 +153,9 @@ class DrillService : Service(), VoiceIo {
             Log.i(TAG, "TEST_GRADE queued: $word")
         }
 
+        /** Card tap: cut TTS without grading. */
+        fun skipSpeech() { active?.stopPlaybackNow() }
+
         /**
          * Show answer button and [ACTION_TEST_SHOW_ANSWER].
          * Stops TTS and listening, then reveals. Ignored once the answer is up.

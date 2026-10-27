@@ -332,6 +332,15 @@ class ChatAdapter(
         private val memoFront: EditText = view.findViewById(R.id.liveMemoFront)
         private val memoBack: EditText = view.findViewById(R.id.liveMemoBack)
 
+        init {
+            val cut: (View) -> Unit = {
+                val s = DrillUi.state
+                if (TapAnswer.cutsSpeech(s.drillRunning, s.chatPaused, s.silentSession)) DrillService.skipSpeech()
+            }
+            question.setOnClickListener(cut)
+            itemView.setOnClickListener(cut)
+        }
+
         fun bind(row: ChatRow.Live) {
             if (!row.revealText) {
                 label.visibility = View.GONE
