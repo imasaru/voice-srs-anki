@@ -15,4 +15,15 @@ object DeckName {
         if (parts.size == 1) return "" to parts[0]
         return parts.dropLast(1).joinToString(" › ") to parts.last()
     }
+
+    /**
+     * True only when a drill is currently running [running] and the deck the
+     * drill was started against [drillDeck] differs from the deck now stored in
+     * [currentDeck]. Compared after trimming, so a whitespace-only difference
+     * is not a change. Returns false when [drillDeck] is null (the drill was
+     * started before this activity began tracking it) or when no drill runs.
+     */
+    fun changedMidDrill(drillDeck: String?, currentDeck: String, running: Boolean): Boolean {
+        return running && drillDeck != null && drillDeck.trim() != currentDeck.trim()
+    }
 }

@@ -45,4 +45,34 @@ class DeckNameTest {
         assertEquals("" to "", DeckName.split("::"))
         assertEquals("" to "", DeckName.split(" :: :: "))
     }
+
+    @Test
+    fun `changedMidDrill flags a different deck while drilling`() {
+        assertEquals(true, DeckName.changedMidDrill("A::B", "A::C", true))
+    }
+
+    @Test
+    fun `changedMidDrill is false when the deck is unchanged`() {
+        assertEquals(false, DeckName.changedMidDrill("A::B", "A::B", true))
+    }
+
+    @Test
+    fun `changedMidDrill ignores surrounding whitespace`() {
+        assertEquals(false, DeckName.changedMidDrill("A::B", " A::B ", true))
+    }
+
+    @Test
+    fun `changedMidDrill is false when no drill runs`() {
+        assertEquals(false, DeckName.changedMidDrill("A::B", "A::C", false))
+    }
+
+    @Test
+    fun `changedMidDrill is false when drill started before this activity`() {
+        assertEquals(false, DeckName.changedMidDrill(null, "A::C", true))
+    }
+
+    @Test
+    fun `changedMidDrill flags a blank stored deck`() {
+        assertEquals(true, DeckName.changedMidDrill("", "A", true))
+    }
 }
