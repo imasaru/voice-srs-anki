@@ -29,4 +29,25 @@ class ImeLayoutDecisionTest {
         assertEquals(true, hidden.bottomBar)
         assertEquals(false, hidden.timerRow)
     }
+
+    @Test
+    fun `wide ime visible hides toolbar and session cue`() {
+        val w = ImeLayoutDecision.decideWide(imeVisible = true, cueWanted = true)
+        assertEquals(false, w.toolbar)
+        assertEquals(false, w.sessionCue)
+    }
+
+    @Test
+    fun `wide ime hidden keeps toolbar and restores cue when wanted`() {
+        val w = ImeLayoutDecision.decideWide(imeVisible = false, cueWanted = true)
+        assertEquals(true, w.toolbar)
+        assertEquals(true, w.sessionCue)
+    }
+
+    @Test
+    fun `wide ime hidden keeps toolbar and hides cue when not wanted`() {
+        val w = ImeLayoutDecision.decideWide(imeVisible = false, cueWanted = false)
+        assertEquals(true, w.toolbar)
+        assertEquals(false, w.sessionCue)
+    }
 }
