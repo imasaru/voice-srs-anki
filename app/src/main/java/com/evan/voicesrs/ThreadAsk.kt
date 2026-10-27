@@ -33,6 +33,7 @@ object ThreadAsk {
     fun ask(context: Context, turnId: Long, question: String, byVoice: Boolean = false) {
         val q = question.trim()
         if (q.isEmpty()) return
+        if (GeneralChat.routeReport(context, q)) return
         val app = context.applicationContext
         val at = System.currentTimeMillis()
         val index = ReviewLog.addFollowUp(turnId, q, at)

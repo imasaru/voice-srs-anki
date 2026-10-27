@@ -49,7 +49,28 @@ object GeneralChat {
     }
 
     fun ask(context: Context, deck: String, question: String) {
+        if (routeReport(context, question)) return
         startAsk(context, deck, question, injectReport = false)
+    }
+
+    /**
+     * When [question] is a report request ("today's study report"), runs the
+     * report instead and returns true. Used by the general box and by card
+     * threads, so a report typed on a card never goes through the hint filter.
+     */
+    fun routeReport(context: Context, question: String): Boolean {
+        if (!ReportRoute.isReportRequest(question)) return false
+        val fullDeck = try {
+            Prefs.load(context.applicationContext).deck
+        } catch (_: Exception) {
+            ""
+        }
+        if (fullDeck.isBlank()) {
+            showNotice(ChatSend.visible(ChatSend.Fail.NO_DECK))
+        } else {
+            todayReport(context, fullDeck)
+        }
+        return true
     }
 
     /** Runs the three study tools for today and passes the results in once as context. */
@@ -86,10 +107,17 @@ object GeneralChat {
                     onTool = null
                     contextBlob = try {
                         val anki = AnkiConnect(cfg.url, cfg.apiKey)
-                        StudyToolRunner(anki, cfg.deck, pending = { LocalQueueStore(app.filesDir).readGrades() }).todayBundle(cfg.deck)
+                        val threads = try {
+                            val f = ThreadStore.file(app.filesDir)
+                            if (f.isFile) f.readText() else ""
+                        } catch (_: Exception) {
+                            ""
+                        }
+                        StudyToolRunner(anki, cfg.deck, pending = { LocalQueueStore(app.filesDir).readGrades() })
+                            .dailyReport(cfg.deck, issuedAt, threads)
                     } catch (e: Exception) {
-                        Log.w(TAG, "today report tools failed: ${e.javaClass.simpleName}")
-                        """{"error":"${e.javaClass.simpleName}"}"""
+                        Log.w(TAG, "today report failed: ${e.javaClass.simpleName}")
+                        "Error: could not build today's report (${e.javaClass.simpleName})."
                     }
                 } else {
                     contextBlob = ""
@@ -106,7 +134,7 @@ object GeneralChat {
                         if (shown.isNotBlank()) {
                             lastPaint = now
                             mark(id, ExplState.Streaming(
-                                if (injectReport) ReportHeader.prepend(issuedAt, shown) else shown
+                                if (injectReport) withHeader(issuedAt, shown) else shown
                             ))
                         }
                     }
@@ -116,7 +144,7 @@ object GeneralChat {
                         baseUrl = cfg.aiBaseUrl,
                         apiKey = cfg.aiApiKey,
                         model = cfg.aiModel,
-                        system = PromptBuilder.generalSystem(!injectReport),
+                        system = if (injectReport) PromptBuilder.reportSystem() else PromptBuilder.generalSystem(true),
                         messages = PromptBuilder.generalMessages(name, q, contextBlob),
                         cancelled = { false },
                         tools = tools,
@@ -147,7 +175,7 @@ object GeneralChat {
                     mark(id, ExplState.Error(ChatSend.visible(ChatSend.Fail.AI), retryable = true))
                 } else {
                     mark(id, ExplState.Ready(
-                        if (injectReport) ReportHeader.prepend(issuedAt, shown) else shown,
+                        if (injectReport) withHeader(issuedAt, shown) else shown,
                         cached = false
                     ))
                 }
@@ -157,6 +185,10 @@ object GeneralChat {
             }
         }, "general-ask").start()
     }
+
+    /** The builder title carries date + issue time; add [ReportHeader] only if the model dropped it. */
+    private fun withHeader(issuedAt: Long, text: String): String =
+        if (text.trimStart().startsWith("# Daily study report")) text.trim() else ReportHeader.prepend(issuedAt, text)
 
     private fun mark(id: Long, state: ExplState) {
         var stored: ChatRow.Ask? = null

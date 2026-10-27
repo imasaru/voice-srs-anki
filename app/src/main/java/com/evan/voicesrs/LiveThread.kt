@@ -98,6 +98,8 @@ object LiveThread {
     fun ask(context: Context, question: String, byVoice: Boolean): Boolean {
         val q = question.trim()
         if (q.isEmpty()) return false
+        // A report typed on a card goes to the report path, not the hint/answer filter.
+        if (GeneralChat.routeReport(context, q)) return true
         val shot = synchronized(lock) {
             val screen = current ?: return false
             val at = System.currentTimeMillis()
