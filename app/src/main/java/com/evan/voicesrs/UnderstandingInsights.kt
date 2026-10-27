@@ -47,13 +47,15 @@ object UnderstandingInsights {
             val root = JSONObject(json)
             val threads = root.getJSONArray("threads")
             for (i in 0 until threads.length()) {
-                val thread = threads.getJSONObject(i)
-                val cardId = thread.getLong("cardId")
+                // Review fix: one bad thread or message is skipped instead of dropping the whole history.
+                val thread = threads.optJSONObject(i) ?: continue
+                if (!thread.has("cardId")) continue
+                val cardId = thread.optLong("cardId", -1L).takeIf { it > 0 } ?: continue
+                val messages = thread.optJSONArray("messages") ?: continue
                 val msgs = result.getOrPut(cardId) { mutableListOf() }
-                val messages = thread.getJSONArray("messages")
                 for (j in 0 until messages.length()) {
-                    val m = messages.getJSONObject(j)
-                    msgs.add(ThreadMsg(m.optString("role", ""), m.optString("text", ""), m.getLong("at")))
+                    val m = messages.optJSONObject(j) ?: continue
+                    msgs.add(ThreadMsg(m.optString("role", ""), m.optString("text", ""), m.optLong("at", 0L)))
                 }
             }
             for (k in result.keys) {
