@@ -176,9 +176,30 @@ object ThreadStore {
 
 /** Slack-style link under an AI bubble. */
 object ThreadLabel {
-    fun text(count: Int, lastAt: Long?, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): String {
+    /**
+     * Slack-style link text. When the last reply falls on the same calendar day
+     * as `now` (in `zone`) only the clock is shown; an earlier day in the same
+     * year shows "MMM d HH:mm"; anything older shows "MMM d, yyyy HH:mm".
+     */
+    fun text(
+        count: Int,
+        lastAt: Long?,
+        zone: java.time.ZoneId = java.time.ZoneId.systemDefault(),
+        now: Long = System.currentTimeMillis()
+    ): String {
         if (count <= 0 || lastAt == null || lastAt <= 0L) return "💬 Reply in thread"
-        val clock = java.time.format.DateTimeFormatter.ofPattern("HH:mm").withZone(zone)
+        val nowDay = java.time.LocalDate.ofInstant(
+            java.time.Instant.ofEpochMilli(now), zone
+        )
+        val lastDay = java.time.LocalDate.ofInstant(
+            java.time.Instant.ofEpochMilli(lastAt), zone
+        )
+        val pattern = when {
+            nowDay == lastDay -> "HH:mm"
+            nowDay.year == lastDay.year -> "MMM d HH:mm"
+            else -> "MMM d, yyyy HH:mm"
+        }
+        val clock = java.time.format.DateTimeFormatter.ofPattern(pattern, java.util.Locale.ENGLISH).withZone(zone)
         val hhmm = clock.format(java.time.Instant.ofEpochMilli(lastAt))
         val noun = if (count == 1) "reply" else "replies"
         return "💬 $count $noun · last $hhmm"
@@ -188,7 +209,7 @@ object ThreadLabel {
         return followUps.count { it.state is ExplState.Ready || it.state is ExplState.Error || it.q.isNotBlank() }
     }
 
-    /** Latest question or reply clock, for the "last HH:mm" link. */
+    /** Latest question or reply clock, for the "last …" link (date shown when not today). */
     fun lastAt(followUps: List<FollowUp>): Long? {
         var best = 0L
         for (follow in followUps) {
