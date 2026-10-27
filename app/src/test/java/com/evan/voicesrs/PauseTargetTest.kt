@@ -99,4 +99,16 @@ class PauseTargetTest {
         val paused = PlaybackControl.Snapshot(state = PlaybackControl.State.PAUSED)
         assertTrue(PlaybackControl.pauseShowsResume(paused, false, false))
     }
+
+    @Test
+    fun `idle running drill is icon-only and a paused drill resumes`() {
+        val idle = PlaybackControl.Snapshot(state = PlaybackControl.State.IDLE)
+        assertTrue(PlaybackControl.pauseIconOnly(idle, drilling = true, drillPaused = false))
+        assertFalse(PlaybackControl.pauseIconOnly(idle, drilling = true, drillPaused = true))
+        assertFalse(PlaybackControl.pauseIconOnly(idle, drilling = false, drillPaused = false))
+        val reading = PlaybackControl.Snapshot(state = PlaybackControl.State.READING)
+        assertFalse(PlaybackControl.pauseIconOnly(reading, drilling = true, drillPaused = false))
+        val paused = PlaybackControl.Snapshot(state = PlaybackControl.State.PAUSED)
+        assertFalse(PlaybackControl.pauseIconOnly(paused, drilling = true, drillPaused = false))
+    }
 }

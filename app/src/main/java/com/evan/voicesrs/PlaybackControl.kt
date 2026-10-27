@@ -75,6 +75,14 @@ object PlaybackControl {
     fun pauseLabel(current: Snapshot): String =
         if (current.state == State.PAUSED) "Resume" else "Pause"
 
+    /**
+     * The pause button is icon-only while the drill runs and is not paused.
+     * It is a real Resume (text) once the drill is paused, and never while
+     * not drilling or while read-aloud is active.
+     */
+    fun pauseIconOnly(snap: Snapshot, drilling: Boolean, drillPaused: Boolean): Boolean =
+        drilling && !drillPaused && snap.state == State.IDLE
+
     fun sectionState(current: Snapshot, turnId: Long, section: Int): State {
         if (current.turnId != turnId || current.section != section) return State.IDLE
         return current.state

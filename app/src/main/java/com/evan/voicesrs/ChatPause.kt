@@ -8,7 +8,14 @@ package com.evan.voicesrs
  */
 object ChatPause {
     const val LABEL = "Paused, asking AI"
+    const val MANUAL_LABEL = "Paused"
     const val RESUME = "Resume"
+
+    /** A manual pause (bottom button) reads [MANUAL_LABEL] and hides the inline resume. */
+    fun label(manual: Boolean): String = if (manual) MANUAL_LABEL else LABEL
+
+    /** The inline chat-row resume shows only for a chat pause, not a manual one. */
+    fun showsInlineResume(manual: Boolean, chatShowResume: Boolean): Boolean = !manual && chatShowResume
 
     enum class Trigger { FOCUS_INPUT, OPEN_THREAD, TYPING, DICTATION, MANUAL }
 

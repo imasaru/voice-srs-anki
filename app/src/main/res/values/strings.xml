@@ -165,6 +165,9 @@
     <string name="settings_shuffle_help">Mix up the order of multiple-choice options.</string>
     <string name="chat_paused">Paused, asking AI</string>
     <string name="chat_resume">Resume</string>
+    <string name="drill_resume">▶ Resume</string>
+    <string name="drill_pause_cd">Pause drill</string>
+    <string name="drill_stop_cd">Stop drill</string>
     <string name="playback_pause">Pause</string>
     <string name="playback_resume">Resume reading</string>
     <string name="playback_read_section">Read this section</string>

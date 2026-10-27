@@ -879,16 +879,60 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** The pause button's own tonal tint and text colours, kept so the pink Resume can be undone. */
+    private var pauseBaseTint: ColorStateList? = null
+    private var pauseBaseText: ColorStateList? = null
+
     private fun paintPlayback(snap: PlaybackControl.Snapshot) {
         val pause = findViewById<Button>(R.id.playbackPauseButton) ?: return
+        val mb = pause as? com.google.android.material.button.MaterialButton
         val drilling = DrillUi.state.drillRunning || DrillService.running
         pause.visibility = if (PlaybackControl.pauseVisible()) View.VISIBLE else View.GONE
         val drillPaused = DrillUi.state.chatPaused
         pause.isEnabled = PlaybackControl.pauseEnabled(snap, drilling, drillPaused)
-        pause.text = if (PlaybackControl.pauseShowsResume(snap, drilling, drillPaused)) {
-            getString(R.string.playback_resume)
+        val stopButton = findViewById<Button>(R.id.stopButton)
+        if (pauseBaseTint == null) pauseBaseTint = pause.backgroundTintList
+        if (pauseBaseText == null) pauseBaseText = pause.textColors
+        if (PlaybackControl.pauseIconOnly(snap, drilling, drillPaused)) {
+            pause.text = ""
+            mb?.setIconResource(R.drawable.ic_drill_pause)
+            mb?.iconPadding = 0
+            pause.contentDescription = getString(R.string.drill_pause_cd)
+            pause.backgroundTintList = pauseBaseTint
+            pauseBaseText?.let { pause.setTextColor(it) }
+        } else if (drilling && drillPaused && snap.state == PlaybackControl.State.IDLE) {
+            val typed = TypedValue()
+            pause.context.theme.resolveAttribute(com.google.android.material.R.attr.colorPrimary, typed, true)
+            mb?.icon = null
+            pause.text = getString(R.string.drill_resume)
+            pause.contentDescription = null
+            pause.backgroundTintList = ColorStateList.valueOf(typed.data)
+            val onPrimary = TypedValue()
+            pause.context.theme.resolveAttribute(com.google.android.material.R.attr.colorOnPrimary, onPrimary, true)
+            pause.setTextColor(onPrimary.data)
         } else {
-            getString(R.string.playback_pause)
+            mb?.icon = null
+            pause.contentDescription = null
+            pause.backgroundTintList = pauseBaseTint
+            pauseBaseText?.let { pause.setTextColor(it) }
+            pause.text = if (PlaybackControl.pauseShowsResume(snap, drilling, drillPaused)) {
+                getString(R.string.playback_resume)
+            } else {
+                getString(R.string.playback_pause)
+            }
+        }
+        val sb = stopButton as? com.google.android.material.button.MaterialButton
+        if (sb != null) {
+            if (drilling) {
+                stopButton.text = ""
+                sb.setIconResource(R.drawable.ic_drill_stop)
+                sb.iconPadding = 0
+                stopButton.contentDescription = getString(R.string.drill_stop_cd)
+            } else {
+                sb.icon = null
+                stopButton.text = getString(R.string.app_stop)
+                stopButton.contentDescription = null
+            }
         }
         val status = findViewById<TextView>(R.id.playbackStatus)
         status?.text = when (snap.state) {
@@ -908,8 +952,9 @@ class MainActivity : AppCompatActivity() {
         if (drilling && state.chatPaused) {
             pauseRow?.visibility = View.VISIBLE
             countdown?.visibility = View.GONE
-            resume?.visibility = if (state.chatShowResume) View.VISIBLE else View.GONE
-            pulseResume(resume, state.chatShowResume && state.chatResumePulse)
+            findViewById<TextView>(R.id.chatPauseLabel)?.text = ChatPause.label(state.manualPause)
+            resume?.visibility = if (ChatPause.showsInlineResume(state.manualPause, state.chatShowResume)) View.VISIBLE else View.GONE
+            pulseResume(resume, ChatPause.showsInlineResume(state.manualPause, state.chatShowResume) && state.chatResumePulse)
         } else if (drilling && !silentOn && seconds != null && seconds > 0 && !state.showBack) {
             pauseRow?.visibility = View.GONE
             countdown?.visibility = View.VISIBLE
