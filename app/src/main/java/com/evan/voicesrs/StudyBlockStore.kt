@@ -64,6 +64,13 @@ object StudyBlockStore {
     fun goalElapsedMs(s: State?, nowMs: Long, sessionElapsedMs: Long): Long =
         if (s == null) sessionElapsedMs else elapsedAt(s, nowMs)
 
+    /** Base for the elapsed chip (SystemClock.elapsedRealtime scale): startedRealtimeMs minus the block's elapsedAt, never below 1. No block: startedRealtimeMs. */
+    fun chipStartMs(s: State?, nowMs: Long, startedRealtimeMs: Long): Long {
+        if (s == null) return startedRealtimeMs
+        val base = startedRealtimeMs - elapsedAt(s, nowMs)
+        return if (base < 1L) 1L else base
+    }
+
     /** True when s != null, !s.done, s.dayKey == dayKey(nowMs, zone) and elapsedAt(s, nowMs) > 0. Used to offer "Continue block (34 of 90)". */
     fun hasUnfinished(s: State?, nowMs: Long, zone: ZoneId): Boolean {
         if (s == null) return false

@@ -163,4 +163,21 @@ class StudyBlockStoreTest {
         val s = StudyBlockStore.State(1, 34 * 60_000L, 90, "2026-10-27", null, false)
         assertEquals(34 * 60_000L, StudyBlockStore.goalElapsedMs(s, at(10, 10), 999_000L))
     }
+
+    @Test
+    fun `chipStartMs without block is the session start`() {
+        assertEquals(5_000_000L, StudyBlockStore.chipStartMs(null, at(10, 0), 5_000_000L))
+    }
+
+    @Test
+    fun `chipStartMs continued block moves the base back by banked and running time`() {
+        val s = StudyBlockStore.State(1, 34 * 60_000L, 90, "2026-10-27", at(10, 0), false)
+        assertEquals(5_000_000L - 35 * 60_000L, StudyBlockStore.chipStartMs(s, at(10, 1), 5_000_000L))
+    }
+
+    @Test
+    fun `chipStartMs never goes below 1`() {
+        val s = StudyBlockStore.State(1, 34 * 60_000L, 90, "2026-10-27", null, false)
+        assertEquals(1L, StudyBlockStore.chipStartMs(s, at(10, 0), 1_000L))
+    }
 }
