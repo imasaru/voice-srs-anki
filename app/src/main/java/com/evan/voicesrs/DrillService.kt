@@ -767,6 +767,7 @@ class DrillService : Service(), VoiceIo {
                 return
             }
             val cfg = Prefs.load(this)
+            blockStart(cfg)
             explainSession = ExplainSession.start(this, cfg)
             configuredSilenceMs = ListenWindow.normalizeSilenceMs(cfg.endSilenceMs)
             refreshNeuralHealth(cfg, force = true)
@@ -855,6 +856,8 @@ class DrillService : Service(), VoiceIo {
             gradeGate.close()
             pendingGrades.clear()
             releaseChatPause()
+            blockPause()
+            block = null
             publishDrillRunning(false)
             runCatching {
                 DrillUi.update {
@@ -1480,6 +1483,7 @@ class DrillService : Service(), VoiceIo {
         var resyncs = 0
         var resyncHalt = false
         while (!stopRequested.get()) {
+            blockTick()
             val elapsed = SystemClock.elapsedRealtime() - started
             if (!goalSpoken && progress.goalReached(cfg.goalMode, cfg.goalCards, cfg.goalMinutes, elapsed)) {
                 finishGoal(progress, started)
@@ -1643,6 +1647,7 @@ class DrillService : Service(), VoiceIo {
         var goalSpoken = false
         for ((index, card) in cards.withIndex()) {
             if (stopRequested.get()) break
+            blockTick()
             val elapsed = SystemClock.elapsedRealtime() - started
             if (progress.goalReached(cfg.goalMode, cfg.goalCards, cfg.goalMinutes, elapsed)) {
                 finishGoal(progress, started)
@@ -2438,6 +2443,7 @@ class DrillService : Service(), VoiceIo {
             // The dictation recognizer owns the mic. Freeze the card and leave it alone.
             if (chatPaused.compareAndSet(false, true)) {
                 elapsedPausedSinceMs = SystemClock.elapsedRealtime()
+                blockPause()
                 if (thinkDeadlineMs > 0L) {
                     frozenThinkMs = ChatPause.freeze(SystemClock.elapsedRealtime(), thinkDeadlineMs)
                     thinkDeadlineMs = 0L
@@ -2457,6 +2463,7 @@ class DrillService : Service(), VoiceIo {
             return
         }
         elapsedPausedSinceMs = SystemClock.elapsedRealtime()
+        blockPause()
         if (thinkDeadlineMs > 0L) {
             frozenThinkMs = ChatPause.freeze(SystemClock.elapsedRealtime(), thinkDeadlineMs)
             thinkDeadlineMs = 0L
@@ -2486,6 +2493,7 @@ class DrillService : Service(), VoiceIo {
             elapsedPausedTotalMs += now - elapsedPausedSinceMs
             elapsedPausedSinceMs = 0L
         }
+        blockResume()
         if (frozenThinkMs >= 0L) {
             thinkDeadlineMs = ChatPause.resumeDeadline(now, frozenThinkMs)
             frozenThinkMs = -1L
