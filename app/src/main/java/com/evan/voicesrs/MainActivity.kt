@@ -34,6 +34,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import android.widget.Toast
 import java.time.LocalDate
+import java.time.ZoneId
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -1199,9 +1200,27 @@ class MainActivity : AppCompatActivity() {
         else permissionLauncher.launch(missing.toTypedArray())
     }
 
+    /** Asks Continue/New when today has an unfinished study block (StudyBlockPrompt.offer), else starts at once. */
     private fun startDrillService() {
+        val offer = runCatching {
+            StudyBlockPrompt.offer(Prefs.loadStudyBlock(this), System.currentTimeMillis(), ZoneId.systemDefault())
+        }.getOrNull()
+        if (offer == null || isFinishing) {
+            launchDrillService(newBlock = false)
+            return
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Study block")
+            .setPositiveButton(offer.continueLabel) { _, _ -> launchDrillService(newBlock = false) }
+            .setNegativeButton(offer.newLabel) { _, _ -> launchDrillService(newBlock = true) }
+            .setNeutralButton("Cancel", null)
+            .show()
+    }
+
+    private fun launchDrillService(newBlock: Boolean) {
         try {
-            ContextCompat.startForegroundService(this, Intent(this, DrillService::class.java))
+            val intent = Intent(this, DrillService::class.java).putExtra(DrillService.EXTRA_NEW_BLOCK, newBlock)
+            ContextCompat.startForegroundService(this, intent)
             drillDeck = Prefs.load(this).deck
             Toast.makeText(this, "Drill starting…", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
