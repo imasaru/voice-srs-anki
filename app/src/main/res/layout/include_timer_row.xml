@@ -21,6 +21,14 @@
         android:paddingStart="8dp"
         android:paddingEnd="8dp">
 
+        <TextView
+            android:id="@+id/elapsedChip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:visibility="gone"
+            android:textAppearance="?attr/textAppearanceLabelLarge" />
+
         <ImageView
             android:id="@+id/timerIcon"
             android:layout_width="24dp"

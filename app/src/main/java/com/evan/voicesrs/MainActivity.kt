@@ -12,6 +12,9 @@ import android.animation.ValueAnimator
 import android.content.res.ColorStateList
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
+import android.os.Handler
+import android.os.Looper
 import android.util.TypedValue
 import android.transition.Fade
 import android.transition.TransitionManager
@@ -81,6 +84,8 @@ class MainActivity : AppCompatActivity() {
     private var timerValue: TextView? = null
     private var timerPlus: Button? = null
     private var timerSwitch: com.google.android.material.materialswitch.MaterialSwitch? = null
+    /** "Elapsed m:ss" chip beside the countdown. Null when the timer row is not inflated. */
+    private var elapsedChip: TextView? = null
     /** Last switch position the user or a fresh service snapshot committed to. */
     private var switchModel = SwitchBoard.Model(on = false, generation = 0)
     /** Microphone permission request is so a running drill can leave silent mode. */
@@ -103,6 +108,40 @@ class MainActivity : AppCompatActivity() {
     private var timerRowWantedVisible = false
     /** Last IME state we acted on, so visibility only changes when it flips. */
     private var lastImeVisible = false
+
+    private val elapsedHandler = Handler(Looper.getMainLooper())
+    /** Ticks the elapsed chip once a second while a drill runs. Never touches the chat pane. */
+    private val elapsedRunnable: Runnable = Runnable { tickElapsed() }
+
+    private fun tickElapsed() {
+        val chip = elapsedChip ?: return
+        val state = DrillUi.state
+        if (ElapsedChip.visible(state.drillRunning)) {
+            chip.text = ElapsedChip.format(
+                ElapsedChip.elapsed(
+                    state.elapsedStartMs,
+                    state.elapsedPausedTotalMs,
+                    state.elapsedPausedSinceMs,
+                    SystemClock.elapsedRealtime()
+                )
+            )
+            chip.visibility = View.VISIBLE
+            elapsedHandler.postDelayed(elapsedRunnable, 1_000L)
+        } else {
+            elapsedHandler.removeCallbacks(elapsedRunnable)
+            chip.visibility = View.GONE
+            chip.text = ""
+        }
+    }
+
+    private fun startElapsedTicker() {
+        elapsedHandler.removeCallbacks(elapsedRunnable)
+        elapsedHandler.post(elapsedRunnable)
+    }
+
+    private fun stopElapsedTicker() {
+        elapsedHandler.removeCallbacks(elapsedRunnable)
+    }
 
     private val reviewListener: (List<ReviewTurn>) -> Unit = {
         runOnUiThread {
@@ -183,6 +222,7 @@ class MainActivity : AppCompatActivity() {
         timerValue = findViewById(R.id.timerValue)
         timerPlus = findViewById(R.id.timerPlus)
         timerSwitch = findViewById(R.id.timerSwitch)
+        elapsedChip = findViewById<TextView>(R.id.elapsedChip)
         timerMinus?.setOnClickListener { onTimerStep(-TimerRowModel.STEP_MINUTES) }
         timerPlus?.setOnClickListener { onTimerStep(TimerRowModel.STEP_MINUTES) }
         timerSwitch?.setOnCheckedChangeListener { _, checked -> onTimerSwitch(checked) }
@@ -325,10 +365,12 @@ class MainActivity : AppCompatActivity() {
         refreshCounts()
         render(DrillUi.state)
         refreshTimerRow()
+        startElapsedTicker()
     }
 
     override fun onPause() {
         chatPane?.setResumed(false)
+        stopElapsedTicker()
         super.onPause()
     }
 
