@@ -927,6 +927,24 @@
                         android:layout_marginTop="4dp"
                         android:textAppearance="?attr/textAppearanceBodySmall" />
 
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/aiLookaheadLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:hint="@string/settings_ai_lookahead"
+                        app:helperText="@string/settings_ai_lookahead_help">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/aiLookaheadInput"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:imeOptions="actionDone"
+                            android:inputType="number"
+                            android:maxLines="1"
+                            android:textAppearance="?attr/textAppearanceBodyLarge" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -1004,24 +1022,6 @@
                             android:src="@drawable/ic_refresh"
                             app:tint="?attr/colorOnSurfaceVariant" />
                     </LinearLayout>
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/aiLookaheadLayout"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:hint="@string/settings_ai_lookahead"
-                        app:helperText="@string/settings_ai_lookahead_help">
-
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/aiLookaheadInput"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:imeOptions="actionDone"
-                            android:inputType="number"
-                            android:maxLines="1"
-                            android:textAppearance="?attr/textAppearanceBodyLarge" />
-                    </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/aiBatchSwitch"
