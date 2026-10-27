@@ -1418,7 +1418,7 @@ class DrillService : Service(), VoiceIo {
         StudyBlockStore.goalElapsedMs(block, System.currentTimeMillis(), sessionElapsedMs)
 
     private fun finishGoal(progress: SessionProgress, startedElapsed: Long) {
-        val summary = progress.spokenSummary(SystemClock.elapsedRealtime() - startedElapsed)
+        val summary = StudyBlockPrompt.withBlock(progress.spokenSummary(SystemClock.elapsedRealtime() - startedElapsed), block, System.currentTimeMillis())
         Log.i(TAG, "goal reached")
         showStatus("Goal reached")
         speak(summary)

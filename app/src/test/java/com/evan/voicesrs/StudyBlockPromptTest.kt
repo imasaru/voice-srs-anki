@@ -115,4 +115,21 @@ class StudyBlockPromptTest {
         assertEquals(60, next.goalMin)
         assertEquals(at(11, 0), next.runStartMs)
     }
+
+    @Test
+    fun `withBlock without block keeps the summary`() {
+        assertEquals("Done: 3 cards, 2 good or easy, 5 minutes.", StudyBlockPrompt.withBlock("Done: 3 cards, 2 good or easy, 5 minutes.", null, at(12, 0)))
+    }
+
+    @Test
+    fun `withBlock with goal adds the block line`() {
+        val s = paused(2, 90 * 60_000L, 90)
+        assertEquals("Done: 3 cards, 2 good or easy, 5 minutes. Block 2: 90 of 90 min.", StudyBlockPrompt.withBlock("Done: 3 cards, 2 good or easy, 5 minutes.", s, at(12, 0)))
+    }
+
+    @Test
+    fun `withBlock without goal adds minutes only`() {
+        val s = paused(1, 34 * 60_000L, 0)
+        assertEquals("Done: 1 card, 1 good or easy, 1 minute. Block 1: 34 min.", StudyBlockPrompt.withBlock("Done: 1 card, 1 good or easy, 1 minute.", s, at(12, 0)))
+    }
 }

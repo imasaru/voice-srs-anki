@@ -31,6 +31,10 @@ object StudyBlockPrompt {
         return if (s.goalMin > 0) "Block ${s.index}: $m of ${s.goalMin} min" else "Block ${s.index}: $m min"
     }
 
+    /** Goal summary plus the block line: "<summary> Block N: M of G min." No block: summary unchanged. */
+    fun withBlock(summary: String, s: StudyBlockStore.State?, nowMs: Long): String =
+        if (s == null) summary else "$summary ${blockLine(s, nowMs)}."
+
     /**
      * Applies the user's choice: continueChosen = true resumes (StudyBlockStore.start(s, nowMs, zone, goalMin, newBlock = false)),
      * false starts a new block (StudyBlockStore.start(s, nowMs, zone, goalMin, newBlock = true)).
