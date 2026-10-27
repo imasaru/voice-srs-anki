@@ -18,6 +18,20 @@ object TapAnswer {
     fun tappable(mcq: Boolean, revealed: Boolean): Boolean = mcq && !revealed
 
     /**
+     * Whether tapping the current card should cut the TTS that is reading it.
+     * Only when the drill is running and neither the chat is paused nor the
+     * session is silent; anything else leaves speech alone.
+     */
+    fun cutsSpeech(drillRunning: Boolean, chatPaused: Boolean, silentSession: Boolean): Boolean =
+        drillRunning && !chatPaused && !silentSession
+
+    /**
+     * After a readout was cut: read it again only when Silent cut it, not when
+     * a card tap skipped it ([cutsSpeech]).
+     */
+    fun rereadAfterCut(interrupted: Boolean, skipped: Boolean): Boolean = interrupted && !skipped
+
+    /**
      * Whole utterance is a letter on this card. Homophones, NATO words, and
      * ordinals live in [SpokenLetter]. Ordinals are the original letters
      * (first = A), including after a shuffle. "the" alone is D. "tea" is not.
