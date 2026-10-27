@@ -102,6 +102,35 @@ class PrefsMapTest {
     }
 
     @Test
+    fun `both secrets round-trip through export, clear, and import`() {
+        // Dummy values only. Never use a real key/token.
+        val exported = PrefsMap.snapshot(
+            linkedMapOf("anki_url" to "http://anki.local:8091"),
+            linkedMapOf(
+                "anki_key" to "test-key-123",
+                "neural_token" to "test-token-456"
+            )
+        )
+        val json = SettingsJson.export(exported, includeSecrets = true)
+        assertTrue(json.contains("test-key-123"))
+        assertTrue(json.contains("test-token-456"))
+
+        // Clear the store, then import and assert both secrets are restored.
+        val clearedPlain = LinkedHashMap<String, Any?>()
+        val clearedSecrets = LinkedHashMap<String, Any?>()
+        val known = PrefsMap.knownForParse(clearedSecrets, json)
+        val parsed = SettingsJson.parse(json, known) as SettingsJson.ImportResult.Ok
+        assertTrue(parsed.hadSecrets)
+        PrefsMap.applyDelta(clearedPlain, clearedSecrets, parsed.prefs)
+
+        assertEquals("test-key-123", clearedSecrets["anki_key"])
+        assertEquals("test-token-456", clearedSecrets["neural_token"])
+        // Secrets stay out of the plain map.
+        assertFalse(clearedPlain.containsKey("anki_key"))
+        assertFalse(clearedPlain.containsKey("neural_token"))
+    }
+
+    @Test
     fun `importing tts_rate as a whole double stores a Float`() {
         val editor = RecordingEditor()
         // A whole-number Double (e.g. tts_rate=1.0 from an import) must be
