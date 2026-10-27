@@ -145,9 +145,15 @@ object DailyReportBuilder {
     /** Anki fields can hold newlines/tabs; collapse them so each missed card stays one markdown bullet. */
     private fun oneLine(t: String): String = t.replace(Regex("\\s+"), " ").trim()
     private fun pad5(t: String): String = if (t.length == 5) t + ":00" else t
-    fun render(r: DailyReport): String {
+    /**
+     * [issued] ("21:56 JST") is appended to the title when set; [beforeFocus]
+     * (e.g. the "Where understanding broke" section) is inserted before Focus next.
+     */
+    fun render(r: DailyReport, issued: String? = null, beforeFocus: String = ""): String {
         val sb = StringBuilder()
-        sb.append("# Daily study report — ").append(r.date).append('\n')
+        sb.append("# Daily study report — ").append(r.date)
+        if (!issued.isNullOrBlank()) sb.append(" · issued ").append(issued.trim())
+        sb.append('\n')
 
         sb.append("## Time span\n")
         val span = if (r.firstTime != null && r.lastTime != null) "${r.firstTime}–${r.lastTime}" else "–"
@@ -189,6 +195,7 @@ object DailyReportBuilder {
             }
         }
 
+        if (beforeFocus.isNotBlank()) sb.append(beforeFocus.trimEnd()).append('\n')
         sb.append("## Focus next\n")
         for (row in r.byDomain.take(3)) {
             sb.append("- ").append(row.name).append('\n')

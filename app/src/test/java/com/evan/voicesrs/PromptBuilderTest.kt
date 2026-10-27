@@ -112,9 +112,10 @@ class PromptBuilderTest {
         assertFalse(withoutTools.contains("get_study_summary"))
         assertFalse(withoutTools.contains("get_category_stats"))
         assertFalse(withoutTools.contains("get_missed_cards"))
-        assertTrue(withoutTools.contains("Study data is provided below; use only it."))
+        // #55: the fallback carries no data, so it must not claim data is below.
+        assertFalse(withoutTools.contains("provided below"))
+        assertTrue(withoutTools.contains("No study data is included"))
         assertTrue(withoutTools.contains("Do not call tools."))
-        assertTrue(withoutTools.contains("If it shows zero reviews, say so."))
         // The injected-data prompt keeps the base tutor framing.
         assertTrue(withoutTools.contains("There is no specific card."))
     }
@@ -127,5 +128,14 @@ class PromptBuilderTest {
         assertFalse(cleaned.contains("tool_call"))
         assertFalse(cleaned.contains("get_study_summary"))
         assertTrue(cleaned.contains("The answer is here."))
+    }
+
+    @Test
+    fun `reportSystem asks for verbatim report plus one takeaway per group`() {
+        val s = PromptBuilder.reportSystem()
+        assertTrue(s.contains("Reproduce it in full"))
+        assertTrue(s.contains("Takeaway: "))
+        assertTrue(s.contains("Do not call tools."))
+        assertFalse(s.contains("120 words"))
     }
 }

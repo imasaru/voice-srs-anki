@@ -196,7 +196,7 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) : Stu
         val out = ArrayList<StudyReview>()
         for (name in names) {
             if (!StudyTools.deckMatches(name, deck)) continue
-            out.addAll(cardReviews(name, startId))
+            out.addAll(cardReviews(name, startId).map { it.copy(deck = name) })
         }
         return out.sortedBy { it.atMs }
     }
@@ -233,6 +233,19 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) : Stu
                 }
             }
             out[id] = list
+        }
+        return out
+    }
+
+    override fun reportFields(ids: List<Long>): Map<Long, ReportFields> {
+        if (ids.isEmpty()) return emptyMap()
+        val r = post("cardsInfo", mapOf("cards" to ids)) as? JSONArray ?: return emptyMap()
+        val out = LinkedHashMap<Long, ReportFields>()
+        for (i in 0 until r.length()) {
+            val o = r.optJSONObject(i) ?: continue
+            val id = o.optLong("cardId", 0L)
+            if (id == 0L) continue
+            out[id] = ReportData.fieldsOf(o)
         }
         return out
     }
