@@ -320,9 +320,10 @@ object Prefs {
         return StudyBlockStore.read(plain.all)
     }
 
-    /** Writes every block key; removes KEY_RUN_START when the block is paused (runStartMs == null). */
+    /** Writes every block key; removes KEY_RUN_START when the block is paused (runStartMs == null). A done block is also added to KEY_HISTORY. */
     fun saveStudyBlock(ctx: Context, state: StudyBlockStore.State) {
-        val editor = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+        val plain = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val editor = plain.edit()
         editor.putInt(StudyBlockStore.KEY_INDEX, state.index)
         editor.putLong(StudyBlockStore.KEY_ELAPSED, state.elapsedMs)
         editor.putInt(StudyBlockStore.KEY_GOAL, state.goalMin)
@@ -330,8 +331,16 @@ object Prefs {
         editor.putBoolean(StudyBlockStore.KEY_DONE, state.done)
         val run = state.runStartMs
         if (run == null) editor.remove(StudyBlockStore.KEY_RUN_START) else editor.putLong(StudyBlockStore.KEY_RUN_START, run)
+        if (state.done) {
+            val old = plain.getString(StudyBlockStore.KEY_HISTORY, "") ?: ""
+            editor.putString(StudyBlockStore.KEY_HISTORY, StudyBlockStore.appendHistory(old, state))
+        }
         editor.apply()
     }
+
+    /** Finished-block history string (see StudyBlockStore.appendHistory); "" when none. */
+    fun loadBlockHistory(ctx: Context): String =
+        ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(StudyBlockStore.KEY_HISTORY, "") ?: ""
 
     fun save(ctx: Context, cfg: AnkiConfig) {
         val plain = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
