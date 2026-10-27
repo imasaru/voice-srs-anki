@@ -370,12 +370,17 @@ object CardFaceBinder {
                     }
                 }
                 SectionFormat.Kind.CODE -> {
-                    for (line in block.text.split('\n')) {
+                    // Indents are measured in the monospace face the block is drawn in.
+                    val monoSpacePx = android.graphics.Paint(view.paint)
+                        .apply { typeface = android.graphics.Typeface.MONOSPACE }
+                        .measureText(" ")
+                    block.text.split('\n').forEachIndexed { i, line ->
+                        if (i > 0) sb.append('\n')
                         val lineStart = sb.length
                         sb.append(CodeIndent.expand(line))
                         val depth = CodeIndent.depth(line)
                         if (depth > 0) {
-                            val restPx = (view.paint.measureText(" ") * depth).toInt()
+                            val restPx = (monoSpacePx * depth).toInt()
                             sb.setSpan(
                                 android.text.style.LeadingMarginSpan.Standard(0, restPx),
                                 lineStart,
