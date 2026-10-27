@@ -10,7 +10,7 @@ class ChatPauseTest {
     @Test
     fun `focus thread typing and dictation pause the drill`() {
         val triggers = ChatPause.Trigger.entries
-        assertEquals(4, triggers.size)
+        assertEquals(5, triggers.size)
         assertTrue(triggers.contains(ChatPause.Trigger.FOCUS_INPUT))
         assertTrue(triggers.contains(ChatPause.Trigger.OPEN_THREAD))
         assertTrue(triggers.contains(ChatPause.Trigger.TYPING))
