@@ -1064,6 +1064,20 @@ class DrillService : Service(), VoiceIo {
             RatingGuides.LONG, RatingGuides.SHORT -> Log.i(TAG, "rating prompt spoken")
             RatingGuides.REPROMPT -> Log.i(TAG, "rating reprompt")
         }
+        val parts = SentenceReading.parts(spoken)
+        try {
+            for ((i, part) in parts.withIndex()) {
+                if (stopRequested.get() || speechInterrupted || speechSkipped || sessionSilent) break
+                DrillUi.update(SentenceReading.at(i, part))
+                speakOne(part)
+            }
+        } finally {
+            DrillUi.update(SentenceReading.cleared())
+        }
+    }
+
+    /** One sentence through the chosen engine (neural with on-device fallback, or on-device). Blocks until it ends. */
+    private fun speakOne(spoken: String) {
         val cfg = try {
             Prefs.load(this)
         } catch (e: Exception) {

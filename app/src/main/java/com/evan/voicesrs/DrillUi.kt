@@ -71,7 +71,11 @@ data class DrillUiState(
      * Paused with the bottom button, not by the chat. A manual pause shows the
      * short row label and hides the inline resume; the bottom button resumes.
      */
-    val manualPause: Boolean = false
+    val manualPause: Boolean = false,
+    /** Sentence of the question/answer being spoken right now (sanitized speech text). Blank when nothing is spoken. */
+    val readingSentence: String = "",
+    /** 0-based index of [readingSentence] within the current utterance; -1 when nothing is spoken. */
+    val readingIndex: Int = -1
 )
 
 object DrillUi {
