@@ -134,11 +134,11 @@ object Prefs {
     fun promptForUrl(value: String): Boolean = value.isBlank()
 
     /**
-     * Build-time default from the gitignored local-api-key.txt.
-     * Empty when that file is missing (CI). Not a source literal.
+     * No baked default: the AnkiConnect key comes only from the user's Settings
+     * (empty until they set it). Previously read from BuildConfig.ANKI_API_KEY.
      */
     val DEFAULT_API_KEY: String
-        get() = BuildConfig.ANKI_API_KEY
+        get() = ""
 
     fun load(ctx: Context): AnkiConfig {
         val plain = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -149,8 +149,8 @@ object Prefs {
                 encryptedNeuralToken = stored(secrets, KEY_NEURAL_TOKEN),
                 plainApiKey = stored(plain, KEY_API_KEY),
                 plainNeuralToken = stored(plain, KEY_NEURAL_TOKEN),
-                buildApiKey = BuildConfig.ANKI_API_KEY,
-                buildNeuralToken = BuildConfig.EDGE_TTS_TOKEN
+                buildApiKey = "",
+                buildNeuralToken = ""
             )
         )
         if (secrets != null) {
