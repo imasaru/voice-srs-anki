@@ -7,6 +7,9 @@ package com.evan.voicesrs
 object PlaybackControl {
     enum class State { IDLE, LOADING, READING, PAUSED }
 
+    /** Where the on-screen Pause button should act: read-aloud, the drill, or nothing. */
+    enum class PauseTarget { PLAYBACK, DRILL, NONE }
+
     data class Snapshot(
         val state: State = State.IDLE,
         val section: Int = -1,
@@ -46,6 +49,22 @@ object PlaybackControl {
             current.state == State.LOADING ||
             current.state == State.PAUSED
     }
+
+    /**
+     * Read-aloud wins when it is active. Otherwise the button drives the drill
+     * only while it is running, and does nothing while IDLE and not drilling.
+     */
+    fun pauseTarget(snap: Snapshot, drilling: Boolean): PauseTarget =
+        if (snap.state == State.READING || snap.state == State.LOADING || snap.state == State.PAUSED) {
+            PauseTarget.PLAYBACK
+        } else if (drilling) {
+            PauseTarget.DRILL
+        } else {
+            PauseTarget.NONE
+        }
+
+    fun pauseEnabled(snap: Snapshot, drilling: Boolean): Boolean =
+        pauseTarget(snap, drilling) != PauseTarget.NONE
 
     fun pauseLabel(current: Snapshot): String =
         if (current.state == State.PAUSED) "Resume" else "Pause"

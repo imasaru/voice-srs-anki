@@ -10,7 +10,7 @@ object ChatPause {
     const val LABEL = "Paused, asking AI"
     const val RESUME = "Resume"
 
-    enum class Trigger { FOCUS_INPUT, OPEN_THREAD, TYPING, DICTATION }
+    enum class Trigger { FOCUS_INPUT, OPEN_THREAD, TYPING, DICTATION, MANUAL }
 
     enum class Action { RESUME, RATING, SHOW_ANSWER, DISMISS, OTHER }
 
@@ -109,5 +109,6 @@ object ChatPause {
     /** Focus, typing, dictation, and opening a thread all drop a pending auto-resume. */
     fun triggerReengages(trigger: Trigger): Boolean = when (trigger) {
         Trigger.FOCUS_INPUT, Trigger.OPEN_THREAD, Trigger.TYPING, Trigger.DICTATION -> true
+        Trigger.MANUAL -> false
     }
 }
