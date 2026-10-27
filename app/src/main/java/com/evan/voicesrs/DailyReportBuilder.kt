@@ -142,6 +142,8 @@ object DailyReportBuilder {
         )
     }
     fun pct(d: Double): String = String.format(java.util.Locale.ROOT, "%.1f%%", d)  // 75.0%
+    /** Anki fields can hold newlines/tabs; collapse them so each missed card stays one markdown bullet. */
+    private fun oneLine(t: String): String = t.replace(Regex("\\s+"), " ").trim()
     private fun pad5(t: String): String = if (t.length == 5) t + ":00" else t
     fun render(r: DailyReport): String {
         val sb = StringBuilder()
@@ -181,8 +183,9 @@ object DailyReportBuilder {
         for ((group, cards) in r.missedByConcept) {
             sb.append("### ").append(group).append(" (").append(cards.size).append(")\n")
             for (c in cards) {
-                val stem = if (c.stem.length > 100) c.stem.substring(0, 100) else c.stem
-                sb.append("- ").append(stem).append(" → ").append(c.correctText).append('\n')
+                val flat = oneLine(c.stem)
+                val stem = if (flat.length > 100) flat.substring(0, 100) else flat
+                sb.append("- ").append(stem).append(" → ").append(oneLine(c.correctText)).append('\n')
             }
         }
 
