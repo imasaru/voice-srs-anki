@@ -88,4 +88,12 @@ class TapAnswerTest {
         assertFalse(TapAnswer.cutsSpeech(drillRunning = true, chatPaused = true, silentSession = true))
         assertFalse(TapAnswer.cutsSpeech(drillRunning = false, chatPaused = true, silentSession = true))
     }
+
+    @Test
+    fun `rereadAfterCut re-reads only when Silent cut the readout`() {
+        assertTrue(TapAnswer.rereadAfterCut(interrupted = true, skipped = false))
+        assertFalse(TapAnswer.rereadAfterCut(interrupted = true, skipped = true))
+        assertFalse(TapAnswer.rereadAfterCut(interrupted = false, skipped = false))
+        assertFalse(TapAnswer.rereadAfterCut(interrupted = false, skipped = true))
+    }
 }

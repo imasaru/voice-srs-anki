@@ -154,7 +154,7 @@ class DrillService : Service(), VoiceIo {
         }
 
         /** Card tap: cut TTS without grading. */
-        fun skipSpeech() { active?.stopPlaybackNow() }
+        fun skipSpeech() { active?.skipSpeechNow() }
 
         /**
          * Show answer button and [ACTION_TEST_SHOW_ANSWER].
@@ -306,6 +306,8 @@ class DrillService : Service(), VoiceIo {
     private val pendingRestart = AtomicBoolean(false)
     /** Per utterance. [speak] clears it; a rating tap sets it so TTS stops. */
     @Volatile private var speechInterrupted = false
+    /** Set by a card tap ([skipSpeechNow]); stops the cut readout from being re-read. Cleared by [speak]. */
+    @Volatile private var speechSkipped = false
     /** This card was claimed by a tap. Cleared when that grade is taken or the next question starts. */
     @Volatile private var tapGrade = false
     /** The listen result in hand came from a tap, not the microphone. */
@@ -1021,6 +1023,12 @@ class DrillService : Service(), VoiceIo {
         stopPlaybackNow()
     }
 
+    /** Card tap: cut the readout and move on (no re-read, no grade). */
+    fun skipSpeechNow() {
+        speechSkipped = true
+        stopPlaybackNow()
+    }
+
     /** Stops TTS and earcons without claiming a grade. Used when silent turns on. */
     fun stopPlaybackNow() {
         speechInterrupted = true
@@ -1038,6 +1046,7 @@ class DrillService : Service(), VoiceIo {
         if (spoken.isBlank()) return
         if (!AudioGate.outputAllowed(sessionSilent)) return
         speechInterrupted = false
+        speechSkipped = false
         when (spoken) {
             RatingGuides.LONG, RatingGuides.SHORT -> Log.i(TAG, "rating prompt spoken")
             RatingGuides.REPROMPT -> Log.i(TAG, "rating reprompt")
@@ -1758,7 +1767,7 @@ class DrillService : Service(), VoiceIo {
                     if (showAnswerEarly.get() || sessionSilent) continue
                     // Silent on cut the readout, then Silent off landed before this
                     // loop noticed. Read the question again instead of listening.
-                    if (speechInterrupted) continue
+                    if (TapAnswer.rereadAfterCut(speechInterrupted, speechSkipped)) continue
                     showStatus("Listening for your answer")
                     if (ThinkTime.armed(thinkTimeSec, sessionSilent)) {
                         when (val end = thinkForAnswer(thinkTimeSec, listenWaitMs, listenAttempts)) {
@@ -1874,7 +1883,7 @@ class DrillService : Service(), VoiceIo {
                             speakAnswer = true
                             continue
                         }
-                        speakAnswer = sessionSilent || speechInterrupted
+                        speakAnswer = sessionSilent || TapAnswer.rereadAfterCut(speechInterrupted, speechSkipped)
                         if (stopRequested.get()) return CardStep.Paused
                         continue
                     }

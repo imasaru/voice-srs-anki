@@ -26,6 +26,12 @@ object TapAnswer {
         drillRunning && !chatPaused && !silentSession
 
     /**
+     * After a readout was cut: read it again only when Silent cut it, not when
+     * a card tap skipped it ([cutsSpeech]).
+     */
+    fun rereadAfterCut(interrupted: Boolean, skipped: Boolean): Boolean = interrupted && !skipped
+
+    /**
      * Whole utterance is a letter on this card. Homophones, NATO words, and
      * ordinals live in [SpokenLetter]. Ordinals are the original letters
      * (first = A), including after a shuffle. "the" alone is D. "tea" is not.
