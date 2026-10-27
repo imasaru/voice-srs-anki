@@ -1,0 +1,430 @@
+{
+  "threads": [
+    {
+      "cardId": 2001,
+      "contentHash": "synthetic-001",
+      "messages": [
+        {
+          "role": "user",
+          "text": "I remember a synthetic triangle but not its sides",
+          "at": 946684800000
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 1.\nInvented explanation for parser tests.",
+          "at": 946684800100
+        },
+        {
+          "role": "user",
+          "text": "I remember a synthetic triangle but not its sides",
+          "at": 946684800200
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 1.\nInvented explanation for parser tests.",
+          "at": 946684800300
+        }
+      ],
+      "noteId": 3001
+    },
+    {
+      "cardId": 2002,
+      "contentHash": "synthetic-002",
+      "messages": [
+        {
+          "role": "user",
+          "text": "[bookmark] synthetic example",
+          "at": 946684810000
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 2.\nInvented explanation for parser tests.",
+          "at": 946684810100
+        }
+      ],
+      "noteId": 3002
+    },
+    {
+      "cardId": 2003,
+      "contentHash": "synthetic-003",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Write today's study report for synthetic data",
+          "at": 946684820000
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 3.\nInvented explanation for parser tests.",
+          "at": 946684820100
+        },
+        {
+          "role": "user",
+          "text": "Write today's study report for synthetic data",
+          "at": 946684820200
+        }
+      ],
+      "noteId": 3003
+    },
+    {
+      "cardId": 2004,
+      "contentHash": "synthetic-004",
+      "messages": [
+        {
+          "role": "user",
+          "text": "What is synthetic shape 4?",
+          "at": 946684830000
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 4.\nInvented explanation for parser tests.",
+          "at": 946684830100
+        },
+        {
+          "role": "user",
+          "text": "What is synthetic shape 4?",
+          "at": 946684830200
+        }
+      ],
+      "noteId": 3004
+    },
+    {
+      "cardId": 2005,
+      "contentHash": "synthetic-005",
+      "messages": [
+        {
+          "role": "user",
+          "text": "What is synthetic shape 5?",
+          "at": 946684840000
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 5.\nInvented explanation for parser tests.",
+          "at": 946684840100
+        },
+        {
+          "role": "user",
+          "text": "What is synthetic shape 5?",
+          "at": 946684840200
+        }
+      ],
+      "noteId": 3005
+    },
+    {
+      "cardId": 2006,
+      "contentHash": "synthetic-006",
+      "messages": [
+        {
+          "role": "user",
+          "text": "What is synthetic shape 6?",
+          "at": 946684850000
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 6.\nInvented explanation for parser tests.",
+          "at": 946684850100
+        },
+        {
+          "role": "user",
+          "text": "What is synthetic shape 6?",
+          "at": 946684850200
+        }
+      ],
+      "noteId": 3006
+    },
+    {
+      "cardId": 2007,
+      "contentHash": "synthetic-007",
+      "messages": [
+        {
+          "role": "user",
+          "text": "What is synthetic shape 7?",
+          "at": 946684860000
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 7.\nInvented explanation for parser tests.",
+          "at": 946684860100
+        },
+        {
+          "role": "user",
+          "text": "What is synthetic shape 7?",
+          "at": 946684860200
+        }
+      ],
+      "noteId": 3007
+    },
+    {
+      "cardId": 2008,
+      "contentHash": "synthetic-008",
+      "messages": [
+        {
+          "role": "user",
+          "text": "What is synthetic shape 8?",
+          "at": 946684870000
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 8.\nInvented explanation for parser tests.",
+          "at": 946684870100
+        },
+        {
+          "role": "user",
+          "text": "What is synthetic shape 8?",
+          "at": 946684870200
+        }
+      ],
+      "noteId": 3008
+    },
+    {
+      "cardId": 2009,
+      "contentHash": "synthetic-009",
+      "messages": [
+        {
+          "role": "user",
+          "text": "What is synthetic shape 9?",
+          "at": 946684880000
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 9.\nInvented explanation for parser tests.",
+          "at": 946684880100
+        },
+        {
+          "role": "user",
+          "text": "What is synthetic shape 9?",
+          "at": 946684880200
+        }
+      ],
+      "noteId": 3009
+    },
+    {
+      "cardId": 2010,
+      "contentHash": "synthetic-010",
+      "messages": [
+        {
+          "role": "user",
+          "text": "What is synthetic shape 10?",
+          "at": 946684890000
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 10.\nInvented explanation for parser tests.",
+          "at": 946684890100
+        },
+        {
+          "role": "user",
+          "text": "What is synthetic shape 10?",
+          "at": 946684890200
+        }
+      ],
+      "noteId": 3010
+    },
+    {
+      "cardId": 2011,
+      "contentHash": "synthetic-011",
+      "messages": [
+        {
+          "role": "user",
+          "text": "What is synthetic shape 11?",
+          "at": 946684900000
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 11.\nInvented explanation for parser tests.",
+          "at": 946684900100
+        },
+        {
+          "role": "user",
+          "text": "What is synthetic shape 11?",
+          "at": 946684900200
+        }
+      ],
+      "noteId": 3011
+    },
+    {
+      "cardId": 2012,
+      "contentHash": "synthetic-012",
+      "messages": [
+        {
+          "role": "user",
+          "text": "What is synthetic shape 12?",
+          "at": 946684910000
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 12.\nInvented explanation for parser tests.",
+          "at": 946684910100
+        },
+        {
+          "role": "user",
+          "text": "What is synthetic shape 12?",
+          "at": 946684910200
+        }
+      ],
+      "noteId": 3012
+    },
+    {
+      "cardId": 2013,
+      "contentHash": "synthetic-013",
+      "messages": [
+        {
+          "role": "user",
+          "text": "What is synthetic shape 13?",
+          "at": 946684920000
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 13.\nInvented explanation for parser tests.",
+          "at": 946684920100
+        },
+        {
+          "role": "user",
+          "text": "What is synthetic shape 13?",
+          "at": 946684920200
+        }
+      ],
+      "noteId": 3013
+    },
+    {
+      "cardId": 2014,
+      "contentHash": "synthetic-014",
+      "messages": [
+        {
+          "role": "user",
+          "text": "What is synthetic shape 14?",
+          "at": 946684930000
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 14.\nInvented explanation for parser tests.",
+          "at": 946684930100
+        },
+        {
+          "role": "user",
+          "text": "What is synthetic shape 14?",
+          "at": 946684930200
+        }
+      ],
+      "noteId": 3014
+    },
+    {
+      "cardId": 2015,
+      "contentHash": "synthetic-015",
+      "messages": [
+        {
+          "role": "user",
+          "text": "What is synthetic shape 15?",
+          "at": 946684940000
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 15.\nInvented explanation for parser tests.",
+          "at": 946684940100
+        },
+        {
+          "role": "user",
+          "text": "What is synthetic shape 15?",
+          "at": 946684940200
+        }
+      ],
+      "noteId": 3015
+    },
+    {
+      "cardId": 2016,
+      "contentHash": "synthetic-016",
+      "messages": [
+        {
+          "role": "user",
+          "text": "What is synthetic shape 16?",
+          "at": 946684950000
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 16.\nInvented explanation for parser tests.",
+          "at": 946684950100
+        },
+        {
+          "role": "user",
+          "text": "What is synthetic shape 16?",
+          "at": 946684950200
+        }
+      ],
+      "noteId": 3016
+    },
+    {
+      "cardId": 2001,
+      "contentHash": "synthetic-017",
+      "messages": [
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 1.\nInvented explanation for parser tests.",
+          "at": 946684960500
+        },
+        {
+          "role": "user",
+          "text": "I remember a synthetic triangle but not its sides",
+          "at": 946684960400
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 1.\nInvented explanation for parser tests.",
+          "at": 946684960300
+        },
+        {
+          "role": "user",
+          "text": "I remember a synthetic triangle but not its sides",
+          "at": 946684960200
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 1.\nInvented explanation for parser tests.",
+          "at": 946684960100
+        },
+        {
+          "role": "user",
+          "text": "I remember a synthetic triangle but not its sides",
+          "at": 946684960000
+        }
+      ],
+      "noteId": 3001
+    },
+    {
+      "cardId": 2002,
+      "contentHash": "synthetic-018",
+      "messages": [
+        {
+          "role": "user",
+          "text": "[bookmark] synthetic example",
+          "at": 946684970000
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 2.\nInvented explanation for parser tests.",
+          "at": 946684970100
+        },
+        {
+          "role": "user",
+          "text": "[bookmark] synthetic example",
+          "at": 946684970200
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 2.\nInvented explanation for parser tests.",
+          "at": 946684970300
+        },
+        {
+          "role": "user",
+          "text": "[bookmark] synthetic example",
+          "at": 946684970400
+        },
+        {
+          "role": "assistant",
+          "text": "Core concept: Synthetic shape 2.\nInvented explanation for parser tests.",
+          "at": 946684970500
+        }
+      ],
+      "noteId": 3002
+    }
+  ]
+}
