@@ -249,7 +249,13 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
         findViewById<Button>(R.id.playbackPauseButton)?.setOnClickListener {
-            PlaybackSpeaker.togglePause(this)
+            val drilling = DrillUi.state.drillRunning || DrillService.running
+            when (PlaybackControl.pauseTarget(PlaybackUi.state, drilling, DrillUi.state.chatPaused)) {
+                PlaybackControl.PauseTarget.PLAYBACK -> PlaybackSpeaker.togglePause(this)
+                PlaybackControl.PauseTarget.DRILL -> DrillService.pauseForChat(ChatPause.Trigger.MANUAL)
+                PlaybackControl.PauseTarget.DRILL_RESUME -> DrillService.resumeFromChat()
+                PlaybackControl.PauseTarget.NONE -> Unit
+            }
         }
         showCrashIfAny()
         bindDeckTitle(Prefs.load(this).deck)
@@ -860,9 +866,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun paintPlayback(snap: PlaybackControl.Snapshot) {
         val pause = findViewById<Button>(R.id.playbackPauseButton) ?: return
+        val drilling = DrillUi.state.drillRunning || DrillService.running
         pause.visibility = if (PlaybackControl.pauseVisible()) View.VISIBLE else View.GONE
-        pause.isEnabled = PlaybackControl.pauseEnabled(snap)
-        pause.text = if (snap.state == PlaybackControl.State.PAUSED) {
+        val drillPaused = DrillUi.state.chatPaused
+        pause.isEnabled = PlaybackControl.pauseEnabled(snap, drilling, drillPaused)
+        pause.text = if (PlaybackControl.pauseShowsResume(snap, drilling, drillPaused)) {
             getString(R.string.playback_resume)
         } else {
             getString(R.string.playback_pause)
