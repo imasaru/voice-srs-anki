@@ -1,5 +1,7 @@
 package com.evan.voicesrs
 
+import org.json.JSONObject
+
 data class DumpRev(val time: String, val ease: Int, val type: Int, val ivl: Int, val ms: Long)
 data class DumpCard(val cid: Long, val deck: String, val domain: String, val stem: String, val correctText: String, val revs: List<DumpRev>)
 data class PctRow(val name: String, val correct: Int, val total: Int) {
@@ -31,8 +33,48 @@ object DailyReportBuilder {
         "Unity Catalog" to listOf("unity catalog", "metastore", "hive", "external location", "storage credential", "system.access", "grant"),
         "Lakehouse basics" to listOf("lakehouse", "delta lake", "acid", "medallion"),
     )
-    fun parseDump(text: String): List<DumpCard> = TODO()
-    fun concept(card: DumpCard): String = TODO()   // group name or "Other"
+    fun parseDump(text: String): List<DumpCard> {
+        val out = ArrayList<DumpCard>()
+        for (rawLine in text.lines()) {
+            val line = rawLine.trimStart()
+            if (!line.startsWith("{")) continue
+            val obj = JSONObject(line)
+            val fields = obj.optJSONObject("fields")
+            val revs = ArrayList<DumpRev>()
+            val revsArr = obj.optJSONArray("revs")
+            if (revsArr != null) {
+                for (i in 0 until revsArr.length()) {
+                    val r = revsArr.getJSONArray(i)
+                    revs += DumpRev(
+                        time = r.optString(0).orEmpty(),
+                        ease = r.optInt(1),
+                        type = r.optInt(2),
+                        ivl = r.optInt(3),
+                        ms = r.optLong(4),
+                    )
+                }
+            }
+            out += DumpCard(
+                cid = obj.optLong("cid"),
+                deck = obj.optString("deck").orEmpty(),
+                domain = fields?.optString("Domain").orEmpty(),
+                stem = fields?.optString("Stem").orEmpty(),
+                correctText = fields?.optString("CorrectText").orEmpty(),
+                revs = revs,
+            )
+        }
+        return out
+    }
+
+    fun concept(card: DumpCard): String {
+        val hay = (card.stem + " " + card.correctText).lowercase()
+        for ((group, keywords) in CONCEPTS) {
+            for (kw in keywords) {
+                if (hay.contains(kw.lowercase())) return group
+            }
+        }
+        return "Other"
+    }
     fun build(date: String, cards: List<DumpCard>): DailyReport = TODO()
     fun pct(d: Double): String = String.format(java.util.Locale.ROOT, "%.1f%%", d)  // 75.0%
     fun render(r: DailyReport): String = TODO()
