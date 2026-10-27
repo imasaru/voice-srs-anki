@@ -1413,6 +1413,10 @@ class DrillService : Service(), VoiceIo {
         }.onFailure { Log.w(TAG, "study block tick failed", it) }
     }
 
+    /** Goal-check elapsed time: the study block's time when one is running, else the session's. */
+    private fun goalElapsed(sessionElapsedMs: Long): Long =
+        StudyBlockStore.goalElapsedMs(block, System.currentTimeMillis(), sessionElapsedMs)
+
     private fun finishGoal(progress: SessionProgress, startedElapsed: Long) {
         val summary = progress.spokenSummary(SystemClock.elapsedRealtime() - startedElapsed)
         Log.i(TAG, "goal reached")
@@ -1485,7 +1489,7 @@ class DrillService : Service(), VoiceIo {
         while (!stopRequested.get()) {
             blockTick()
             val elapsed = SystemClock.elapsedRealtime() - started
-            if (!goalSpoken && progress.goalReached(cfg.goalMode, cfg.goalCards, cfg.goalMinutes, elapsed)) {
+            if (!goalSpoken && progress.goalReached(cfg.goalMode, cfg.goalCards, cfg.goalMinutes, goalElapsed(elapsed))) {
                 finishGoal(progress, started)
                 goalSpoken = true
                 break
@@ -1601,7 +1605,7 @@ class DrillService : Service(), VoiceIo {
                 }
             }
             val after = SystemClock.elapsedRealtime() - started
-            if (!goalSpoken && progress.goalReached(cfg.goalMode, cfg.goalCards, cfg.goalMinutes, after)) {
+            if (!goalSpoken && progress.goalReached(cfg.goalMode, cfg.goalCards, cfg.goalMinutes, goalElapsed(after))) {
                 finishGoal(progress, started)
                 goalSpoken = true
                 break
@@ -1649,7 +1653,7 @@ class DrillService : Service(), VoiceIo {
             if (stopRequested.get()) break
             blockTick()
             val elapsed = SystemClock.elapsedRealtime() - started
-            if (progress.goalReached(cfg.goalMode, cfg.goalCards, cfg.goalMinutes, elapsed)) {
+            if (progress.goalReached(cfg.goalMode, cfg.goalCards, cfg.goalMinutes, goalElapsed(elapsed))) {
                 finishGoal(progress, started)
                 goalSpoken = true
                 break

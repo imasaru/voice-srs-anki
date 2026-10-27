@@ -146,4 +146,21 @@ class StudyBlockStoreTest {
         assertEquals(s1, again)
         assertEquals(at(10, 0), again.runStartMs)
     }
+
+    @Test
+    fun `goalElapsedMs without block uses session time`() {
+        assertEquals(123_000L, StudyBlockStore.goalElapsedMs(null, at(10, 0), 123_000L))
+    }
+
+    @Test
+    fun `goalElapsedMs running block adds banked and running stretch`() {
+        val s = StudyBlockStore.State(1, 34 * 60_000L, 90, "2026-10-27", at(10, 0), false)
+        assertEquals(44 * 60_000L, StudyBlockStore.goalElapsedMs(s, at(10, 10), 5_000L))
+    }
+
+    @Test
+    fun `goalElapsedMs paused block ignores session time`() {
+        val s = StudyBlockStore.State(1, 34 * 60_000L, 90, "2026-10-27", null, false)
+        assertEquals(34 * 60_000L, StudyBlockStore.goalElapsedMs(s, at(10, 10), 999_000L))
+    }
 }

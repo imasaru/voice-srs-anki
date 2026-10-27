@@ -60,6 +60,10 @@ object StudyBlockStore {
         }
     }
 
+    /** Elapsed ms the drill's goal check uses: the block's elapsedAt when a block exists, else the session's own elapsed ms. */
+    fun goalElapsedMs(s: State?, nowMs: Long, sessionElapsedMs: Long): Long =
+        if (s == null) sessionElapsedMs else elapsedAt(s, nowMs)
+
     /** True when s != null, !s.done, s.dayKey == dayKey(nowMs, zone) and elapsedAt(s, nowMs) > 0. Used to offer "Continue block (34 of 90)". */
     fun hasUnfinished(s: State?, nowMs: Long, zone: ZoneId): Boolean {
         if (s == null) return false
