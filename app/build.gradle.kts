@@ -1,4 +1,3 @@
-import java.io.File
 import java.util.Properties
 
 plugins {
@@ -6,13 +5,6 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
 }
-
-// Baked defaults. Never print these values. Both files stay outside git.
-val edgeTokenFile = File("<local-directory>")
-val edgeTtsToken: String = if (edgeTokenFile.isFile) edgeTokenFile.readText().trim() else ""
-
-val ankiKeyFile = rootProject.file("local-api-key.txt")
-val ankiApiKey: String = if (ankiKeyFile.isFile) ankiKeyFile.readText().trim() else ""
 
 /** Host defaults from gitignored local.properties. Blank when missing so a fresh clone builds. */
 val localProps = Properties()
@@ -53,8 +45,6 @@ android {
         versionCode = 24
         versionName = "0.1.23"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "ANKI_API_KEY", javaStringLiteral(ankiApiKey))
-        buildConfigField("String", "EDGE_TTS_TOKEN", javaStringLiteral(edgeTtsToken))
         buildConfigField("String", "DEFAULT_ANKI_URL", javaStringLiteral(defaultAnkiUrl))
         buildConfigField("String", "DEFAULT_NEURAL_URL", javaStringLiteral(defaultNeuralUrl))
         buildConfigField("String", "DEFAULT_AI_URL", javaStringLiteral(defaultAiUrl))
