@@ -350,7 +350,7 @@ object CardFaceBinder {
         val sb = SpannableStringBuilder()
         for (block in doc.blocks) {
             if (block.kind == SectionFormat.Kind.FOOTER) continue
-            if (sb.isNotEmpty()) sb.append('\n')
+            if (sb.isNotEmpty()) sb.append(if (block.gapBefore) "\n\n" else "\n")
             val start = sb.length
             when (block.kind) {
                 SectionFormat.Kind.BULLET -> {
