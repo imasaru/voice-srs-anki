@@ -66,8 +66,37 @@ class PauseTargetTest {
     }
 
     @Test
-    fun `manual trigger pauses but does not reengage`() {
+    fun `manual trigger pauses and drops a pending auto-resume`() {
         assertTrue(ChatPause.pauses(drillRunning = true, ChatPause.Trigger.MANUAL))
-        assertFalse(ChatPause.triggerReengages(ChatPause.Trigger.MANUAL))
+        assertTrue(ChatPause.triggerReengages(ChatPause.Trigger.MANUAL))
+    }
+
+    @Test
+    fun `idle paused drill targets drill resume and shows Resume`() {
+        val idle = PlaybackControl.Snapshot(state = PlaybackControl.State.IDLE)
+        assertEquals(
+            PlaybackControl.PauseTarget.DRILL_RESUME,
+            PlaybackControl.pauseTarget(idle, drilling = true, drillPaused = true)
+        )
+        assertTrue(PlaybackControl.pauseEnabled(idle, true, true))
+        assertTrue(PlaybackControl.pauseShowsResume(idle, true, true))
+        assertFalse(PlaybackControl.pauseShowsResume(idle, true, false))
+        assertFalse(PlaybackControl.pauseShowsResume(idle, false, true))
+        assertEquals(
+            PlaybackControl.PauseTarget.NONE,
+            PlaybackControl.pauseTarget(idle, drilling = false, drillPaused = true)
+        )
+    }
+
+    @Test
+    fun `read-aloud wins over a paused drill`() {
+        val reading = PlaybackControl.Snapshot(state = PlaybackControl.State.READING)
+        assertEquals(
+            PlaybackControl.PauseTarget.PLAYBACK,
+            PlaybackControl.pauseTarget(reading, drilling = true, drillPaused = true)
+        )
+        assertFalse(PlaybackControl.pauseShowsResume(reading, true, true))
+        val paused = PlaybackControl.Snapshot(state = PlaybackControl.State.PAUSED)
+        assertTrue(PlaybackControl.pauseShowsResume(paused, false, false))
     }
 }

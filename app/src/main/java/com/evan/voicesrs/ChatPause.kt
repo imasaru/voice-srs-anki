@@ -106,9 +106,8 @@ object ChatPause {
         pulse = false
     )
 
-    /** Focus, typing, dictation, and opening a thread all drop a pending auto-resume. */
+    /** Focus, typing, dictation, opening a thread and the Pause button all drop a pending auto-resume. */
     fun triggerReengages(trigger: Trigger): Boolean = when (trigger) {
-        Trigger.FOCUS_INPUT, Trigger.OPEN_THREAD, Trigger.TYPING, Trigger.DICTATION -> true
-        Trigger.MANUAL -> false
+        Trigger.FOCUS_INPUT, Trigger.OPEN_THREAD, Trigger.TYPING, Trigger.DICTATION, Trigger.MANUAL -> true
     }
 }
