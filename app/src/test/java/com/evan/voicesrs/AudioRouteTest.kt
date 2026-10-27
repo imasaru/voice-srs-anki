@@ -137,4 +137,40 @@ class AudioRouteTest {
         assertNull(r.chosen)
         assertFalse(r.changed)
     }
+
+    // --- commAction (API guard) ---------------------------------------------
+
+    @Test
+    fun `commAction is NONE below API 31 regardless of preference`() {
+        for (sdk in listOf(26, 30)) {
+            assertEquals(
+                AudioRouteDecision.CommAction.NONE,
+                AudioRouteDecision.commAction(useCommunicationDevice = true, sdkInt = sdk),
+            )
+            assertEquals(
+                AudioRouteDecision.CommAction.NONE,
+                AudioRouteDecision.commAction(useCommunicationDevice = false, sdkInt = sdk),
+            )
+        }
+    }
+
+    @Test
+    fun `commAction is SET on API 31+ when a communication device is used`() {
+        for (sdk in listOf(31, 34)) {
+            assertEquals(
+                AudioRouteDecision.CommAction.SET,
+                AudioRouteDecision.commAction(useCommunicationDevice = true, sdkInt = sdk),
+            )
+        }
+    }
+
+    @Test
+    fun `commAction is CLEAR on API 31+ when no communication device is used`() {
+        for (sdk in listOf(31, 34)) {
+            assertEquals(
+                AudioRouteDecision.CommAction.CLEAR,
+                AudioRouteDecision.commAction(useCommunicationDevice = false, sdkInt = sdk),
+            )
+        }
+    }
 }

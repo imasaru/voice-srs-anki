@@ -1,6 +1,7 @@
 package com.evan.voicesrs
 
 import android.content.Context
+import android.annotation.SuppressLint
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -61,6 +62,23 @@ object AudioRouteDecision {
             useCommunicationDevice = chosen?.let { usesCommunicationDevice(it.type) } ?: false,
         )
     }
+
+    /**
+     * Which communication-device call a [Result] maps to. [CLEAR] and [SET] are
+     * API 31+ only; [NONE] means the platform has no such API (below 31).
+     */
+    enum class CommAction { SET, CLEAR, NONE }
+
+    /**
+     * Pure API guard for the communication-device switch. Returns [NONE] on
+     * pre-API-31 so the caller never reaches
+     * [android.media.AudioManager.setCommunicationDevice]/[clearCommunicationDevice]
+     * without a version check — the guard lives here, not at each call site.
+     */
+    fun commAction(useCommunicationDevice: Boolean, sdkInt: Int): CommAction =
+        if (sdkInt < 31) CommAction.NONE
+        else if (useCommunicationDevice) CommAction.SET
+        else CommAction.CLEAR
 }
 
 /**
@@ -110,6 +128,8 @@ class AudioRouteWatcher(context: Context) {
         return did
     }
 
+    /** Android API check lives in [AudioRouteDecision.commAction], so silence NewApi here. */
+    @SuppressLint("NewApi")
     private fun evaluate() {
         val outputInfos =
             audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS) ?: emptyArray()
@@ -126,12 +146,13 @@ class AudioRouteWatcher(context: Context) {
         routeChanged = true
         result.chosen?.let { Log.i(LOG_TAG, "audio route changed to ${it.type}") }
 
-        if (result.useCommunicationDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            result.chosen?.let { matchingOutput(it, outputInfos) }?.let {
-                audioManager.setCommunicationDevice(it)
-            }
-        } else {
-            audioManager.clearCommunicationDevice()
+        when (AudioRouteDecision.commAction(result.useCommunicationDevice, Build.VERSION.SDK_INT)) {
+            AudioRouteDecision.CommAction.SET ->
+                result.chosen?.let { matchingOutput(it, outputInfos) }?.let {
+                    audioManager.setCommunicationDevice(it)
+                }
+            AudioRouteDecision.CommAction.CLEAR -> audioManager.clearCommunicationDevice()
+            AudioRouteDecision.CommAction.NONE -> Unit
         }
     }
 
