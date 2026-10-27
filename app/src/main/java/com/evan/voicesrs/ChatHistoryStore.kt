@@ -26,7 +26,7 @@ data class StoredChat(
 
     fun toAsk(): ChatRow.Ask {
         val state = if (answer.isBlank()) ExplState.None else ExplState.Ready(answer, cached = true)
-        return ChatRow.Ask(id, question, state, deck)
+        return ChatRow.Ask(id, question, state, deck, at = this.at)
     }
 
     fun toTurn(): ReviewTurn {
@@ -41,7 +41,8 @@ data class StoredChat(
             transcript = transcript,
             ease = ease,
             explanation = explanation,
-            questionLabel = questionLabel
+            questionLabel = questionLabel,
+            at = this.at
         )
     }
 
@@ -49,7 +50,7 @@ data class StoredChat(
         const val ASK = "ask"
         const val TURN = "turn"
 
-        fun ofAsk(ask: ChatRow.Ask, at: Long = System.currentTimeMillis()): StoredChat? {
+        fun ofAsk(ask: ChatRow.Ask, at: Long = ask.at.takeIf { it > 0 } ?: System.currentTimeMillis()): StoredChat? {
             val answer = when (val state = ask.state) {
                 is ExplState.Ready -> state.text
                 is ExplState.Error -> state.message
@@ -66,7 +67,7 @@ data class StoredChat(
             )
         }
 
-        fun ofTurn(turn: ReviewTurn, at: Long = System.currentTimeMillis()): StoredChat {
+        fun ofTurn(turn: ReviewTurn, at: Long = turn.at.takeIf { it > 0 } ?: System.currentTimeMillis()): StoredChat {
             val answer = when (val state = turn.explanation) {
                 is ExplState.Ready -> state.text
                 is ExplState.Error -> state.message

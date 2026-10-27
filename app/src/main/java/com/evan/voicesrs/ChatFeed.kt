@@ -47,7 +47,9 @@ sealed class ChatRow {
         val id: Long,
         val question: String,
         val state: ExplState,
-        val deck: String = ""
+        val deck: String = "",
+        /** Wall clock when the ask was created. 0 until wired; rows order by this. */
+        val at: Long = 0L
     ) : ChatRow() {
         override val key: String = "ask$id"
     }
@@ -80,8 +82,14 @@ object ChatFeed {
                 StoredChat.ASK -> if (item.id !in liveAskIds) out += item.toAsk()
             }
         }
-        for (turn in turns) out += ChatRow.Past(turn)
-        for (ask in asks) out += ask
+        // Merge live turns and asks by wall-clock time so a pinned study-report
+        // Ask does not sit below every live turn. Turns rank before asks at equal
+        // `at`; stable sort keeps at==0 rows in their original order (turns first).
+        val keyed = ArrayList<Triple<Long, Int, ChatRow>>(turns.size + asks.size)
+        for (turn in turns) keyed += Triple(turn.at, 0, ChatRow.Past(turn))
+        for (ask in asks) keyed += Triple(ask.at, 1, ask)
+        keyed.sortWith(compareBy({ it.first }, { it.second }))
+        for (k in keyed) out += k.third
         val note = notice?.trim().orEmpty()
         if (note.isNotEmpty()) out += ChatRow.Notice(note)
         if (!state.drillRunning || state.frontHtml.isBlank()) return out

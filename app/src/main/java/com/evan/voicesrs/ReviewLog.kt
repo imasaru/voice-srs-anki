@@ -23,7 +23,9 @@ data class ReviewTurn(
     /** Note Correct field. Empty on turns recorded before v0.1.20. */
     val correctField: String = "",
     /** Think-to-grade duration in ms. 0 when unknown. */
-    val durationMs: Long = ThinkTime.UNKNOWN_DURATION_MS
+    val durationMs: Long = ThinkTime.UNKNOWN_DURATION_MS,
+    /** Wall clock when the turn was created. 0 until wired; rows order by this. */
+    val at: Long = 0L
 )
 
 sealed interface ExplState {
@@ -113,7 +115,8 @@ object ReviewLog {
                 unread = false,
                 questionLabel = questionLabel,
                 correctField = correctField,
-                durationMs = durationMs
+                durationMs = durationMs,
+                at = System.currentTimeMillis()
             )
             turns = turns + created
             created
