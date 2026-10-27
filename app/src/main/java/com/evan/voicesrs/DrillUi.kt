@@ -45,6 +45,12 @@ data class DrillUiState(
     val cardId: Long = 0L,
     /** Wall clock when this drill session started. Shuffle seeds use it. */
     val sessionStartedMs: Long = 0L,
+    /** Goal-clock base for the elapsed chip; mirrors the service's [started] (SystemClock.elapsedRealtime). */
+    val elapsedStartMs: Long = 0L,
+    /** Cumulative paused time already subtracted from the elapsed chip. */
+    val elapsedPausedTotalMs: Long = 0L,
+    /** SystemClock.elapsedRealtime the drill last paused (0 while running). */
+    val elapsedPausedSinceMs: Long = 0L,
     /** Original letter the learner picked, before the grade. */
     val chosenLetter: String? = null,
     /** 1 Again or 3 Good. An outline only. It is not a grade. */

@@ -362,6 +362,12 @@ class DrillService : Service(), VoiceIo {
     private val showAnswerEarly = AtomicBoolean(false)
     /** Chat pause blocks the session thread on this card. It does not end the drill. */
     private val chatPaused = AtomicBoolean(false)
+    /** Goal-clock base for the elapsed chip; mirrors the [started] used by finishGoal. */
+    @Volatile private var elapsedStartMs = 0L
+    /** Cumulative paused time already subtracted from the elapsed chip. */
+    @Volatile private var elapsedPausedTotalMs = 0L
+    /** SystemClock.elapsedRealtime the drill last paused; 0 while running. */
+    @Volatile private var elapsedPausedSinceMs = 0L
     private val chatPauseLatch = AtomicReference<CountDownLatch?>(null)
     @Volatile private var thinkDeadlineMs = 0L
     /** Remaining think time frozen by a chat pause. Negative means the timer is not frozen. */
@@ -763,6 +769,9 @@ class DrillService : Service(), VoiceIo {
                     progressLine = "",
                     pendingSync = store.readGrades().size,
                     sessionStartedMs = sessionStartedMs,
+                    elapsedStartMs = elapsedStartMs,
+                    elapsedPausedTotalMs = elapsedPausedTotalMs,
+                    elapsedPausedSinceMs = elapsedPausedSinceMs,
                     cardId = 0L,
                     chosenLetter = null,
                     suggestedEase = null
@@ -842,6 +851,9 @@ class DrillService : Service(), VoiceIo {
                 DrillUi.update {
                     val cleared = it.copy(
                         drillRunning = false,
+                        elapsedStartMs = 0L,
+                        elapsedPausedTotalMs = 0L,
+                        elapsedPausedSinceMs = 0L,
                         ratingMicOpen = false,
                         progressLine = "",
                         ratingVisible = false,
@@ -941,6 +953,9 @@ class DrillService : Service(), VoiceIo {
                         questionOrdinal = ordinal,
                         cardId = cardId,
                         sessionStartedMs = sessionStartedMs,
+                        elapsedStartMs = elapsedStartMs,
+                        elapsedPausedTotalMs = elapsedPausedTotalMs,
+                        elapsedPausedSinceMs = elapsedPausedSinceMs,
                         chosenLetter = null,
                         suggestedEase = null,
                         thinkSecondsLeft = null,
@@ -1391,6 +1406,9 @@ class DrillService : Service(), VoiceIo {
         }
         val progress = SessionProgress(due)
         val started = SystemClock.elapsedRealtime()
+        elapsedStartMs = started
+        elapsedPausedTotalMs = 0L
+        elapsedPausedSinceMs = 0L
         publish(progress, store)
         var lastSkipId = 0L
         var goalSpoken = false
@@ -1553,6 +1571,9 @@ class DrillService : Service(), VoiceIo {
         announceRecognition()
         val progress = SessionProgress(cards.size)
         val started = SystemClock.elapsedRealtime()
+        elapsedStartMs = started
+        elapsedPausedTotalMs = 0L
+        elapsedPausedSinceMs = 0L
         publish(progress, store)
         var goalSpoken = false
         for ((index, card) in cards.withIndex()) {
@@ -2351,6 +2372,7 @@ class DrillService : Service(), VoiceIo {
         if (dictating) {
             // The dictation recognizer owns the mic. Freeze the card and leave it alone.
             if (chatPaused.compareAndSet(false, true)) {
+                elapsedPausedSinceMs = SystemClock.elapsedRealtime()
                 if (thinkDeadlineMs > 0L) {
                     frozenThinkMs = ChatPause.freeze(SystemClock.elapsedRealtime(), thinkDeadlineMs)
                     thinkDeadlineMs = 0L
@@ -2369,6 +2391,7 @@ class DrillService : Service(), VoiceIo {
             publishCue(true, null)
             return
         }
+        elapsedPausedSinceMs = SystemClock.elapsedRealtime()
         if (thinkDeadlineMs > 0L) {
             frozenThinkMs = ChatPause.freeze(SystemClock.elapsedRealtime(), thinkDeadlineMs)
             thinkDeadlineMs = 0L
@@ -2393,6 +2416,10 @@ class DrillService : Service(), VoiceIo {
         if (!ChatPause.accepts(action)) return
         if (!chatPaused.compareAndSet(true, false)) return
         val now = SystemClock.elapsedRealtime()
+        if (elapsedPausedSinceMs > 0L) {
+            elapsedPausedTotalMs += now - elapsedPausedSinceMs
+            elapsedPausedSinceMs = 0L
+        }
         if (frozenThinkMs >= 0L) {
             thinkDeadlineMs = ChatPause.resumeDeadline(now, frozenThinkMs)
             frozenThinkMs = -1L
@@ -2465,7 +2492,17 @@ class DrillService : Service(), VoiceIo {
         if (paused == shownPaused && shown == shownThinkSec) return
         shownPaused = paused
         shownThinkSec = shown
-        runCatching { DrillUi.update { it.copy(chatPaused = paused, thinkSecondsLeft = shown) } }
+        runCatching {
+            DrillUi.update {
+                it.copy(
+                    chatPaused = paused,
+                    thinkSecondsLeft = shown,
+                    elapsedStartMs = elapsedStartMs,
+                    elapsedPausedTotalMs = elapsedPausedTotalMs,
+                    elapsedPausedSinceMs = elapsedPausedSinceMs
+                )
+            }
+        }
     }
 
     private fun claimedEase(): Int? = synchronized(gradeGate) {
