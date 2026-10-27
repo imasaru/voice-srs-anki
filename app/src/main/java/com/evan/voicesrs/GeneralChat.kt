@@ -68,7 +68,7 @@ object GeneralChat {
         synchronized(lock) {
             notice = null
             id = nextId++
-            items = items + ChatRow.Ask(id, q, ExplState.Pending, name)
+            items = items + ChatRow.Ask(id, q, ExplState.Pending, name, at = System.currentTimeMillis())
         }
         val issuedAt = System.currentTimeMillis()
         dispatch()
