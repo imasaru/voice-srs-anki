@@ -106,6 +106,8 @@ class MainActivity : AppCompatActivity() {
     /** Last [DrillUiState.drillRunning] applied by [uiListener]; used to refresh due on session end. */
     private var lastDrillRunning = false
     private var chatPane: ChatPane? = null
+    /** readingSentence|readingIndex last sent to the chat list (h80). */
+    private var lastReadingKey = ""
     private var chatDictation: ChatDictation? = null
     private var chatInputView: EditText? = null
     private var appliedHintRes = 0
@@ -169,6 +171,11 @@ class MainActivity : AppCompatActivity() {
             val ended = lastDrillRunning && !snapshot.drillRunning
             lastDrillRunning = snapshot.drillRunning
             render(snapshot)
+            val readingKey = snapshot.readingSentence + "|" + snapshot.readingIndex
+            if (readingKey != lastReadingKey) {
+                lastReadingKey = readingKey
+                chatPane?.notifyReading(snapshot)
+            }
             if (ended) refreshCounts()
         }
     }

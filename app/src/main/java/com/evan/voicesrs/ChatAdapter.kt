@@ -60,7 +60,12 @@ class ChatAdapter(
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int, payloads: MutableList<Any>) {
-        if (payloads.isEmpty()) bind(holder, getItem(position)) else bind(holder, getItem(position))
+        val row = getItem(position)
+        if (payloads.isNotEmpty() && payloads.all { it == PAYLOAD_READING }) {
+            if (holder is PastHolder && row is ChatRow.Past) { holder.paintReading(row.turn); return }
+            if (holder is LiveHolder && row is ChatRow.Live) { holder.paintReading(row); return }
+        }
+        if (payloads.isEmpty()) bind(holder, row) else bind(holder, row)
     }
 
     private fun bind(holder: RecyclerView.ViewHolder, row: ChatRow) {
@@ -113,6 +118,16 @@ class ChatAdapter(
         private val thread: TextView = view.findViewById(R.id.threadLink)
         private val bookmark: TextView = view.findViewById(R.id.bookmarkLink)
         private val makeCard: Chip = view.findViewById(R.id.makeCardChip)
+
+        /** PAYLOAD_READING: repaint only the reading span on the already-built blocks (no rebind). */
+        fun paintReading(turn: ReviewTurn) {
+            val highlightOn = try {
+                Prefs.load(itemView.context).highlightSentence
+            } catch (_: Exception) {
+                HighlightSentence.SETTING_DEFAULT
+            }
+            CardFaceBinder.paintReadingIn(blocks, ReadingSpan.sentenceFor(turn.cardId, DrillUi.state, highlightOn))
+        }
 
         fun bind(turn: ReviewTurn) {
             val expanded = turn.turnId in cardOpen
@@ -207,7 +222,8 @@ class ChatAdapter(
                         turnId = turn.turnId,
                         playback = PlaybackUi.state,
                         highlightOn = highlightOn,
-                        onSpeak = { index, text -> onSpeakSection(turn.turnId, index, text) }
+                        onSpeak = { index, text -> onSpeakSection(turn.turnId, index, text) },
+                        readingSentence = ReadingSpan.sentenceFor(turn.cardId, DrillUi.state, highlightOn)
                     )
                 } else {
                     blocks.visibility = View.GONE
@@ -332,6 +348,17 @@ class ChatAdapter(
         private val memoFront: EditText = view.findViewById(R.id.liveMemoFront)
         private val memoBack: EditText = view.findViewById(R.id.liveMemoBack)
 
+        /** h80: the drill speaks this card's question/answer, drawn here; paint the reading sentence on them. */
+        fun paintReading(row: ChatRow.Live) {
+            val highlightOn = try {
+                Prefs.load(itemView.context).highlightSentence
+            } catch (_: Exception) {
+                HighlightSentence.SETTING_DEFAULT
+            }
+            val sentence = if (row.revealText) ReadingSpan.sentenceFor(row.cardId, DrillUi.state, highlightOn) else ""
+            CardFaceBinder.paintReadingIn(listOf(question, answer), sentence)
+        }
+
         init {
             val cut: (View) -> Unit = {
                 val s = DrillUi.state
@@ -418,6 +445,7 @@ class ChatAdapter(
             good.setOnClickListener { DrillService.submitTestGrade("good") }
             easy.setOnClickListener { DrillService.submitTestGrade("easy") }
             bindFollows(row.followUps)
+            paintReading(row)
         }
 
         private fun bindMemos(row: ChatRow.Live) {
@@ -499,9 +527,11 @@ class ChatAdapter(
 
     companion object {
         const val PAYLOAD = "expl"
+        /** Only the spoken-sentence highlight changed (DrillUi.readingSentence / readingIndex). */
+        const val PAYLOAD_READING = "reading"
         private const val TYPE_PAST = 1
         private const val TYPE_DIVIDER = 2
-        private const val TYPE_LIVE = 3
+        internal const val TYPE_LIVE = 3
         private const val TYPE_ASK = 4
         private const val TYPE_NOTICE = 5
 

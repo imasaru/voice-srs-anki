@@ -179,6 +179,15 @@ class ChatPane(
         DrillService.reportChatScreen(attached = false, ordinal = followView.liveOrdinal, ready = false)
     }
 
+    /** The spoken sentence changed: repaint only the current drill card's turn row (payload, no full rebind). */
+    fun notifyReading(state: DrillUiState) {
+        val ids = adapter.currentList.map { (it as? ChatRow.Past)?.turn?.cardId }
+        val pos = ReadingSpan.currentTurnIndex(ids, state)
+        if (pos >= 0) adapter.notifyItemChanged(pos, ChatAdapter.PAYLOAD_READING)
+        val live = adapter.currentList.indexOfLast { it is ChatRow.Live }
+        if (live >= 0) adapter.notifyItemChanged(live, ChatAdapter.PAYLOAD_READING)
+    }
+
     private fun render() {
         val turns = ReviewLog.snapshot()
         val showCard = try {

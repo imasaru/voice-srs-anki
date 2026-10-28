@@ -12,6 +12,7 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
+import android.util.Log
 import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
@@ -164,7 +165,8 @@ object CardFaceBinder {
         turnId: Long = 0L,
         playback: PlaybackControl.Snapshot = PlaybackControl.Snapshot(),
         highlightOn: Boolean = HighlightSentence.SETTING_DEFAULT,
-        onSpeak: ((Int, String) -> Unit)? = null
+        onSpeak: ((Int, String) -> Unit)? = null,
+        readingSentence: String = ""
     ) {
         host.removeAllViews()
         val doc = if (body.isBlank()) {
@@ -245,6 +247,7 @@ object CardFaceBinder {
             shown++
         }
         host.visibility = if (shown == 0) View.GONE else View.VISIBLE
+        paintReadingIn(host, readingSentence)
         val foot = listOf(doc.footer, extraFooter.trim()).filter { it.isNotBlank() }.joinToString("\n")
         if (foot.isBlank()) {
             footerView.visibility = View.GONE
@@ -255,6 +258,47 @@ object CardFaceBinder {
             footerView.setTextColor(host.context.getColor(R.color.note_footer))
             footerView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
         }
+    }
+
+    /** 58C in the chat bubble: marks the span this binder painted, so it can be found and removed. */
+    class ReadingHighlightSpan(color: Int) : BackgroundColorSpan(color)
+
+    /**
+     * Paints [sentence] on the first matching block TextView of [host] (rows built by
+     * [fillSections]; the text view is each row's last child) and removes any earlier
+     * reading span. Blank [sentence] only clears. Colour = R.color.reading_highlight (as paintReading).
+     */
+    fun paintReadingIn(host: LinearLayout, sentence: String) {
+        val views = (0 until host.childCount).mapNotNull { i ->
+            val row = host.getChildAt(i) as? LinearLayout ?: return@mapNotNull null
+            row.getChildAt(row.childCount - 1) as? TextView
+        }
+        paintReadingIn(views, sentence)
+    }
+
+    /** Same as above on explicit views (LiveHolder: liveQuestion, liveAnswer). GONE/empty views never match. */
+    fun paintReadingIn(views: List<TextView>, sentence: String) {
+        for (view in views) {
+            val cur = view.text
+            if (cur is Spanned && cur.getSpans(0, cur.length, ReadingHighlightSpan::class.java).isNotEmpty()) {
+                val sp = android.text.SpannableString(cur)
+                for (old in sp.getSpans(0, sp.length, ReadingHighlightSpan::class.java)) sp.removeSpan(old)
+                view.text = sp
+            }
+        }
+        if (sentence.isBlank()) return
+        val pick = ReadingSpan.pick(views.map { it.text.toString() }, sentence)
+        Log.d("CardFaceBinder", "bubble reading highlight matched=${pick != null} blocks=${views.size}")
+        if (pick == null) return
+        val view = views[pick.block]
+        val sp = android.text.SpannableString(view.text)
+        sp.setSpan(
+            ReadingHighlightSpan(view.context.getColor(R.color.reading_highlight)),
+            pick.range.first,
+            pick.range.last + 1,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        view.text = sp
     }
 
     /**
