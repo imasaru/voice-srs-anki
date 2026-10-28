@@ -45,4 +45,35 @@ class SentenceReadingTest {
         assertEquals("", s.readingSentence)
         assertEquals(-1, s.readingIndex)
     }
+
+    @Test
+    fun h_firstWordMatch() {
+        assertEquals(5..8, SentenceReading.spanIn("One. Two.", "Two."))
+    }
+
+    @Test
+    fun i_anyWhitespaceBetweenWords() {
+        assertEquals(5..15, SentenceReading.spanIn("One.\nTwo  words.", "Two words."))
+    }
+
+    @Test
+    fun j_notFound() {
+        assertEquals(null, SentenceReading.spanIn("One. Two.", "Three."))
+    }
+
+    @Test
+    fun k_blankSentenceNull() {
+        assertEquals(null, SentenceReading.spanIn("abc", ""))
+        assertEquals(null, SentenceReading.spanIn("abc", "   "))
+    }
+
+    @Test
+    fun l_regexCharactersEscaped() {
+        assertEquals(3..8, SentenceReading.spanIn("Is (a+b)? yes", "(a+b)?"))
+    }
+
+    @Test
+    fun m_firstMatch() {
+        assertEquals(0..4, SentenceReading.spanIn("Same. Same.", "Same."))
+    }
 }

@@ -15,4 +15,12 @@ object SentenceReading {
     /** DrillUi.update block: nothing is being spoken. */
     fun cleared(): (DrillUiState) -> DrillUiState =
         { it.copy(readingSentence = "", readingIndex = -1) }
+
+    /** Where [sentence] appears in the on-screen text [shown], matching its words in order with any whitespace between. Not found or blank -> null. */
+    fun spanIn(shown: String, sentence: String): IntRange? {
+        val words = sentence.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (words.isEmpty()) return null
+        val pattern = Regex(words.joinToString("\\s+") { Regex.escape(it) })
+        return pattern.find(shown)?.range
+    }
 }

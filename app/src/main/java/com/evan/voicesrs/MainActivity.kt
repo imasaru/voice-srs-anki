@@ -101,6 +101,8 @@ class MainActivity : AppCompatActivity() {
     private var startWithoutMic = false
     private var renderedFront = ""
     private var renderedBack = ""
+    private var readingSpan: android.text.style.BackgroundColorSpan? = null
+    private var paintedReading = ""
     /** Last [DrillUiState.drillRunning] applied by [uiListener]; used to refresh due on session end. */
     private var lastDrillRunning = false
     private var chatPane: ChatPane? = null
@@ -757,6 +759,7 @@ class MainActivity : AppCompatActivity() {
             }
             heardText?.visibility = View.GONE
             heardText?.text = ""
+            paintReading(frontView, if (showBack) backView else null, if (cfg.highlightSentence) state.readingSentence else "")
         }
         val progressLine = SessionProgress.visibleLine(DrillService.running, state.progressLine)
         val voice = currentVoiceLine(cfg, state)
@@ -957,6 +960,36 @@ class MainActivity : AppCompatActivity() {
             ""
         }
         GeneralChat.runChip(this, fullDeck, pc, cardBlob = cardBlob, chatsBlob = chatsBlob)
+    }
+
+    /** 58C: one background span over the sentence being spoken, on the question or the answer view. */
+    // #59 hook (58E): a word span from ReadingTimeline.wordAt, offset by spanIn(...).first, can be added here later. Do not implement now.
+    private fun paintReading(front: TextView, back: TextView?, sentence: String) {
+        val key = sentence + "|" + renderedFront + "|" + renderedBack + "|" + (back != null)
+        if (key == paintedReading) return
+        paintedReading = key
+        val old = readingSpan
+        readingSpan = null
+        if (old != null) {
+            for (view in listOfNotNull(front, back)) {
+                val cur = view.text
+                if (cur is android.text.Spanned && cur.getSpanStart(old) >= 0) {
+                    val sp = android.text.SpannableString(cur)
+                    sp.removeSpan(old)
+                    view.text = sp
+                }
+            }
+        }
+        if (sentence.isBlank()) return
+        for (view in listOfNotNull(front, back)) {
+            val range = SentenceReading.spanIn(view.text.toString(), sentence) ?: continue
+            val span = android.text.style.BackgroundColorSpan(getColor(R.color.reading_highlight))
+            val sp = android.text.SpannableString(view.text)
+            sp.setSpan(span, range.first, range.last + 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            view.text = sp
+            readingSpan = span
+            return
+        }
     }
 
     /** Countdown while thinking. The pause row replaces it and stays until Resume or a rating. */
