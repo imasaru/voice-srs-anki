@@ -93,4 +93,9 @@ class ThinkTimeTest {
         assertTrue(ThinkTime.isShowAnswer("show answer"))
         assertFalse(ThinkTime.isShowAnswer("show me a hint"))
     }
+
+    @Test
+    fun `next card is skip`() {
+        assertEquals(ThinkTime.Hear.SKIP, ThinkTime.classify("next card"))
+    }
 }

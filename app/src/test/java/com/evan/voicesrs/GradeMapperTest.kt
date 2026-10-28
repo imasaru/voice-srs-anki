@@ -166,4 +166,11 @@ class GradeMapperTest {
         assertNull(GradeMapper.wordToEase("goodbye"))
         assertNull(GradeMapper.wordToEase("not easy peasy"))
     }
+
+    @Test
+    fun `skip it please is skip and skip good is a grade`() {
+        assertTrue(GradeMapper.parse("skip it please") is VoiceAction.Skip)
+        assertTrue(GradeMapper.parse("skip good") is VoiceAction.Grade)
+        assertEquals(3, GradeMapper.wordToEase("skip good"))
+    }
 }
