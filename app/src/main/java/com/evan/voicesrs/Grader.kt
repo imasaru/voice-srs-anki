@@ -76,6 +76,10 @@ class PauseRequested : Exception()
 
 /** v1 grader: self-grading via spoken grades, plus repeat / skip / pause. */
 class VoiceSelfGrader : Grader {
+    companion object {
+        const val MAX_REPEATS = 8
+    }
+
     override fun grade(ctx: GradeContext, io: VoiceIo): Int {
         fun tapped(): Int? =
             ctx.claimedEase()?.let { GradeMapper.toAvailableEase(it, ctx.card.buttons) }
@@ -90,6 +94,7 @@ class VoiceSelfGrader : Grader {
         handedOff()
         tapped()?.let { return it }
         var attempts = 0
+        var repeats = 0
         val max = ListenWindow.clampAttempts(ctx.listenAttempts)
         while (true) {
             handedOff()
@@ -102,6 +107,9 @@ class VoiceSelfGrader : Grader {
             handedOff()
             when (action) {
                 VoiceAction.Repeat -> {
+                    repeats += 1
+                    if (repeats > MAX_REPEATS) throw ListenGaveUp()
+                    attempts = 0
                     io.speak(ctx.spokenAnswer)
                     handedOff()
                     tapped()?.let { return it }
