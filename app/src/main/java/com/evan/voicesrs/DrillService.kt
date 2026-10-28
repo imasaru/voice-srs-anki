@@ -2213,6 +2213,8 @@ class DrillService : Service(), VoiceIo {
 
     /** Spoken answer captured during think time. Null for show-answer, silence, and expiry. */
     @Volatile private var thinkTranscript: String? = null
+    /** All final hypotheses (n-best) of the latest listen, for the own-words judge. */
+    @Volatile private var lastFinals: List<String> = emptyList()
 
     /**
      * Speech for the question. A number printed on the card is not read again.
@@ -2356,6 +2358,7 @@ class DrillService : Service(), VoiceIo {
         val question = BubbleModel.fullQuestion(questionHtml).ifBlank {
             AnkiText.stripHtml(questionHtml)
         }
+        val judgeInput = OwnWordsJudge.judgeInput(transcript, lastFinals)
         var raw: String? = null
         var failReason: String? = null
         val verdict = try {
@@ -2363,7 +2366,7 @@ class DrillService : Service(), VoiceIo {
                 cfg.decisionModel,
                 question,
                 correctAnswer,
-                transcript
+                judgeInput
             )
             raw = AiClient().postDecision(decisionBase, cfg.aiApiKey, body) {
                 stopRequested.get() || destroyed
@@ -2376,6 +2379,7 @@ class DrillService : Service(), VoiceIo {
         when (verdict) {
             is OwnWordsJudge.Verdict.Graded -> {
                 judgedEase = verdict.ease
+                Log.i(TAG, "own-words judge verdict=${verdict.correct} conf=${verdict.confidence} input=$judgeInput")
                 val line = getString(
                     if (verdict.correct) R.string.own_words_correct else R.string.own_words_incorrect
                 )
@@ -2385,6 +2389,7 @@ class DrillService : Service(), VoiceIo {
             OwnWordsJudge.Verdict.Fallback -> {
                 val reason = failReason ?: OwnWordsJudge.fallbackReason(raw, null)
                 if (reason != null) Log.w(TAG, "own-words judge fallback: $reason")
+                Log.i(TAG, "own-words judge verdict=fallback conf=none input=$judgeInput")
                 val line = getString(R.string.own_words_fallback)
                 showStatus(line)
                 speak(line)
@@ -3063,6 +3068,7 @@ class DrillService : Service(), VoiceIo {
             }
             listenLatch = latch
             listenResult.set(null)
+            lastFinals = emptyList()
             listenActive = true
             inFlightClaimed = false
             clientRetryUsed = false
@@ -3506,6 +3512,7 @@ class DrillService : Service(), VoiceIo {
             if (!errorGate.compareAndSet(false, true)) return
             logNBest("final", results)
             val raw = hypotheses(results)
+            lastFinals = raw.map { it.trim() }.filter { it.isNotEmpty() }
             if (raw.any { it.isNotBlank() }) listenSpeechDetected = true
             if (absorbAnswer(raw, allowUnmatched = true)) return
             val text = raw.firstOrNull().orEmpty()

@@ -24,7 +24,9 @@ object OwnWordsJudge {
         "You judge whether a learner's own-words answer means the same as the " +
         "correct answer. Reply with exactly one JSON object and nothing else: " +
         "{\"correct\": <boolean>, \"confidence\": <number 0..1>}. " +
-        "Set correct=true only when the meaning matches; otherwise correct=false."
+        "Set correct=true only when the meaning matches; otherwise correct=false. " +
+        "The learner's answer may list several speech-recognition results separated by \" | \". " +
+        "These are alternative transcriptions of one spoken answer; judge the most plausible reading."
 
     sealed class Verdict {
         data class Graded(
@@ -91,6 +93,22 @@ object OwnWordsJudge {
             .put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
             .put("response_format", JSONObject().put("type", "json_object"))
             .put("messages", messages)
+    }
+
+    /** Separator between n-best hypotheses in the judge input. */
+    const val NBEST_SEPARATOR = " | "
+
+    /**
+     * Judge input: every non-blank final hypothesis (best first, duplicates dropped,
+     * case-insensitive) joined with [NBEST_SEPARATOR], when [transcript] is one of
+     * them. Otherwise (a letter, a typed or stale answer) just [transcript].
+     */
+    fun judgeInput(transcript: String, finals: List<String?>): String {
+        val t = transcript.trim()
+        val alts = finals.mapNotNull { it?.trim()?.takeIf { s -> s.isNotEmpty() } }
+            .distinctBy { it.lowercase() }
+        if (alts.none { it.equals(t, ignoreCase = true) }) return t
+        return alts.joinToString(NBEST_SEPARATOR)
     }
 
     fun requestBody(
