@@ -5,7 +5,6 @@ import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -74,8 +73,10 @@ class PromptChipsActivity : AppCompatActivity() {
         }
     }
 
-    /** ✎ (id = the chip) and ＋ Add prompt (id = null). Placeholder until 57E2b adds the Edit prompt screen. */
+    /** ✎ (id = the chip) and ＋ Add prompt (id = null). */
     private fun openEditor(id: String?) {
-        Toast.makeText(this, "Edit prompt: coming next (" + (id ?: "new") + ")", Toast.LENGTH_SHORT).show()
+        val i = android.content.Intent(this, PromptChipEditActivity::class.java)
+        if (id != null) i.putExtra(EXTRA_CHIP_ID, id)
+        startActivity(i)
     }
 }

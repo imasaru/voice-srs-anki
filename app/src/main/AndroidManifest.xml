@@ -34,6 +34,11 @@
             android:name=".PromptChipsActivity"
             android:exported="false"
             android:label="@string/prompt_chips_title" />
+        <activity
+            android:name=".PromptChipEditActivity"
+            android:exported="false"
+            android:label="@string/prompt_edit_title"
+            android:windowSoftInputMode="adjustResize" />
         <service
             android:name=".DrillService"
             android:exported="false"

@@ -250,4 +250,15 @@
     <string name="prompt_delete_confirm">Delete “%1$s”?</string>
     <string name="settings_prompt_chips_help">Chips above the chat box that send a saved prompt with your study data.</string>
     <string name="settings_prompt_chips_button">Manage prompts</string>
+    <string name="prompt_edit_title">Edit prompt</string>
+    <string name="prompt_edit_add_title">Add prompt</string>
+    <string name="prompt_edit_name">Name</string>
+    <string name="prompt_edit_source">Data sent with it</string>
+    <string name="prompt_edit_prompt">Prompt</string>
+    <string name="prompt_edit_info">ⓘ Study data is attached automatically</string>
+    <string name="prompt_edit_reset">Reset to default</string>
+    <string name="prompt_edit_save">Save</string>
+    <string name="prompt_edit_reset_title">Reset to default?</string>
+    <string name="prompt_edit_reset_message">This replaces the name and prompt fields with the built-in ones.</string>
+    <string name="prompt_edit_reset_confirm">Reset</string>
 </resources>
