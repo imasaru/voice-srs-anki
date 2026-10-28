@@ -69,14 +69,20 @@ object SpokenLetter {
 
     fun statusLine(heard: String): String = "$HEARD_PREFIX \"$heard\""
 
-    /** Whole utterance is one letter on [letters]. Anything else is null. */
-    fun normalise(raw: String?, letters: Set<String>): String? {
+    /**
+     * Whole utterance is one letter on [letters]. Anything else is null.
+     * [partial] is true for a recognizer partial: a bare "the" there is the
+     * start of a sentence, not D, so it is null. Finals keep "the" as D.
+     */
+    fun normalise(raw: String?, letters: Set<String>, partial: Boolean = false): String? {
         if (raw.isNullOrBlank() || letters.isEmpty()) return null
         val allowed = letters.map { it.uppercase() }.toSet()
         var text = raw.trim().lowercase()
             .replace(Regex("[.!?,]+$"), "")
             .replace(Regex("\\s+"), " ")
             .trim()
+        // A partial "the" is usually the first word of a sentence, not D.
+        if (partial && text == "the") return null
         // Filler before a letter ("the bee"). A bare "the" is the letter D.
         if (text != "the" && text.startsWith("the ")) text = text.removePrefix("the ").trim()
         val token = prefixed.matchEntire(text)?.groupValues?.get(1) ?: text
@@ -94,7 +100,7 @@ object SpokenLetter {
             if (letter != null) return letter
         }
         for (raw in partials) {
-            val letter = normalise(raw, letters)
+            val letter = normalise(raw, letters, partial = true)
             if (letter != null) return letter
         }
         return null
