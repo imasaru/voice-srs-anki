@@ -42,7 +42,14 @@ object PlaybackControl {
 
     fun stop(current: Snapshot): Snapshot = Snapshot()
 
-    fun pauseVisible(): Boolean = true
+    fun pauseVisible(snap: Snapshot, drilling: Boolean): Boolean = drilling || snap.state != State.IDLE
+
+    /**
+     * The bottom toggle reads Resume for a paused drill on an idle read-aloud.
+     * It is THE Resume: the inline chat-row resume hides whenever this is true.
+     */
+    fun bottomShowsDrillResume(snap: Snapshot, drilling: Boolean, drillPaused: Boolean): Boolean =
+        drilling && drillPaused && snap.state == State.IDLE
 
     fun pauseEnabled(current: Snapshot): Boolean {
         return current.state == State.READING ||

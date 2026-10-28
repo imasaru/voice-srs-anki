@@ -30,7 +30,7 @@ class PlaybackControlTest {
     @Test
     fun `play then started is reading and pause is always visible`() {
         val idle = PlaybackControl.Snapshot()
-        assertTrue(PlaybackControl.pauseVisible())
+        assertTrue(PlaybackControl.pauseVisible(PlaybackControl.Snapshot(), drilling = true))
         assertFalse(PlaybackControl.pauseEnabled(idle))
         val loading = PlaybackControl.play(idle, turnId = 9L, section = 1)
         assertEquals(PlaybackControl.State.LOADING, loading.state)

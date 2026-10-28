@@ -898,7 +898,7 @@ class MainActivity : AppCompatActivity() {
         val pause = findViewById<Button>(R.id.playbackPauseButton) ?: return
         val mb = pause as? com.google.android.material.button.MaterialButton
         val drilling = DrillUi.state.drillRunning || DrillService.running
-        pause.visibility = if (PlaybackControl.pauseVisible()) View.VISIBLE else View.GONE
+        pause.visibility = if (PlaybackControl.pauseVisible(snap, drilling)) View.VISIBLE else View.GONE
         val drillPaused = DrillUi.state.chatPaused
         pause.isEnabled = PlaybackControl.pauseEnabled(snap, drilling, drillPaused)
         if (pauseBaseTint == null) pauseBaseTint = pause.backgroundTintList
@@ -909,7 +909,7 @@ class MainActivity : AppCompatActivity() {
             pause.contentDescription = null
             pause.backgroundTintList = pauseBaseTint
             pauseBaseText?.let { pause.setTextColor(it) }
-        } else if (drilling && drillPaused && snap.state == PlaybackControl.State.IDLE) {
+        } else if (PlaybackControl.bottomShowsDrillResume(snap, drilling, drillPaused)) {
             val typed = TypedValue()
             pause.context.theme.resolveAttribute(com.google.android.material.R.attr.colorPrimary, typed, true)
             mb?.icon = null
@@ -937,6 +937,9 @@ class MainActivity : AppCompatActivity() {
             PlaybackControl.State.PAUSED -> getString(R.string.playback_resume)
             PlaybackControl.State.IDLE -> ""
         }
+        // renderCue now depends on PlaybackUi.state (the bottom toggle reads Resume
+        // only for an idle paused drill), so repaint the cue when playback changes.
+        renderCue(DrillUi.state, drilling, switchModel.on)
     }
 
     /** One-tap prompt chip tap: the card on screen and saved card chats are sent only when the chip asks for them. */
@@ -1005,12 +1008,13 @@ class MainActivity : AppCompatActivity() {
         val countdown = findViewById<TextView>(R.id.thinkCountdown)
         val seconds = state.thinkSecondsLeft
         val resume = findViewById<Button>(R.id.chatResumeButton)
+        val bottomIsResume = PlaybackControl.bottomShowsDrillResume(PlaybackUi.state, drilling, state.chatPaused)
         if (drilling && state.chatPaused) {
             pauseRow?.visibility = View.VISIBLE
             countdown?.visibility = View.GONE
             findViewById<TextView>(R.id.chatPauseLabel)?.text = ChatPause.label(state.manualPause)
-            resume?.visibility = if (ChatPause.showsInlineResume(state.manualPause, state.chatShowResume)) View.VISIBLE else View.GONE
-            pulseResume(resume, ChatPause.showsInlineResume(state.manualPause, state.chatShowResume) && state.chatResumePulse)
+            resume?.visibility = if (ChatPause.inlineResumeVisible(state.manualPause, state.chatShowResume, bottomIsResume)) View.VISIBLE else View.GONE
+            pulseResume(resume, ChatPause.inlineResumeVisible(state.manualPause, state.chatShowResume, bottomIsResume) && state.chatResumePulse)
         } else if (drilling && !silentOn && seconds != null && seconds > 0 && !state.showBack) {
             pauseRow?.visibility = View.GONE
             countdown?.visibility = View.VISIBLE

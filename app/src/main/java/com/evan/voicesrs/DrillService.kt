@@ -2462,6 +2462,7 @@ class DrillService : Service(), VoiceIo {
     private fun releaseChatPause() {
         dictating = false
         chatPaused.set(false)
+        runCatching { DrillUi.update { it.copy(chatPaused = false, chatShowResume = false, chatResumePulse = false, manualPause = false) } }
         chatPauseLatch.get()?.countDown()
         pendingVoiceReply.set(null)
         thinkDeadlineMs = 0L

@@ -17,6 +17,14 @@ object ChatPause {
     /** The inline chat-row resume shows only for a chat pause, not a manual one. */
     fun showsInlineResume(manual: Boolean, chatShowResume: Boolean): Boolean = !manual && chatShowResume
 
+    /**
+     * The inline chat-row resume shows only for a chat pause, not a manual one,
+     * and only while the bottom toggle is not itself the Resume. Keeping the
+     * bottom as THE Resume means the inline one never doubles it.
+     */
+    fun inlineResumeVisible(manual: Boolean, chatShowResume: Boolean, bottomIsResume: Boolean): Boolean =
+        !bottomIsResume && showsInlineResume(manual, chatShowResume)
+
     enum class Trigger { FOCUS_INPUT, OPEN_THREAD, TYPING, DICTATION, MANUAL }
 
     enum class Action { RESUME, RATING, SHOW_ANSWER, DISMISS, OTHER }
