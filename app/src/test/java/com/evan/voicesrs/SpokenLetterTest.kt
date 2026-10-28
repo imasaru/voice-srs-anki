@@ -157,4 +157,40 @@ class SpokenLetterTest {
         assertEquals(5, SpokenLetter.MAX_RESULTS)
         assertFalse(SpokenLetter.PREFER_OFFLINE)
     }
+
+    @Test
+    fun `h79a a partial the alone is not a letter`() {
+        assertNull(SpokenLetter.match(emptyList(), listOf("the"), letters))
+        val d = SpokenLetter.decide(emptyList(), listOf("the"), letters)
+        assertFalse(d is SpokenLetter.Decision.Match)
+        assertFalse(SpokenLetter.stopsForMatch(d))
+    }
+
+    @Test
+    fun `h79b a final the alone is still D`() {
+        assertEquals("D", SpokenLetter.match(listOf("the"), emptyList(), letters))
+        assertEquals(SpokenLetter.Decision.Match("D"), SpokenLetter.decide(listOf("the"), emptyList(), letters))
+    }
+
+    @Test
+    fun `h79c own-words final after a partial the is unmatched`() {
+        val d = SpokenLetter.decide(listOf("the user who created the table"), listOf("the"), letters, speechDetected = true)
+        assertEquals(SpokenLetter.Decision.Unmatched("the user who created the table"), d)
+    }
+
+    @Test
+    fun `h79d other partial letters still match`() {
+        assertEquals("D", SpokenLetter.match(emptyList(), listOf("dee"), letters))
+        assertEquals("C", SpokenLetter.match(emptyList(), listOf("see"), letters))
+        assertEquals("B", SpokenLetter.match(emptyList(), listOf("the bee"), letters))
+    }
+
+    @Test
+    fun `h79e normalise partial the is null and final the is D`() {
+        assertNull(SpokenLetter.normalise("the", setOf("A", "B", "C"), partial = true))
+        assertNull(SpokenLetter.normalise("the", letters, partial = true))
+        assertNull(SpokenLetter.normalise("The.", letters, partial = true))
+        assertEquals("D", SpokenLetter.normalise("the", letters))
+        assertEquals("B", SpokenLetter.normalise("the bee", letters, partial = true))
+    }
 }
