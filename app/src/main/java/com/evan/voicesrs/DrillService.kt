@@ -336,6 +336,10 @@ class DrillService : Service(), VoiceIo {
     @Volatile private var tapGrade = false
     /** The listen result in hand came from a tap, not the microphone. */
     @Volatile private var tapTranscript = false
+    /** Skip count per card this session (cardId -> how many times skipped). */
+    private val skipCounts = HashMap<Long, Int>()
+    /** CardId -> graded count at which it was skipped; a return is due once progress.done passes the gap. */
+    private val skipReturns = LinkedHashMap<Long, Int>()
     /** Dictation owns the microphone. Pause and the drill listener must not cancel it. */
     @Volatile private var dictating = false
     /** False when no chat column is attached, so a headless drill does not wait forever. */
@@ -890,6 +894,8 @@ class DrillService : Service(), VoiceIo {
             explainSession = null
             gradeGate.close()
             pendingGrades.clear()
+            skipCounts.clear()
+            skipReturns.clear()
             releaseChatPause()
             blockPause()
             block = null
@@ -1689,16 +1695,28 @@ class DrillService : Service(), VoiceIo {
         }
     }
 
+    /** Unsuspend skipped cards whose return is due (done = Int.MAX_VALUE returns them all). */
+    private fun returnDueSkips(anki: AnkiConnect, store: LocalQueueStore, done: Int) {
+        val ids = skipReturns.filterValues { SkipQueue.dueForReturn(it, done) }.keys
+        if (ids.isEmpty()) return
+        try { anki.unsuspendCards(ids.toList()) } catch (e: Exception) { return }
+        store.writeSkipped(store.readSkipped().filterNot { it in ids })
+        for (id in ids) skipReturns.remove(id)
+    }
+
     /** Reveal with guiShowAnswer, then leave the card ungraded and move on. */
-    private fun skipOnline(anki: AnkiConnect, deck: String, card: AnkiCard, store: LocalQueueStore) {
+    private fun skipOnline(anki: AnkiConnect, deck: String, card: AnkiCard, store: LocalQueueStore, done: Int, speedMode: Boolean) {
         Log.i(TAG, "skip card id=${card.cardId}")
-        speak("Skipped.")
+        val n = (skipCounts[card.cardId] ?: 0) + 1
+        skipCounts[card.cardId] = n
+        speak(SkipQueue.say(n, speedMode))
         runCatching { anki.guiShowAnswer() }
         if (card.cardId <= 0L) return
         val skipped = store.readSkipped().toMutableList()
         if (card.cardId !in skipped) skipped += card.cardId
         store.writeSkipped(skipped)
         runCatching { anki.suspendCards(listOf(card.cardId)) }
+        if (SkipQueue.requeue(n)) skipReturns[card.cardId] = done
         runCatching { anki.guiDeckReview(deck) }
     }
 
@@ -1730,7 +1748,13 @@ class DrillService : Service(), VoiceIo {
                 goalSpoken = true
                 break
             }
-            val card = anki.guiCurrentCard() ?: break
+            val card = anki.guiCurrentCard()
+            if (card == null) {
+                if (skipReturns.isEmpty()) break
+                returnDueSkips(anki, store, Int.MAX_VALUE)
+                runCatching { anki.guiDeckReview(cfg.deck) }
+                continue
+            }
             if (card.cardId != 0L && card.cardId == lastSkipId) {
                 speak("Couldn't skip that card. Drill stopped.")
                 break
@@ -1799,7 +1823,7 @@ class DrillService : Service(), VoiceIo {
                 }
                 CardStep.Skipped -> {
                     lastSkipId = card.cardId
-                    skipOnline(anki, cfg.deck, card, store)
+                    skipOnline(anki, cfg.deck, card, store, progress.done, cfg.speedMode)
                     resyncs = 0
                     runCatching {
                         explainSession?.noteSeen(card.cardId)
@@ -1833,6 +1857,7 @@ class DrillService : Service(), VoiceIo {
                             )
                         }
                         progress.recordGrade(step.ease, step.elapsedMs)
+                        returnDueSkips(anki, store, progress.done)
                         publish(progress, store)
                         Log.i(TAG, "graded ease=${step.ease}")
                         runCatching { explainSession?.prefetchOnline(anki) }
@@ -1885,9 +1910,12 @@ class DrillService : Service(), VoiceIo {
         elapsedPausedSinceMs = 0L
         publish(progress, store)
         var goalSpoken = false
-        for ((index, card) in cards.withIndex()) {
+        val queue = cards.toMutableList()
+        var index = 0
+        while (index < queue.size) {
             if (stopRequested.get()) break
             blockTick()
+            val card = queue[index]
             val elapsed = SystemClock.elapsedRealtime() - started
             if (progress.goalReached(cfg.goalMode, cfg.goalCards, cfg.goalMinutes, goalElapsed(elapsed))) {
                 finishGoal(progress, started)
@@ -1919,15 +1947,20 @@ class DrillService : Service(), VoiceIo {
                     Log.w(TAG, "offline card had an empty question")
                     runCatching {
                         explainSession?.noteSeen(card.cardId)
-                        explainSession?.prefetchOffline(cards, index)
+                        explainSession?.prefetchOffline(queue, index)
                     }
                 }
                 CardStep.Skipped -> {
                     Log.i(TAG, "offline skip id=${card.cardId}")
-                    speak("Skipped.")
+                    val n = (skipCounts[card.cardId] ?: 0) + 1
+                    skipCounts[card.cardId] = n
+                    speak(SkipQueue.say(n, cfg.speedMode))
+                    val drop = n > SkipQueue.MAX_SKIPS_PER_CARD + 1
+                    if (!drop) queue.add(if (n <= SkipQueue.MAX_SKIPS_PER_CARD) SkipQueue.insertAt(index + 1, queue.size) else queue.size, card)
+                    queue.removeAt(index)
                     runCatching {
                         explainSession?.noteSeen(card.cardId)
-                        explainSession?.prefetchOffline(cards, index)
+                        explainSession?.prefetchOffline(queue, index)
                     }
                 }
                 is CardStep.Graded -> {
@@ -1950,10 +1983,11 @@ class DrillService : Service(), VoiceIo {
                     progress.recordGrade(step.ease, step.elapsedMs)
                     publish(progress, store)
                     Log.i(TAG, "queued ease=${step.ease}")
-                    runCatching { explainSession?.prefetchOffline(cards, index) }
+                    runCatching { explainSession?.prefetchOffline(queue, index) }
                     afterGradePause(cfg)
                 }
             }
+            index++
         }
         if (!stopRequested.get() && !goalSpoken) {
             val summary = if (progress.done == 0) {
