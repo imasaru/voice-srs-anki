@@ -70,19 +70,31 @@ object SilentTap {
         wasOn: Boolean,
         hasQuestion: Boolean,
         answerShown: Boolean,
-        fromUser: Boolean
+        fromUser: Boolean,
+        thinkRunning: Boolean = false
     ): Plan {
         val turningOn = wantOn && !wasOn
-        val reveal = fromUser && turningOn && hasQuestion && !answerShown
+        val keepThink = fromUser && turningOn && hasQuestion && !answerShown && thinkRunning
+        val reveal = fromUser && turningOn && hasQuestion && !answerShown && !keepThink
         val shown = answerShown || reveal
         val controls = AnswerControls.of(hasQuestion || reveal, shown, wantOn)
         return Plan(
             silent = wantOn,
             cancelMic = wantOn,
-            stopThinkTimer = wantOn,
+            stopThinkTimer = wantOn && !keepThink,
             revealAnswer = reveal,
             showRating = controls.rating,
             showAnswerButton = controls.showAnswer && !reveal
         )
     }
+
+    /**
+     * A user flip with the question up, no answer yet, and the think timer
+     * running keeps the question and its timer: the mic stays off, nothing
+     * reveals, and the timer keeps counting until the deadline, at which point
+     * the answer shows as normal. False once the deadline has passed, no timer
+     * is running, or Silent is off.
+     */
+    fun thinkContinues(silent: Boolean, deadlineMs: Long, nowMs: Long): Boolean =
+        silent && deadlineMs > 0L && nowMs < deadlineMs
 }

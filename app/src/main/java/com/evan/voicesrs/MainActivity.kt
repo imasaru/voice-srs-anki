@@ -1015,7 +1015,7 @@ class MainActivity : AppCompatActivity() {
             findViewById<TextView>(R.id.chatPauseLabel)?.text = ChatPause.label(state.manualPause)
             resume?.visibility = if (ChatPause.inlineResumeVisible(state.manualPause, state.chatShowResume, bottomIsResume)) View.VISIBLE else View.GONE
             pulseResume(resume, ChatPause.inlineResumeVisible(state.manualPause, state.chatShowResume, bottomIsResume) && state.chatResumePulse)
-        } else if (drilling && !silentOn && seconds != null && seconds > 0 && !state.showBack) {
+        } else if (drilling && seconds != null && seconds > 0 && !state.showBack) {
             pauseRow?.visibility = View.GONE
             countdown?.visibility = View.VISIBLE
             countdown?.text = ThinkTime.countdownText(seconds)

@@ -2127,7 +2127,11 @@ class DrillService : Service(), VoiceIo {
                     continue
                 }
                 if (showAnswerEarly.getAndSet(false)) return ThinkResult.Reveal
-                if (sessionSilent) return ThinkResult.Again
+                if (sessionSilent) {
+                    if (!SilentTap.thinkContinues(true, thinkDeadlineMs, SystemClock.elapsedRealtime())) return ThinkResult.Reveal
+                    SystemClock.sleep(200L)
+                    continue
+                }
                 val now = SystemClock.elapsedRealtime()
                 if (thinkDeadlineMs <= 0L || ThinkTime.expired(now, thinkDeadlineMs)) {
                     return ThinkResult.Reveal
@@ -2137,7 +2141,11 @@ class DrillService : Service(), VoiceIo {
                 val heard = captureListen(slice)
                 if (chatPaused.get()) continue
                 if (showAnswerEarly.getAndSet(false)) return ThinkResult.Reveal
-                if (sessionSilent) return ThinkResult.Again
+                if (sessionSilent) {
+                    if (!SilentTap.thinkContinues(true, thinkDeadlineMs, SystemClock.elapsedRealtime())) return ThinkResult.Reveal
+                    SystemClock.sleep(200L)
+                    continue
+                }
                 if (stopRequested.get()) return ThinkResult.Stop
                 if (listenFault) consumeMicFault()
                 when (ThinkTime.classify(heard)) {
@@ -2633,7 +2641,7 @@ class DrillService : Service(), VoiceIo {
     }
 
     private fun onThinkTick() {
-        if (sessionSilent || destroyed || chatPaused.get() || thinkDeadlineMs <= 0L) return
+        if (destroyed || chatPaused.get() || thinkDeadlineMs <= 0L) return
         val sec = ThinkTime.remainingSec(SystemClock.elapsedRealtime(), thinkDeadlineMs)
         if (sessionSilent) return
         if (sec <= 0) {
@@ -2873,7 +2881,8 @@ class DrillService : Service(), VoiceIo {
             wasOn = was,
             hasQuestion = DrillUi.state.frontHtml.isNotBlank(),
             answerShown = DrillUi.state.showBack,
-            fromUser = fromUser
+            fromUser = fromUser,
+            thinkRunning = thinkDeadlineMs > 0L
         )
         val next = synchronized(gateLock) {
             listenGate = ListenGate.toggle(listenGate, on)
