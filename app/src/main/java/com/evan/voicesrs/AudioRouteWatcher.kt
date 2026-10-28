@@ -86,7 +86,7 @@ object AudioRouteDecision {
  *
  * The routing decision itself is pure ([MicRoute] + [AudioRouteDecision]); this
  * class only bridges Android's [AudioManager] into that logic and applies the
- * result. It is intentionally not wired into [DrillService] yet.
+ * result.
  */
 class AudioRouteWatcher(context: Context) {
 
@@ -140,11 +140,15 @@ class AudioRouteWatcher(context: Context) {
         val inputDevs = inputInfos.map { MicRoute.AudioDev(it.id, MicRoute.typeOf(it.type), it.productName.toString()) }
 
         val result = AudioRouteDecision.decide(previousInput, outputDevs, inputDevs)
+        Log.i(
+            "MicRoute",
+            "outs=${outputDevs.map { it.type }} ins=${inputDevs.map { it.type }} " +
+                "chosen=${result.chosen?.type} changed=${result.changed} comm=${result.useCommunicationDevice}"
+        )
         if (!result.changed) return
 
         previousInput = result.chosen
         routeChanged = true
-        result.chosen?.let { Log.i(LOG_TAG, "audio route changed to ${it.type}") }
 
         when (AudioRouteDecision.commAction(result.useCommunicationDevice, Build.VERSION.SDK_INT)) {
             AudioRouteDecision.CommAction.SET ->
@@ -173,9 +177,5 @@ class AudioRouteWatcher(context: Context) {
         MicRoute.AudioDevType.WIRED_HEADPHONES,
         MicRoute.AudioDevType.USB_HEADSET -> true
         else -> false
-    }
-
-    private companion object {
-        const val LOG_TAG = "AudioRoute"
     }
 }

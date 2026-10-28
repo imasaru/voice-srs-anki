@@ -112,4 +112,35 @@ class MicRouteTest {
     fun `empty outputs returns null`() {
         assertNull(MicRoute.pickInput(emptyList(), listOf(dev(2, AudioDevType.BUILTIN_MIC))))
     }
+
+    @Test
+    fun `A2DP headphones that also offer an SCO mic use the SCO mic`() {
+        val out = listOf(
+            dev(1, AudioDevType.BUILTIN_SPEAKER),
+            dev(2, AudioDevType.BLUETOOTH_A2DP, "Buds"),
+            dev(3, AudioDevType.BLUETOOTH_SCO, "Buds")
+        )
+        val ins = listOf(dev(4, AudioDevType.BUILTIN_MIC), dev(5, AudioDevType.BLUETOOTH_SCO, "Buds"))
+        val picked = MicRoute.pickInput(out, ins)
+        assertEquals(AudioDevType.BLUETOOTH_SCO, picked?.type)
+        assertEquals(5, picked?.id)
+    }
+
+    @Test
+    fun `wired headset next to built-in picks the headset mic`() {
+        val out = listOf(dev(1, AudioDevType.BUILTIN_SPEAKER), dev(2, AudioDevType.WIRED_HEADSET))
+        val ins = listOf(dev(3, AudioDevType.BUILTIN_MIC), dev(4, AudioDevType.WIRED_HEADSET))
+        val picked = MicRoute.pickInput(out, ins)
+        assertEquals(AudioDevType.WIRED_HEADSET, picked?.type)
+        assertEquals(4, picked?.id)
+    }
+
+    @Test
+    fun `built-in only picks the built-in mic`() {
+        val out = listOf(dev(1, AudioDevType.BUILTIN_SPEAKER), dev(2, AudioDevType.BUILTIN_EARPIECE))
+        val ins = listOf(dev(3, AudioDevType.BUILTIN_MIC))
+        val picked = MicRoute.pickInput(out, ins)
+        assertEquals(AudioDevType.BUILTIN_MIC, picked?.type)
+        assertEquals(3, picked?.id)
+    }
 }

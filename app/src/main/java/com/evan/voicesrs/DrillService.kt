@@ -289,6 +289,8 @@ class DrillService : Service(), VoiceIo {
     private var recognizer: SpeechRecognizer? = null
     /** Bumped on every destroy so late callbacks from the old instance are ignored. */
     private var recognizerGen = 0
+    /** Re-routes the mic when audio devices change (item 29b). Main thread only. */
+    private var routeWatcher: AudioRouteWatcher? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var toneGen: ToneGenerator? = null
     private lateinit var mainHandler: Handler
@@ -440,6 +442,12 @@ class DrillService : Service(), VoiceIo {
         mainHandler = Handler(Looper.getMainLooper())
         worker = HandlerThread("drill-worker").apply { start() }
         handler = Handler(worker.looper)
+        routeWatcher = try {
+            AudioRouteWatcher(this).also { it.start() }
+        } catch (e: Exception) {
+            Log.w(TAG, "audio route watcher failed; continuing without it", e)
+            null
+        }
         wakeLock = try {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
             pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "voicesrs:drill").also {
@@ -596,6 +604,8 @@ class DrillService : Service(), VoiceIo {
         mainHandler.removeCallbacksAndMessages(null)
         requestStop()
         destroyRecognizerOnMain()
+        try { routeWatcher?.stop() } catch (_: Exception) {}
+        routeWatcher = null
         try { tts?.stop(); tts?.shutdown() } catch (_: Exception) {}
         try { toneGen?.release() } catch (_: Exception) {}
         if (wakeLock?.isHeld == true) wakeLock?.release()
@@ -3281,6 +3291,13 @@ class DrillService : Service(), VoiceIo {
             }
             return
         }
+        if (RouteRebuild.onListen(routeWatcher?.consumeChange() == true) == RouteRebuild.Action.REBUILD) {
+            Log.i("MicRoute", "route changed before startListening; rebuilding recognizer")
+            if (!createRecognizerOnMain(session, epoch)) {
+                finishListen(null)
+                return
+            }
+        }
         val started = recognizer
         try {
             started?.startListening(intent)
@@ -3365,6 +3382,9 @@ class DrillService : Service(), VoiceIo {
     private fun createRecognizerOnMain(session: Int, epoch: Int): Boolean {
         if (dictating) return false
         if (!listenEpochOpen(epoch) || !SilentPolicy.of(sessionSilent).createRecognizer) return false
+        if (RouteRebuild.onListen(routeWatcher?.consumeChange() == true) == RouteRebuild.Action.REBUILD) {
+            Log.i("MicRoute", "route changed; building recognizer on new route")
+        }
         destroyRecognizerOnMain()
         if (destroyed || !listenActive || session != listenToken) return false
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
