@@ -37,6 +37,8 @@ data class AnkiConfig(
     val shuffleOptions: Boolean = true,
     /** Tap-only review. Read once at session start. The microphone stays closed. */
     val silentMode: Boolean = false,
+    /** Read-aloud output channel on classic Bluetooth: [READ_ALOUD_MEDIA] or [READ_ALOUD_CALL]. */
+    val readAloudChannel: String = Prefs.READ_ALOUD_MEDIA,
     /** After a grade, go to the next card without waiting. */
     val handsFree: Boolean = HandsFree.SETTING_DEFAULT,
     /** Speak "Ready?" before the next card when hands-free is on. */
@@ -96,6 +98,9 @@ object Prefs {
     private const val KEY_HIGHLIGHT_SENTENCE = "highlight_sentence"
     private const val KEY_SHUFFLE = "shuffle_options"
     private const val KEY_SILENT = "silent_mode"
+    const val READ_ALOUD_MEDIA = "MEDIA"
+    const val READ_ALOUD_CALL = "CALL"
+    private const val KEY_READ_ALOUD_CHANNEL = "read_aloud_channel"
     private const val KEY_HANDS_FREE = "hands_free"
     private const val KEY_HANDS_FREE_READY = "hands_free_ready"
     private const val KEY_OFFLINE = "offline_batch"
@@ -208,6 +213,7 @@ object Prefs {
             .putBoolean(KEY_HIGHLIGHT_SENTENCE, cfg.highlightSentence)
             .putBoolean(KEY_SHUFFLE, cfg.shuffleOptions)
             .putBoolean(KEY_SILENT, cfg.silentMode)
+            .putString(KEY_READ_ALOUD_CHANNEL, cfg.readAloudChannel)
             .putBoolean(KEY_HANDS_FREE, cfg.handsFree)
             .putBoolean(KEY_HANDS_FREE_READY, cfg.handsFreeReady)
             .putBoolean(KEY_OFFLINE, cfg.offlineBatch)
@@ -408,6 +414,7 @@ object Prefs {
             highlightSentence = p.getBoolean(KEY_HIGHLIGHT_SENTENCE, HighlightSentence.SETTING_DEFAULT),
             shuffleOptions = p.getBoolean(KEY_SHUFFLE, true),
             silentMode = p.getBoolean(KEY_SILENT, false),
+            readAloudChannel = if (p.getString(KEY_READ_ALOUD_CHANNEL, READ_ALOUD_MEDIA) == READ_ALOUD_CALL) READ_ALOUD_CALL else READ_ALOUD_MEDIA,
             handsFree = p.getBoolean(KEY_HANDS_FREE, HandsFree.SETTING_DEFAULT),
             handsFreeReady = p.getBoolean(KEY_HANDS_FREE_READY, HandsFree.READY_DEFAULT),
             offlineBatch = p.getBoolean(KEY_OFFLINE, false),

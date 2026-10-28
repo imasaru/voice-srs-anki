@@ -82,7 +82,7 @@ class AudioRouteTest {
         val btMic = dev(3, AudioDevType.BLUETOOTH_SCO, "BT Mic")
         val ins = listOf(btMic)
 
-        val r = AudioRouteDecision.decide(previous = null, outputs = out, inputs = ins)
+        val r = AudioRouteDecision.decide(previous = null, outputs = out, inputs = ins, channel = Prefs.READ_ALOUD_CALL)
 
         assertEquals(btMic, r.chosen)
         assertTrue(r.changed)

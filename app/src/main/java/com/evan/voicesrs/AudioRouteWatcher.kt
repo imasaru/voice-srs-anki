@@ -37,13 +37,28 @@ object AudioRouteDecision {
         val useCommunicationDevice: Boolean,
     )
 
-    /** Whether a mic of this type should be treated as a communication device. */
-    private fun usesCommunicationDevice(type: MicRoute.AudioDevType): Boolean = when (type) {
-        MicRoute.AudioDevType.BLUETOOTH_SCO,
-        MicRoute.AudioDevType.BLE_HEADSET,
-        MicRoute.AudioDevType.WIRED_HEADSET,
-        MicRoute.AudioDevType.USB_HEADSET -> true
-        else -> false
+    /**
+     * Whether a mic of this type should be treated as a communication device.
+     * [channel] is [Prefs.READ_ALOUD_CALL] (today's behaviour) or [Prefs.READ_ALOUD_MEDIA]
+     * (classic Bluetooth SCO is never a communication device).
+     */
+    private fun usesCommunicationDevice(
+        type: MicRoute.AudioDevType,
+        channel: String,
+    ): Boolean = when (channel) {
+        Prefs.READ_ALOUD_CALL -> when (type) {
+            MicRoute.AudioDevType.BLUETOOTH_SCO,
+            MicRoute.AudioDevType.BLE_HEADSET,
+            MicRoute.AudioDevType.WIRED_HEADSET,
+            MicRoute.AudioDevType.USB_HEADSET -> true
+            else -> false
+        }
+        else -> when (type) {
+            MicRoute.AudioDevType.BLE_HEADSET,
+            MicRoute.AudioDevType.WIRED_HEADSET,
+            MicRoute.AudioDevType.USB_HEADSET -> true
+            else -> false
+        }
     }
 
     /**
@@ -54,13 +69,47 @@ object AudioRouteDecision {
         previous: MicRoute.AudioDev?,
         outputs: List<MicRoute.AudioDev>,
         inputs: List<MicRoute.AudioDev>,
+        channel: String = Prefs.READ_ALOUD_MEDIA,
     ): Result {
-        val chosen = MicRoute.pickInput(outputs, inputs, previous)
+        // In MEDIA mode the classic Bluetooth SCO mic is never selectable, so the
+        // phone never holds the headset in SCO and the read-aloud volume reaches A2DP.
+        val pickInputs = if (channel == Prefs.READ_ALOUD_CALL) inputs
+        else inputs.filter { it.type != MicRoute.AudioDevType.BLUETOOTH_SCO }
+        val chosen = MicRoute.pickInput(outputs, pickInputs, previous)
         return Result(
             chosen = chosen,
             changed = chosen != null,
-            useCommunicationDevice = chosen?.let { usesCommunicationDevice(it.type) } ?: false,
+            useCommunicationDevice = chosen?.let { usesCommunicationDevice(it.type, channel) } ?: false,
         )
+    }
+
+    /**
+     * Whether an output of this type may carry a communication device for [channel].
+     * In [Prefs.READ_ALOUD_MEDIA] classic Bluetooth (A2DP and SCO) is never a
+     * communication output; [Prefs.READ_ALOUD_CALL] keeps today's set.
+     */
+    fun isCommunicationOutput(
+        type: MicRoute.AudioDevType,
+        channel: String,
+    ): Boolean = when (channel) {
+        Prefs.READ_ALOUD_CALL -> when (type) {
+            MicRoute.AudioDevType.BLUETOOTH_SCO,
+            MicRoute.AudioDevType.BLUETOOTH_A2DP,
+            MicRoute.AudioDevType.BLE_HEADSET,
+            MicRoute.AudioDevType.BLE_SPEAKER,
+            MicRoute.AudioDevType.WIRED_HEADSET,
+            MicRoute.AudioDevType.WIRED_HEADPHONES,
+            MicRoute.AudioDevType.USB_HEADSET -> true
+            else -> false
+        }
+        else -> when (type) {
+            MicRoute.AudioDevType.BLE_HEADSET,
+            MicRoute.AudioDevType.BLE_SPEAKER,
+            MicRoute.AudioDevType.WIRED_HEADSET,
+            MicRoute.AudioDevType.WIRED_HEADPHONES,
+            MicRoute.AudioDevType.USB_HEADSET -> true
+            else -> false
+        }
     }
 
     /**
@@ -88,7 +137,7 @@ object AudioRouteDecision {
  * class only bridges Android's [AudioManager] into that logic and applies the
  * result.
  */
-class AudioRouteWatcher(context: Context) {
+class AudioRouteWatcher(private val context: Context) {
 
     private val audioManager =
         context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -139,11 +188,12 @@ class AudioRouteWatcher(context: Context) {
         val outputDevs = outputInfos.map { MicRoute.AudioDev(it.id, MicRoute.typeOf(it.type), it.productName.toString()) }
         val inputDevs = inputInfos.map { MicRoute.AudioDev(it.id, MicRoute.typeOf(it.type), it.productName.toString()) }
 
-        val result = AudioRouteDecision.decide(previousInput, outputDevs, inputDevs)
+        val channel = runCatching { Prefs.load(context).readAloudChannel }.getOrDefault(Prefs.READ_ALOUD_MEDIA)
+        val result = AudioRouteDecision.decide(previousInput, outputDevs, inputDevs, channel)
         Log.i(
             "MicRoute",
             "outs=${outputDevs.map { it.type }} ins=${inputDevs.map { it.type }} " +
-                "chosen=${result.chosen?.type} changed=${result.changed} comm=${result.useCommunicationDevice}"
+                "chosen=${result.chosen?.type} changed=${result.changed} comm=${result.useCommunicationDevice} ch=$channel"
         )
         if (!result.changed) return
 
@@ -152,7 +202,7 @@ class AudioRouteWatcher(context: Context) {
 
         when (AudioRouteDecision.commAction(result.useCommunicationDevice, Build.VERSION.SDK_INT)) {
             AudioRouteDecision.CommAction.SET ->
-                result.chosen?.let { matchingOutput(it, outputInfos) }?.let {
+                result.chosen?.let { matchingOutput(it, outputInfos, channel) }?.let {
                     audioManager.setCommunicationDevice(it)
                 }
             AudioRouteDecision.CommAction.CLEAR -> audioManager.clearCommunicationDevice()
@@ -160,22 +210,16 @@ class AudioRouteWatcher(context: Context) {
         }
     }
 
-    /** The output device matching [chosen] by type, else any external communication output. */
+    /**
+     * The output device matching [chosen] by type (only when it is a communication
+     * output for [channel], or in CALL mode), else any external communication output.
+     */
     private fun matchingOutput(
         chosen: MicRoute.AudioDev,
         outputs: Array<AudioDeviceInfo>,
+        channel: String,
     ): AudioDeviceInfo? =
-        outputs.firstOrNull { MicRoute.typeOf(it.type) == chosen.type }
-            ?: outputs.firstOrNull { isCommunicationOutput(MicRoute.typeOf(it.type)) }
-
-    private fun isCommunicationOutput(type: MicRoute.AudioDevType): Boolean = when (type) {
-        MicRoute.AudioDevType.BLUETOOTH_SCO,
-        MicRoute.AudioDevType.BLUETOOTH_A2DP,
-        MicRoute.AudioDevType.BLE_HEADSET,
-        MicRoute.AudioDevType.BLE_SPEAKER,
-        MicRoute.AudioDevType.WIRED_HEADSET,
-        MicRoute.AudioDevType.WIRED_HEADPHONES,
-        MicRoute.AudioDevType.USB_HEADSET -> true
-        else -> false
-    }
+        outputs.firstOrNull { MicRoute.typeOf(it.type) == chosen.type &&
+            (AudioRouteDecision.isCommunicationOutput(MicRoute.typeOf(it.type), channel) || channel == Prefs.READ_ALOUD_CALL) }
+            ?: outputs.firstOrNull { AudioRouteDecision.isCommunicationOutput(MicRoute.typeOf(it.type), channel) }
 }

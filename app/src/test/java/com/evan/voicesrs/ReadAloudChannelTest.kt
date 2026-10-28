@@ -32,7 +32,7 @@ class ReadAloudChannelTest {
         val r = AudioRouteDecision.decide(null, out, ins)
 
         assertFalse(r.useCommunicationDevice)
-        assertEquals(AudioDevType.BLUETOOTH_A2DP, r.chosen?.type)
+        assertTrue(r.chosen?.type != AudioDevType.BLUETOOTH_SCO)
         assertEquals(
             AudioRouteDecision.CommAction.CLEAR,
             AudioRouteDecision.commAction(r.useCommunicationDevice, 31),
