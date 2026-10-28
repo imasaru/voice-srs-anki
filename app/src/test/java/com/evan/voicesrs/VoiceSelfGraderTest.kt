@@ -256,4 +256,24 @@ class VoiceSelfGraderTest {
         assertEquals(3, VoiceSelfGrader().grade(ctx, io))
         assertEquals(0, io.listenCalls)
     }
+
+    @Test
+    fun `repeat resets the missed listen count`() {
+        val io = FakeIo(listOf(null, null, "repeat", null, null, "good"))
+        assertEquals(3, VoiceSelfGrader().grade(ctx().copy(listenAttempts = 3), io))
+        assertEquals(6, io.listenCalls)
+        assertEquals(1, io.spoken.count { it == "the answer" })
+    }
+
+    @Test
+    fun `nine repeats give up`() {
+        val io = FakeIo(List(9) { "repeat" } + "good")
+        try {
+            VoiceSelfGrader().grade(ctx(), io)
+            fail("nine repeats must give up")
+        } catch (_: ListenGaveUp) {
+        }
+        assertEquals(9, io.listenCalls)
+        assertEquals(8, io.spoken.count { it == "the answer" })
+    }
 }
