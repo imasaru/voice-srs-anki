@@ -1754,6 +1754,8 @@ class DrillService : Service(), VoiceIo {
             if (card == null) {
                 if (skipReturns.isEmpty()) break
                 returnDueSkips(anki, store, Int.MAX_VALUE)
+                if (skipReturns.isNotEmpty()) break // unsuspend failed: end instead of spinning
+                lastSkipId = 0L // a returned card may be the one just skipped
                 runCatching { anki.guiDeckReview(cfg.deck) }
                 continue
             }
@@ -1962,6 +1964,7 @@ class DrillService : Service(), VoiceIo {
                     val drop = n > SkipQueue.MAX_SKIPS_PER_CARD + 1
                     if (!drop) queue.add(if (n <= SkipQueue.MAX_SKIPS_PER_CARD) SkipQueue.insertAt(index + 1, queue.size) else queue.size, card)
                     queue.removeAt(index)
+                    index-- // the next card slid into this slot; index++ below lands on it
                     runCatching {
                         explainSession?.noteSeen(card.cardId)
                         explainSession?.prefetchOffline(queue, index)
