@@ -2644,14 +2644,14 @@ class DrillService : Service(), VoiceIo {
 
     private fun onThinkTick() {
         if (destroyed || chatPaused.get() || thinkDeadlineMs <= 0L) return
+        // Silent flipped on mid-think keeps the timer (h86 silentthink), so keep ticking
+        // the countdown too; thinkDeadlineMs is only > 0 inside thinkForAnswer.
         val sec = ThinkTime.remainingSec(SystemClock.elapsedRealtime(), thinkDeadlineMs)
-        if (sessionSilent) return
         if (sec <= 0) {
             publishCue(false, null)
             return
         }
         publishCue(false, sec)
-        if (sessionSilent) return
         mainHandler.postDelayed(thinkTicker, 250L)
     }
 
