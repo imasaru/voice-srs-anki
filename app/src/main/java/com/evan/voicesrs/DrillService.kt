@@ -7,6 +7,8 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Build
@@ -233,6 +235,7 @@ class DrillService : Service(), VoiceIo {
         fun pauseForChat(trigger: ChatPause.Trigger) {
             val svc = active ?: return
             if (!ChatPause.pauses(running, trigger)) return
+            svc.releaseFocus()
             svc.enterChatPause()
             runCatching { DrillUi.update { it.copy(manualPause = trigger == ChatPause.Trigger.MANUAL) } }
             if (ChatPause.triggerReengages(trigger)) svc.cancelAutoResume(showButton = true)
@@ -317,6 +320,16 @@ class DrillService : Service(), VoiceIo {
     private val pendingRestart = AtomicBoolean(false)
     /** Per utterance. [speak] clears it; a rating tap sets it so TTS stops. */
     @Volatile private var speechInterrupted = false
+    /** Focus state kept between callbacks; fed to [FocusPolicy.onChange]. */
+    private val focusState = FocusPolicy.State()
+    /** Focus phase fed to [FocusPolicy.onChange]; drives pause/abort/resume on focus loss. */
+    @Volatile private var focusPhase = FocusPolicy.Phase.IDLE
+    /** True from a focus-loss action until a RESUME clears it. Blocks re-speak/listen. */
+    @Volatile private var focusPaused = false
+    /** Latch the RESUME callback counts down. */
+    @Volatile private var focusWake: CountDownLatch? = null
+    /** The built audio-focus request, created lazily once. */
+    private var focusReq: AudioFocusRequest? = null
     /** Set by a card tap ([skipSpeechNow]); stops the cut readout from being re-read. Cleared by [speak]. */
     @Volatile private var speechSkipped = false
     /** This card was claimed by a tap. Cleared when that grade is taken or the next question starts. */
@@ -604,6 +617,7 @@ class DrillService : Service(), VoiceIo {
 
     override fun onDestroy() {
         destroyed = true
+        releaseFocus()
         val wasActive = active === this
         if (wasActive) active = null
         mainHandler.removeCallbacksAndMessages(null)
@@ -623,6 +637,7 @@ class DrillService : Service(), VoiceIo {
     private fun requestStop() {
         stopRequested.set(true)
         releaseChatPause()
+        releaseFocus()
         showAnswerLatch.get()?.countDown()
         silentGradeLatch.get()?.countDown()
         runCatching { explainSession?.stop() }
@@ -1068,13 +1083,122 @@ class DrillService : Service(), VoiceIo {
 
     override fun audioSuppressed(): Boolean = sessionSilent
 
+    // ---------- Audio focus (h90) ----------
+
+    /** Builds once and reuses; the focus-change listener posts back on the main thread. */
+    @Suppress("DEPRECATION")
+    private fun focusRequest(): AudioFocusRequest {
+        focusReq?.let { return it }
+        val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            .setWillPauseWhenDucked(true)
+            .setOnAudioFocusChangeListener(object : AudioManager.OnAudioFocusChangeListener {
+                override fun onAudioFocusChange(change: Int) { onFocusChange(change) }
+            }, mainHandler)
+            .build()
+        focusReq = req
+        return req
+    }
+
+    /** Blocks until focus is granted (retrying DELAYED/FAILED refusals) or the drill stops. */
+    private fun acquireFocus(): Boolean {
+        while (!stopped()) {
+            val granted = try {
+                val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                am.requestAudioFocus(focusRequest()) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            } catch (e: Exception) {
+                false
+            }
+            if (granted) {
+                Log.i(TAG, "audiofocus granted")
+                return true
+            }
+            Log.i(TAG, "audiofocus refused; retry")
+            if (!sleepQuiet(FocusPolicy.RESUME_DELAY_MS)) return false
+        }
+        return false
+    }
+
+    /** Drop focus and reset all focus state. Called on every manual pause and stop. */
+    private fun releaseFocus() {
+        runCatching {
+            val req = focusReq
+            focusReq = null
+            if (req != null) {
+                val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                am.abandonAudioFocusRequest(req)
+            }
+        }
+        focusPhase = FocusPolicy.Phase.IDLE
+        focusPaused = false
+        focusState.transientLoss = false
+        focusState.lostForGood = false
+        focusState.lostAt = 0L
+        focusWake?.countDown()
+        focusWake = null
+    }
+
+    /** Runs on the main thread via the request's handler. */
+    private fun onFocusChange(change: Int) {
+        val action = FocusPolicy.onChange(change, focusPhase, focusState, SystemClock.elapsedRealtime())
+        when (action) {
+            FocusPolicy.Action.PAUSE_SPEAK -> {
+                focusPaused = true
+                stopPlaybackNow()
+            }
+            FocusPolicy.Action.ABORT_LISTEN -> {
+                focusPaused = true
+                destroyRecognizerOnMain()
+                finishListen(null, tone = false)
+            }
+            FocusPolicy.Action.RESUME -> {
+                mainHandler.postDelayed({
+                    focusPaused = false
+                    focusWake?.countDown()
+                }, FocusPolicy.RESUME_DELAY_MS)
+            }
+            FocusPolicy.Action.NONE -> {}
+        }
+        if (focusState.lostForGood) {
+            // Permanent loss: hand control to the user with the same manual pause the Pause button uses.
+            runCatching { DrillService.pauseForChat(ChatPause.Trigger.MANUAL) }
+        }
+    }
+
+    /** Wait in 500 ms slices while focus stays lost. False when the drill stops. */
+    private fun awaitFocusResume(): Boolean {
+        while (focusPaused && !stopRequested.get() && !destroyed) {
+            val latch = CountDownLatch(1)
+            focusWake = latch
+            if (!focusPaused || stopRequested.get() || destroyed) {
+                focusWake = null
+                break
+            }
+            try {
+                latch.await(500, TimeUnit.MILLISECONDS)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
+        }
+        return !stopRequested.get() && !destroyed
+    }
+
     override fun speak(text: String) {
         if (text.isBlank()) return
         val spoken = AnkiText.sanitizeForSpeech(text)
         if (spoken.isBlank()) return
         if (!AudioGate.outputAllowed(sessionSilent)) return
+        var reSpeaks = 0
         speechInterrupted = false
         speechSkipped = false
+        if (!acquireFocus()) return
+        focusPhase = FocusPolicy.Phase.SPEAKING
         when (spoken) {
             RatingGuides.LONG, RatingGuides.SHORT -> Log.i(TAG, "rating prompt spoken")
             RatingGuides.REPROMPT -> Log.i(TAG, "rating reprompt")
@@ -1096,7 +1220,11 @@ class DrillService : Service(), VoiceIo {
             }
         } finally {
             DrillUi.update(SentenceReading.cleared())
+            focusPhase = FocusPolicy.Phase.IDLE
         }
+        // Cut off by a focus-loss pause: re-read from the start after focus returns (Repeat-style),
+        // at most 3 re-speaks so a stuck focus can't loop forever.
+        while (focusPaused && reSpeaks++ < 3 && awaitFocusResume()) speak(spoken)
     }
 
     /** 58E: the whole card in one Edge request; readingIndex follows playback via ReadingTimeline. true = played to the end or the user stopped/skipped it. */
@@ -1336,26 +1464,46 @@ class DrillService : Service(), VoiceIo {
     }
 
     private fun captureListen(timeoutMs: Long): String? {
-        val scripted = SpeechHooks.scripted
-        val result = if (scripted != null && scripted.enabled()) {
-            // Poll in short slices so a chip tap (queued grade) is honoured during a scripted listen,
-            // the same way the real recognizer path accepts it.
-            val deadline = SystemClock.elapsedRealtime() + timeoutMs
-            var text: String? = null
-            while (text == null) {
-                if (showAnswerEarly.get() || sessionSilent || chatPaused.get()) break
-                consumeQueuedGrade()?.let { text = it }
-                if (text != null || stopRequested.get() || destroyed) break
-                val left = deadline - SystemClock.elapsedRealtime()
-                if (left <= 0) break
-                text = scripted.poll(minOf(left, 250L))
-                if (text != null) Log.i(TAG, "listen ok: SCRIPT")
+        var reopens = 0
+        while (true) {
+            if (!acquireFocus()) return null
+            focusPhase = FocusPolicy.Phase.LISTENING
+            val listenStartedAt = SystemClock.elapsedRealtime()
+            val scripted = SpeechHooks.scripted
+            val result = if (scripted != null && scripted.enabled()) {
+                // Poll in short slices so a chip tap (queued grade) is honoured during a scripted listen,
+                // the same way the real recognizer path accepts it.
+                val deadline = SystemClock.elapsedRealtime() + timeoutMs
+                var text: String? = null
+                while (text == null) {
+                    if (showAnswerEarly.get() || sessionSilent || chatPaused.get()) break
+                    consumeQueuedGrade()?.let { text = it }
+                    if (text != null || stopRequested.get() || destroyed) break
+                    val left = deadline - SystemClock.elapsedRealtime()
+                    if (left <= 0) break
+                    text = scripted.poll(minOf(left, 250L))
+                    if (text != null) Log.i(TAG, "listen ok: SCRIPT")
+                }
+                if (text == null) Log.i(TAG, "listen ok: SCRIPT_EMPTY")
+                text
+            } else {
+                consumeQueuedGrade() ?: listenWithRecognizer(timeoutMs)
             }
-            if (text == null) Log.i(TAG, "listen ok: SCRIPT_EMPTY")
-            text
-        } else {
-            consumeQueuedGrade() ?: listenWithRecognizer(timeoutMs)
+            focusPhase = FocusPolicy.Phase.IDLE
+            if (!focusPaused && FocusPolicy.shouldGrade(focusState.lostAt, SystemClock.elapsedRealtime())) {
+                return maybeGrade(result)
+            }
+            // A focus loss hit the answer window: drop the result, do NOT count a miss, and reopen.
+            if (reopens++ >= 3 || stopped() || chatPaused.get()) {
+                if (focusState.lostAt > listenStartedAt) Log.i(TAG, "listen dropped: focus lost during answer window")
+                return null
+            }
+            awaitFocusResume()
         }
+    }
+
+    /** Grade parsing moved out of [captureListen] so a focus-loss drop can skip it. */
+    private fun maybeGrade(result: String?): String? {
         if (!result.isNullOrBlank()) {
             val action = GradeMapper.parse(result)
             logAction(action)
@@ -3543,6 +3691,8 @@ class DrillService : Service(), VoiceIo {
         override fun onEvent(eventType: Int, params: Bundle) {}
 
         override fun onResults(results: Bundle) {
+            // Late result after a focus-loss abort is not graded.
+            if (focusPaused) return
             if (closeIfSilent()) return
             if (!current()) return
             if (!errorGate.compareAndSet(false, true)) return
