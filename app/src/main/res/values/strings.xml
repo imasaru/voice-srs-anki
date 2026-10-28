@@ -236,4 +236,18 @@
     <string name="timer_fewer">Fewer minutes</string>
     <string name="timer_more">More minutes</string>
     <string name="timer_switch">Timer on</string>
+    <string name="prompt_chips_title">One-tap prompts</string>
+    <string name="prompt_chips_empty">No prompts yet. Tap ＋ Add prompt.</string>
+    <string name="prompt_chips_add">＋ Add prompt</string>
+    <string name="prompt_chip_builtin">Built-in</string>
+    <string name="prompt_src_reviews">Today\'s reviews</string>
+    <string name="prompt_src_card">Card on screen</string>
+    <string name="prompt_src_chats">Card chats</string>
+    <string name="prompt_move_up">Move up</string>
+    <string name="prompt_move_down">Move down</string>
+    <string name="prompt_edit">Edit</string>
+    <string name="prompt_delete">Delete</string>
+    <string name="prompt_delete_confirm">Delete “%1$s”?</string>
+    <string name="settings_prompt_chips_help">Chips above the chat box that send a saved prompt with your study data.</string>
+    <string name="settings_prompt_chips_button">Manage prompts</string>
 </resources>

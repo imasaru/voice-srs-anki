@@ -958,6 +958,9 @@ class SettingsActivity : AppCompatActivity() {
                 }
             }.start()
         }
+        findViewById<Button>(R.id.promptChipsButton).setOnClickListener {
+            startActivity(android.content.Intent(this, PromptChipsActivity::class.java))
+        }
         val includeKeys = findViewById<MaterialCheckBox>(R.id.exportIncludeKeys)
         includeKeys.isChecked = false
         findViewById<Button>(R.id.exportSettingsButton).setOnClickListener {

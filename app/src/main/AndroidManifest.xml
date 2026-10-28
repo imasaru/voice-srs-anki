@@ -30,6 +30,10 @@
             android:exported="false"
             android:label="Voice SRS settings"
             android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".PromptChipsActivity"
+            android:exported="false"
+            android:label="@string/prompt_chips_title" />
         <service
             android:name=".DrillService"
             android:exported="false"
