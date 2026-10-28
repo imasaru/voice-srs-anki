@@ -39,12 +39,13 @@
     <string name="section_anki">AnkiConnect</string>
     <string name="section_speech">Speech</string>
     <string name="section_listening">Listening</string>
-    <string name="settings_listen_wait">Wait for speech</string>
+    <string name="settings_listen_wait">Rating listen window</string>
+    <string name="settings_listen_wait_help">How long the mic stays open for each listen (ratings, and answers when Think time is Off).</string>
     <string name="settings_end_silence">End-of-speech silence</string>
     <string name="settings_listen_attempts">Listen attempts</string>
-    <string name="settings_listen_attempts_help">How many times to listen before switching to silent.</string>
+    <string name="settings_listen_attempts_help">Missed listens allowed before switching to silent.</string>
     <string name="settings_think_time">Think time</string>
-    <string name="settings_think_time_help">How long to give you to think before the answer is read.</string>
+    <string name="settings_think_time_help">Total time to think before the answer is shown. Say a letter or your answer to reveal early.</string>
     <string name="settings_listen_help">How long to wait for you to start speaking. End-of-speech silence is a hint; Google\'s recognizer may ignore it.</string>
     <string name="settings_listen_wait_choice">%1$d seconds</string>
     <string name="settings_end_silence_choice">%1$d ms</string>

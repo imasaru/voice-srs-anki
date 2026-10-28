@@ -735,6 +735,14 @@
                             android:textAppearance="?attr/textAppearanceBodyLarge" />
                     </com.google.android.material.textfield.TextInputLayout>
 
+                    <TextView
+                        android:id="@+id/listenWaitHelp"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/settings_listen_wait_help"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
                     <com.google.android.material.textfield.TextInputLayout
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                         android:layout_width="match_parent"
@@ -766,6 +774,7 @@
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <TextView
+                        android:id="@+id/listenAttemptsHelp"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
@@ -788,6 +797,7 @@
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <TextView
+                        android:id="@+id/thinkTimeHelp"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
