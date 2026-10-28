@@ -1709,7 +1709,9 @@ class DrillService : Service(), VoiceIo {
         Log.i(TAG, "skip card id=${card.cardId}")
         val n = (skipCounts[card.cardId] ?: 0) + 1
         skipCounts[card.cardId] = n
-        speak(SkipQueue.say(n, speedMode))
+        val say = SkipQueue.say(n, speedMode)
+        speak(say)
+        postStatusNotice(say)
         runCatching { anki.guiShowAnswer() }
         if (card.cardId <= 0L) return
         val skipped = store.readSkipped().toMutableList()
@@ -1954,7 +1956,9 @@ class DrillService : Service(), VoiceIo {
                     Log.i(TAG, "offline skip id=${card.cardId}")
                     val n = (skipCounts[card.cardId] ?: 0) + 1
                     skipCounts[card.cardId] = n
-                    speak(SkipQueue.say(n, cfg.speedMode))
+                    val say = SkipQueue.say(n, cfg.speedMode)
+                    speak(say)
+                    postStatusNotice(say)
                     val drop = n > SkipQueue.MAX_SKIPS_PER_CARD + 1
                     if (!drop) queue.add(if (n <= SkipQueue.MAX_SKIPS_PER_CARD) SkipQueue.insertAt(index + 1, queue.size) else queue.size, card)
                     queue.removeAt(index)

@@ -101,6 +101,9 @@
     <string name="card_back_label">Answer</string>
     <string name="grade_guide">Say a grade</string>
     <string name="grade_guide_tap">Tap a grade</string>
+    <string name="answer_guide">Say your answer, "repeat", or "skip"</string>
+    <string name="skip_notice">Skipped. You\'ll see this card again later.</string>
+    <string name="skip_notice_short">Skipped.</string>
     <string name="grade_again">Again</string>
     <string name="grade_hard">Hard</string>
     <string name="grade_good">Good</string>

@@ -26,4 +26,16 @@ object SkipQueue {
         speedMode -> SAY_SHORT
         else -> SAY
     }
+
+    /**
+     * Which hint line the answer controls should show (0 = hidden). Pure, mirrors
+     * the old silent/non-silent split and adds the answer hint before reveal:
+     * 0 = hidden, 1 = grade_guide, 2 = grade_guide_tap, 3 = answer_guide.
+     */
+    fun guide(hasQuestion: Boolean, answerShown: Boolean, silent: Boolean): Int = when {
+        !hasQuestion -> 0;
+        silent -> if (answerShown) 2 else 0;
+        answerShown -> 1;
+        else -> 3
+    }
 }

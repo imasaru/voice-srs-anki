@@ -863,10 +863,15 @@ class MainActivity : AppCompatActivity() {
             silent = silentOn
         )
         val ratingVis = if (controls.rating) View.VISIBLE else View.GONE
-        findViewById<View>(R.id.gradeGuideLabel)?.visibility = ratingVis
-        findViewById<TextView>(R.id.gradeGuideLabel)?.setText(
-            if (silentOn) R.string.grade_guide_tap else R.string.grade_guide
-        )
+        val guide = SkipQueue.guide(hasQuestion, state.showBack, silentOn)
+        findViewById<View>(R.id.gradeGuideLabel)?.visibility = if (guide != 0) View.VISIBLE else View.GONE
+        if (guide != 0) {
+            findViewById<TextView>(R.id.gradeGuideLabel)?.setText(when (guide) {
+                1 -> R.string.grade_guide
+                2 -> R.string.grade_guide_tap
+                else -> R.string.answer_guide
+            })
+        }
         findViewById<View>(R.id.gradeChips)?.visibility = ratingVis
         val sel = if (controls.rating) state.selectedEase else null
         val suggested = if (controls.rating) state.suggestedEase else null
