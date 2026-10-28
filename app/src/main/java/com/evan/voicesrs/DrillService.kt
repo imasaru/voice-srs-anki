@@ -205,9 +205,12 @@ class DrillService : Service(), VoiceIo {
             active?.onChatScreen(attached, ordinal, ready)
         }
 
-        /** Tapped MCQ row. The letter is the original one. This does not grade. */
-        fun submitLetter(letter: String) {
-            active?.acceptLetter(letter)
+        /** Tapped MCQ row. The letter is the original one. A paused card resumes first unless the user is typing. */
+        fun submitLetter(letter: String, typing: Boolean = false) {
+            val svc = active ?: return
+            val plan = ChatPause.tapPlan(svc.chatPaused.get(), typing) ?: return
+            svc.acceptLetter(letter)
+            if (plan == ChatPause.Action.RESUME) svc.leaveChatPause(ChatPause.Action.RESUME)
         }
 
         /** Live silent switch. Does not restart the drill. */

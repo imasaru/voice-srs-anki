@@ -37,6 +37,17 @@ object ChatPause {
     fun accepts(action: Action): Boolean = action == Action.RESUME || action == Action.RATING
 
     /**
+     * What a tap on the card should do. A paused tap resumes then takes the
+     * letter; a tap while typing is ignored (null) so the pause holds; a tap
+     * when not paused just takes the letter (OTHER).
+     */
+    fun tapPlan(paused: Boolean, typing: Boolean): Action? = when {
+        !paused -> Action.OTHER
+        typing -> null
+        else -> Action.RESUME
+    }
+
+    /**
      * A reply is spoken only while paused, when Silent is off, and the question
      * was dictated. Typed questions stay text. Unpaused review never speaks them.
      */

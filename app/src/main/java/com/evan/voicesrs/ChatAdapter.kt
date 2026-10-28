@@ -359,6 +359,13 @@ class ChatAdapter(
             CardFaceBinder.paintReadingIn(listOf(question, answer), sentence)
         }
 
+        private fun composerBusy(v: View): Boolean {
+            val root = v.rootView
+            val focused = root.findFocus() as? EditText
+            val chat = root.findViewById<EditText>(R.id.chatInput)
+            return focused != null || !chat?.text.isNullOrEmpty()
+        }
+
         init {
             val cut: (View) -> Unit = {
                 val s = DrillUi.state
@@ -391,7 +398,7 @@ class ChatAdapter(
                     sessionStartMs = DrillUi.state.sessionStartedMs,
                     shuffle = shuffleOn(itemView),
                     chosenLetter = row.chosenLetter,
-                    onOption = if (row.showBack) null else { letter -> DrillService.submitLetter(letter) },
+                    onOption = if (row.showBack) null else { letter -> DrillService.submitLetter(letter, typing = composerBusy(itemView)) },
                     correctField = row.correctField
                 )
                 if (!mcq) {
