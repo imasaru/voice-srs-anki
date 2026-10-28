@@ -414,6 +414,8 @@ class DrillService : Service(), VoiceIo {
      */
     @Volatile private var listenSpeechDetected = false
     private var silenceRestarts = 0
+    private var restartRecognizer = false
+    private var restartBusyRetries = 0
     private var listenDeadlineMs = 0L
     private var listenWaitMs = ListenWindow.DEFAULT_WAIT_SEC * 1000L
     private var listenSilenceMs = ListenWindow.DEFAULT_SILENCE_MS
@@ -3089,6 +3091,8 @@ class DrillService : Service(), VoiceIo {
             speechBegan = false
             listenSpeechDetected = false
             silenceRestarts = 0
+            restartRecognizer = false
+            restartBusyRetries = 0
             listenExtrasLogged = false
             listenWaitMs = timeoutMs
             listenSilenceMs = configuredSilenceMs
@@ -3353,9 +3357,28 @@ class DrillService : Service(), VoiceIo {
                 finishListen(null)
                 return@post
             }
-            destroyRecognizerOnMain()
+            restartSilenceListenAfter(session, SilenceRestart.RESTART_DELAY_MS)
+        }
+    }
+
+    /** Destroy, wait [delayMs], recreate; a restart's busy error retries once. */
+    private fun restartSilenceListenAfter(session: Int, delayMs: Long) {
+        val epoch = listenEpoch
+        mainHandler.post {
             if (!listenEpochOpen(epoch) || !sessionOpen(session)) return@post
-            beginListenOnMain(session, epoch)
+            val left = listenDeadlineMs - SystemClock.elapsedRealtime()
+            if (left < ListenWindow.MIN_REMAINING_MS) {
+                finishListen(null)
+                return@post
+            }
+            restartRecognizer = true
+            SilenceRestart.schedule(
+                delayMs,
+                destroy = { destroyRecognizerOnMain() },
+                postDelayed = { ms, r -> mainHandler.postDelayed(r, ms) },
+                stillOpen = { listenEpochOpen(epoch) && sessionOpen(session) },
+                begin = { beginListenOnMain(session, epoch) }
+            )
         }
     }
 
@@ -3596,6 +3619,20 @@ class DrillService : Service(), VoiceIo {
             // A heard letter ends the window. A no-match after speech does too:
             // that used to look like silence and reopen the mic in a loop.
             if (absorbAnswer(emptyList(), allowUnmatched = normalEnd)) return
+            when (val p = SilenceRestart.onError(error, restartRecognizer, restartBusyRetries, SystemClock.elapsedRealtime(), listenDeadlineMs)) {
+                is SilenceRestart.Plan.Retry -> {
+                    restartBusyRetries += 1
+                    Log.i(TAG, "restart busy: $error retry in ${p.delayMs}ms")
+                    restartSilenceListenAfter(session, p.delayMs)
+                    return
+                }
+                SilenceRestart.Plan.EndQuiet -> {
+                    Log.i(TAG, "listen ok: restart busy $error")
+                    finishListen(null)
+                    return
+                }
+                SilenceRestart.Plan.NotMine -> Unit
+            }
             if (retryable && !clientRetryUsed && sessionOpen(session) && listenEpochOpen(epoch)) {
                 clientRetryUsed = true
                 Log.i(TAG, "recognizer backoff: $error")
