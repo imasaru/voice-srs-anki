@@ -1066,14 +1066,56 @@ class DrillService : Service(), VoiceIo {
         }
         val parts = SentenceReading.parts(spoken)
         try {
+            val cfg = try { Prefs.load(this) } catch (_: Exception) { null }
+            val neuralCard = cfg != null && useNeuralNow(cfg) && spoken.length <= NeuralTts.MAX_TEXT
+            if (neuralCard && speakNeuralCard(cfg!!, spoken)) return
+            if (stopRequested.get() || speechInterrupted || speechSkipped || sessionSilent) return
             for ((i, part) in parts.withIndex()) {
                 if (stopRequested.get() || speechInterrupted || speechSkipped || sessionSilent) break
                 DrillUi.update(SentenceReading.at(i, part))
-                speakOne(part)
+                if (neuralCard) {
+                    if (speakOnDevice(part)) Log.i(TAG, "TTS engine=neural card fail; fallback on-device ok")
+                } else {
+                    speakOne(part)
+                }
             }
         } finally {
             DrillUi.update(SentenceReading.cleared())
         }
+    }
+
+    /** 58E: the whole card in one Edge request; readingIndex follows playback via ReadingTimeline. true = played to the end or the user stopped/skipped it. */
+    private fun speakNeuralCard(cfg: AnkiConfig, spoken: String): Boolean {
+        val ranges = SentenceSplit.ranges(spoken)
+        var timed: List<ReadingTimeline.Timed> = emptyList()
+        var shown = -1
+        val ok = try {
+            EdgeSpeaker(this).speakWithMarks(
+                cfg.neuralUrl,
+                cfg.neuralToken,
+                cfg.neuralVoice,
+                cfg.ttsRate,
+                spoken,
+                cancelled = { stopRequested.get() || speechInterrupted || speechSkipped || sessionSilent },
+                onMarks = { marks -> timed = ReadingTimeline.align(spoken, marks) },
+                onPlaybackStart = { reportPlaybackStart(EngineChoice.NEURAL) },
+                onPosition = { ms, total ->
+                    val i = ReadingTimeline.sentenceAt(spoken, timed, total, ms)
+                    if (i != shown && i in ranges.indices) {
+                        shown = i
+                        DrillUi.update(SentenceReading.at(i, spoken.substring(ranges[i])))
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "neural card speak error")
+            false
+        }
+        if (ok) {
+            Log.i(TAG, "TTS engine=neural card ok marks=${timed.size}")
+            return true
+        }
+        return stopRequested.get() || speechInterrupted || speechSkipped
     }
 
     /** One sentence through the chosen engine (neural with on-device fallback, or on-device). Blocks until it ends. */
