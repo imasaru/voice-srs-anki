@@ -1116,6 +1116,8 @@ class DrillService : Service(), VoiceIo {
             }
             if (granted) {
                 Log.i(TAG, "audiofocus granted")
+                // h90 review: we hold focus again, so an old loss must not poison later listens.
+                if (!focusPaused) { focusState.transientLoss = false; focusState.lostAt = 0L }
                 return true
             }
             Log.i(TAG, "audiofocus refused; retry")
@@ -1162,7 +1164,11 @@ class DrillService : Service(), VoiceIo {
                     focusWake?.countDown()
                 }, FocusPolicy.RESUME_DELAY_MS)
             }
-            FocusPolicy.Action.NONE -> {}
+            FocusPolicy.Action.NONE -> {
+                // h90 review: a transient loss between speak and listen still waits for GAIN,
+                // so the next question/mic doesn't grab focus back from a nav prompt.
+                if (focusState.transientLoss) focusPaused = true
+            }
         }
         if (focusState.lostForGood) {
             // Permanent loss: hand control to the user with the same manual pause the Pause button uses.
@@ -1197,6 +1203,7 @@ class DrillService : Service(), VoiceIo {
         var reSpeaks = 0
         speechInterrupted = false
         speechSkipped = false
+        if (focusPaused && !awaitFocusResume()) return
         if (!acquireFocus()) return
         focusPhase = FocusPolicy.Phase.SPEAKING
         when (spoken) {
@@ -1466,6 +1473,7 @@ class DrillService : Service(), VoiceIo {
     private fun captureListen(timeoutMs: Long): String? {
         var reopens = 0
         while (true) {
+            if (focusPaused && !awaitFocusResume()) return null
             if (!acquireFocus()) return null
             focusPhase = FocusPolicy.Phase.LISTENING
             val listenStartedAt = SystemClock.elapsedRealtime()
@@ -1490,7 +1498,9 @@ class DrillService : Service(), VoiceIo {
                 consumeQueuedGrade() ?: listenWithRecognizer(timeoutMs)
             }
             focusPhase = FocusPolicy.Phase.IDLE
-            if (!focusPaused && FocusPolicy.shouldGrade(focusState.lostAt, SystemClock.elapsedRealtime())) {
+            val lostInWindow = focusState.lostAt > listenStartedAt &&
+                !FocusPolicy.shouldGrade(focusState.lostAt, SystemClock.elapsedRealtime())
+            if (!focusPaused && !lostInWindow) {
                 return maybeGrade(result)
             }
             // A focus loss hit the answer window: drop the result, do NOT count a miss, and reopen.
