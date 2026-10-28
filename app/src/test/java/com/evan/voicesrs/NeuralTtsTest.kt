@@ -86,4 +86,34 @@ class NeuralTtsTest {
         assertTrue(NeuralTts.DEFAULT_VOICE in NeuralTts.pickerNames(parsed))
         assertEquals(emptyList<NeuralVoice>(), NeuralTts.parseVoices("not-json"))
     }
+
+    @Test
+    fun `parseMarks reads the speak2 marks array`() {
+        val marks = NeuralTts.parseMarks("""[{"o":0,"d":300,"t":"One"},{"o":300,"d":250,"t":"two"}]""")
+        assertEquals(listOf(ReadingTimeline.Mark(0, 300, "One"), ReadingTimeline.Mark(300, 250, "two")), marks)
+    }
+
+    @Test
+    fun `parseMarks returns empty for bad or missing input`() {
+        assertEquals(emptyList<ReadingTimeline.Mark>(), NeuralTts.parseMarks("not json"))
+        assertEquals(emptyList<ReadingTimeline.Mark>(), NeuralTts.parseMarks(""))
+        assertEquals(emptyList<ReadingTimeline.Mark>(), NeuralTts.parseMarks(null.toString()))
+    }
+
+    @Test
+    fun `parseMarks skips blank or missing word`() {
+        val marks = NeuralTts.parseMarks("""[{"o":5,"d":1,"t":""},{"o":6,"d":1}]""")
+        assertEquals(emptyList<ReadingTimeline.Mark>(), marks)
+    }
+
+    @Test
+    fun `marksJson round trips through parseMarks`() {
+        val list = listOf(ReadingTimeline.Mark(0, 1, "a"), ReadingTimeline.Mark(1500, 320, "Héllo"))
+        assertEquals(list, NeuralTts.parseMarks(NeuralTts.marksJson(list)))
+    }
+
+    @Test
+    fun `marksJson of an empty list is empty array`() {
+        assertEquals("[]", NeuralTts.marksJson(emptyList()))
+    }
 }

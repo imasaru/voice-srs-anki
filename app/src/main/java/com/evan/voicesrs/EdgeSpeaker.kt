@@ -104,6 +104,72 @@ class EdgeSpeaker(private val context: Context) {
         return played
     }
 
+    /**
+     * 58E: speak the whole [text] in one request with Edge word marks.
+     * Cache: <key>.mp3 + <key>.marks.json. [onMarks] gets the marks (maybe empty) before playback;
+     * [onPosition] gets (positionMs, durationMs) about every 200 ms while playing.
+     * @return true when playback ran to completion.
+     */
+    fun speakWithMarks(
+        baseUrl: String,
+        token: String,
+        voice: String,
+        rate: Float,
+        text: String,
+        cancelled: () -> Boolean = { false },
+        onMarks: (List<ReadingTimeline.Mark>) -> Unit = {},
+        onPlaybackStart: () -> Unit = {},
+        onPosition: (Long, Long) -> Unit = { _, _ -> }
+    ): Boolean {
+        val spoken = text.trim()
+        if (spoken.isEmpty() || spoken.length > NeuralTts.MAX_TEXT) return false
+        if (baseUrl.isBlank() || token.isBlank()) return false
+        if (cancelled()) return false
+        val voiceName = voice.ifBlank { NeuralTts.DEFAULT_VOICE }
+        val serverRate = NeuralTts.serverRate(rate)
+        val file = cacheFile(spoken, voiceName, serverRate)
+        val marksFile = marksFile(file)
+        if (!isPlayable(file) || !marksFile.isFile) {
+            val tmp = File(file.parentFile, file.name + ".part")
+            val marks = downloadWithMarks(baseUrl, token, voiceName, serverRate, spoken, tmp)
+                ?: if (download(baseUrl, token, voiceName, serverRate, spoken, tmp)) emptyList() else null
+            if (marks == null) { tmp.delete(); return false }
+            file.parentFile?.mkdirs()
+            if (file.exists()) file.delete()
+            if (!tmp.renameTo(file)) { tmp.copyTo(file, overwrite = true); tmp.delete() }
+            marksFile.writeText(NeuralTts.marksJson(marks))
+            trimCache(file.parentFile)
+        }
+        val marks = try { NeuralTts.parseMarks(marksFile.readText()) } catch (_: Exception) { emptyList() }
+        runCatching { onMarks(marks) }
+        if (cancelled()) return false
+        val played = play(file, cancelled, onPlaybackStart, onPosition)
+        if (!played && !cancelled()) { file.delete(); marksFile.delete() }
+        return played
+    }
+
+    private fun marksFile(mp3: File): File = File(mp3.parentFile, mp3.nameWithoutExtension + ".marks.json")
+
+    /** POST /speak2; writes the decoded mp3 to [dest] and returns its marks, or null on any failure (including 404 before the server has /speak2). */
+    private fun downloadWithMarks(baseUrl: String, token: String, voice: String, rate: Float, text: String, dest: File): List<ReadingTimeline.Mark>? {
+        val endpoint = baseUrl.trim().trimEnd('/') + "/speak2"
+        val payload = JSONObject().put("text", text).put("voice", voice).put("rate", rate.toDouble()).toString()
+        val conn = try { open(endpoint, "POST", token, payload) } catch (_: Exception) { return null }
+        return try {
+            if (conn.responseCode !in 200..299) return null
+            val body = JSONObject(conn.inputStream.readBytes().decodeToString())
+            val bytes = android.util.Base64.decode(body.optString("audio", ""), android.util.Base64.DEFAULT)
+            if (bytes.size < 64 || bytes[0] == '{'.code.toByte()) return null
+            dest.parentFile?.mkdirs()
+            dest.writeBytes(bytes)
+            NeuralTts.parseMarks(body.optJSONArray("marks")?.toString() ?: "[]")
+        } catch (_: Exception) {
+            dest.delete(); null
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     private fun cacheFile(text: String, voice: String, rate: Float): File {
         val dir = File(context.cacheDir, "neural-tts")
         dir.mkdirs()
@@ -191,7 +257,8 @@ class EdgeSpeaker(private val context: Context) {
     private fun play(
         file: File,
         cancelled: () -> Boolean,
-        onPlaybackStart: () -> Unit = {}
+        onPlaybackStart: () -> Unit = {},
+        onPosition: (Long, Long) -> Unit = { _, _ -> }
     ): Boolean {
         val player = MediaPlayer()
         val latch = CountDownLatch(1)
@@ -223,6 +290,7 @@ class EdgeSpeaker(private val context: Context) {
                 }
                 if (System.nanoTime() > deadline) return false
                 try {
+                    runCatching { onPosition(player.currentPosition.toLong(), player.duration.toLong()) }
                     latch.await(200, TimeUnit.MILLISECONDS)
                 } catch (_: InterruptedException) {
                     try { player.stop() } catch (_: Exception) {}
@@ -245,7 +313,10 @@ class EdgeSpeaker(private val context: Context) {
         if (files.size <= NeuralTts.MAX_CACHE_FILES) return
         files.sortedBy { it.lastModified() }
             .take(files.size - NeuralTts.MAX_CACHE_FILES)
-            .forEach { runCatching { it.delete() } }
+            .forEach {
+                runCatching { it.delete() }
+                runCatching { File(it.parentFile, it.nameWithoutExtension + ".marks.json").delete() }
+            }
     }
 
     companion object {

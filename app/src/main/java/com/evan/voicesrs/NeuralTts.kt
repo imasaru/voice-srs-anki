@@ -148,6 +148,23 @@ object NeuralTts {
         val base = if (names.isEmpty()) FALLBACK_VOICES else names
         return if (DEFAULT_VOICE in base) base else listOf(DEFAULT_VOICE) + base
     }
+
+    /** 58E: /speak2 marks JSON array `[{"o":ms,"d":ms,"t":"word"}]` -> marks. Bad or missing input -> empty list. */
+    fun parseMarks(json: String): List<ReadingTimeline.Mark> = try {
+        val arr = org.json.JSONArray(json)
+        (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+            val t = o.optString("t", "")
+            if (t.isBlank()) null else ReadingTimeline.Mark(o.optLong("o", 0), o.optLong("d", 0), t)
+        }
+    } catch (_: Exception) { emptyList() }
+
+    /** 58E: marks -> the same JSON array text, for the .marks.json cache file. */
+    fun marksJson(marks: List<ReadingTimeline.Mark>): String {
+        val arr = org.json.JSONArray()
+        for (m in marks) arr.put(org.json.JSONObject().put("o", m.offsetMs).put("d", m.durationMs).put("t", m.word))
+        return arr.toString()
+    }
 }
 
 data class NeuralVoice(val name: String, val locale: String, val gender: String)
