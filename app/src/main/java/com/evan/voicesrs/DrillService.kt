@@ -2158,6 +2158,13 @@ class DrillService : Service(), VoiceIo {
                                 }
                                 is SpokenLetter.Decision.Unmatched -> {
                                     runCatching { DrillUi.update { it.copy(heard = decision.heard) } }
+                                    if (ThinkTime.unmatchedAction(decision.heard, ownWordsOpen()) ==
+                                        ThinkTime.UnmatchedAction.REVEAL_JUDGE
+                                    ) {
+                                        thinkTranscript = decision.heard.trim()
+                                        Log.i(TAG, "think own-words answer; reveal + judge")
+                                        return ThinkResult.Reveal
+                                    }
                                     val step = SpokenLetter.advance(decision, letterAttempts, maxAttempts)
                                     letterAttempts = step.attempts
                                     Log.i(TAG, "think unmatched $letterAttempts/$maxAttempts")

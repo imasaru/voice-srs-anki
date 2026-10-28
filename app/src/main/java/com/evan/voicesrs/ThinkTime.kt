@@ -93,6 +93,13 @@ object ThinkTime {
 
     enum class Hear { EMPTY, SHOW_ANSWER, ANSWER, REPEAT, SKIP, STOP_DRILL }
 
+    /** What think time does with speech that is not a letter on the card. */
+    enum class UnmatchedAction { REVEAL_JUDGE, COUNT_MISS }
+
+    /** Own-words on and something was said: reveal and judge it. Otherwise count a miss. */
+    fun unmatchedAction(heard: String?, ownWordsOn: Boolean): UnmatchedAction =
+        if (!heard.isNullOrBlank() && ownWordsOn) UnmatchedAction.REVEAL_JUDGE else UnmatchedAction.COUNT_MISS
+
     /** A spoken answer or "show answer" ends the timer before it runs out. A tap is separate. */
     fun endsEarly(hear: Hear): Boolean = hear == Hear.ANSWER || hear == Hear.SHOW_ANSWER
 
