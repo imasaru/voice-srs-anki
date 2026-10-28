@@ -69,8 +69,8 @@ class ThinkTimeTest {
 
     @Test
     fun `think slice ignores the grade wait setting`() {
-        assertEquals(8_000L, ThinkTime.listenSliceMs(20_000L, gradeWaitMs = 15_000L))
-        assertEquals(8_000L, ThinkTime.listenSliceMs(60_000L, gradeWaitMs = 5_000L))
+        assertEquals(20_000L, ThinkTime.listenSliceMs(20_000L, gradeWaitMs = 15_000L))
+        assertEquals(60_000L, ThinkTime.listenSliceMs(60_000L, gradeWaitMs = 5_000L))
         assertEquals(3_000L, ThinkTime.listenSliceMs(3_000L, gradeWaitMs = 30_000L))
         assertNotEquals(15_000L, ThinkTime.listenSliceMs(60_000L, gradeWaitMs = 15_000L))
         assertNotEquals(5_000L, ThinkTime.listenSliceMs(60_000L, gradeWaitMs = 5_000L))
@@ -97,5 +97,44 @@ class ThinkTimeTest {
     @Test
     fun `next card is skip`() {
         assertEquals(ThinkTime.Hear.SKIP, ThinkTime.classify("next card"))
+    }
+
+    @Test
+    fun `listen slice is the whole remaining time`() {
+        assertEquals(20_000L, ThinkTime.listenSliceMs(20_000L, gradeWaitMs = 5_000L))
+        assertEquals(0L, ThinkTime.listenSliceMs(0L, gradeWaitMs = 5_000L))
+    }
+
+    @Test
+    fun `answer with time left settles`() {
+        assertEquals(ThinkTime.Step.SETTLE, ThinkTime.nextStep(ThinkTime.Hear.ANSWER, bufferEmpty = true, remainingMs = 10_000L, settling = false))
+    }
+
+    @Test
+    fun `quiet settle with buffer reveals`() {
+        assertEquals(ThinkTime.Step.REVEAL, ThinkTime.nextStep(ThinkTime.Hear.EMPTY, bufferEmpty = false, remainingMs = 5_000L, settling = true))
+    }
+
+    @Test
+    fun `empty without buffer restarts quietly`() {
+        assertEquals(ThinkTime.Step.RESTART_QUIET, ThinkTime.nextStep(ThinkTime.Hear.EMPTY, bufferEmpty = true, remainingMs = 5_000L, settling = false))
+    }
+
+    @Test
+    fun `commands act at once`() {
+        assertEquals(ThinkTime.Step.ACT, ThinkTime.nextStep(ThinkTime.Hear.SKIP, bufferEmpty = true, remainingMs = 10_000L, settling = false))
+        assertEquals(ThinkTime.Step.ACT, ThinkTime.nextStep(ThinkTime.Hear.REPEAT, bufferEmpty = true, remainingMs = 10_000L, settling = false))
+        assertEquals(ThinkTime.Step.ACT, ThinkTime.nextStep(ThinkTime.Hear.STOP_DRILL, bufferEmpty = true, remainingMs = 10_000L, settling = false))
+    }
+
+    @Test
+    fun `deadline reveals`() {
+        assertEquals(ThinkTime.Step.REVEAL, ThinkTime.nextStep(ThinkTime.Hear.EMPTY, bufferEmpty = true, remainingMs = 0L, settling = false))
+    }
+
+    @Test
+    fun `settle is at least 1_5 s`() {
+        assertEquals(1_500L, ThinkTime.settleMs(800L))
+        assertEquals(2_500L, ThinkTime.settleMs(2_500L))
     }
 }

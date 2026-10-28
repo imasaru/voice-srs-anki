@@ -17,6 +17,9 @@ object ThinkTime {
     /** One recognizer slice while thinking. Independent of the grade wait. */
     const val MIC_SLICE_MS = 8_000L
 
+    /** Think-time mic restarts are capped here so a stuck mic stops retrying. */
+    const val MAX_RESTARTS = 10
+
     fun normalize(sec: Int): Int = if (sec in CHOICES_SEC) sec else DEFAULT_SEC
 
     fun label(sec: Int): String {
@@ -86,9 +89,28 @@ object ThinkTime {
      */
     fun listenSliceMs(remainingMs: Long, gradeWaitMs: Long): Long {
         if (remainingMs <= 0L) return 0L
-        val unused = gradeWaitMs
-        if (unused == Long.MIN_VALUE) return remainingMs
-        return minOf(remainingMs, MIC_SLICE_MS)
+        return remainingMs
+    }
+
+    /** Settling grace before a quiet reveal: at least 1.5 s of no new speech. */
+    fun settleMs(listenSilenceMs: Long): Long = maxOf(1_500L, listenSilenceMs)
+
+    /** What think time does next with the current speech state. */
+    enum class Step { SETTLE, REVEAL, RESTART_QUIET, ACT }
+
+    /**
+     * Decide the next think-time action from the latest speech [hear] and the
+     * clock. A spent deadline reveals now; a command acts at once; a spoken
+     * answer settles to keep listening; a quiet pause with something already
+     * buffered reveals it; otherwise restart the mic quietly.
+     */
+    fun nextStep(hear: Hear, bufferEmpty: Boolean, remainingMs: Long, settling: Boolean): Step {
+        if (remainingMs <= 0L) return Step.REVEAL
+        return when (hear) {
+            Hear.REPEAT, Hear.SKIP, Hear.STOP_DRILL, Hear.SHOW_ANSWER -> Step.ACT
+            Hear.ANSWER -> Step.SETTLE
+            Hear.EMPTY -> if (settling && !bufferEmpty) Step.REVEAL else Step.RESTART_QUIET
+        }
     }
 
     enum class Hear { EMPTY, SHOW_ANSWER, ANSWER, REPEAT, SKIP, STOP_DRILL }
