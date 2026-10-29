@@ -2317,6 +2317,9 @@ class DrillService : Service(), VoiceIo {
         }
         quietListen = true
         thinkTranscript = null
+        val buffer = ThinkBuffer()
+        var settling = false
+        var restarts = 0
         val maxAttempts = ListenWindow.clampAttempts(listenAttempts)
         var letterAttempts = 0
         armThinkTicker()
@@ -2335,9 +2338,23 @@ class DrillService : Service(), VoiceIo {
                 }
                 val now = SystemClock.elapsedRealtime()
                 if (thinkDeadlineMs <= 0L || ThinkTime.expired(now, thinkDeadlineMs)) {
+                    if (buffer.isEmpty()) {
+                        val blank = noteBlankAnswer(letterAttempts, maxAttempts)
+                        letterAttempts = blank.attempts
+                        if (blank.giveUp) {
+                            giveUpToSilent()
+                            return ThinkResult.Again
+                        }
+                    } else {
+                        thinkTranscript = buffer.text()
+                    }
                     return ThinkResult.Reveal
                 }
-                val slice = ThinkTime.listenSliceMs(thinkDeadlineMs - now, listenWaitMs)
+                val slice = if (settling) {
+                    ThinkTime.settleMs(listenSilenceMs.toLong()).coerceAtMost(thinkDeadlineMs - now)
+                } else {
+                    minOf(ThinkTime.listenSliceMs(thinkDeadlineMs - now, listenWaitMs), ThinkTime.MIC_SLICE_MS)
+                }
                 if (slice <= 0L) return ThinkResult.Reveal
                 val heard = captureListen(slice)
                 if (chatPaused.get()) continue
@@ -2349,67 +2366,57 @@ class DrillService : Service(), VoiceIo {
                 }
                 if (stopRequested.get()) return ThinkResult.Stop
                 if (listenFault) consumeMicFault()
-                when (ThinkTime.classify(heard)) {
-                    ThinkTime.Hear.EMPTY -> {
-                        val blank = noteBlankAnswer(letterAttempts, maxAttempts)
-                        letterAttempts = blank.attempts
-                        if (blank.giveUp) {
-                            giveUpToSilent()
-                            return ThinkResult.Again
+                // A spoken letter on the card reveals at once, exactly as before.
+                val letters = answerLetters()
+                if (letters != null) {
+                    val decision = SpokenLetter.decide(
+                        listOf(heard),
+                        emptyList(),
+                        letters,
+                        speechDetected = true
+                    )
+                    if (decision is SpokenLetter.Decision.Match) {
+                        thinkTranscript = if (noteChoice(decision.letter)) {
+                            chosenLetter
+                        } else {
+                            decision.letter
                         }
-                        continue
-                    }
-                    ThinkTime.Hear.SHOW_ANSWER -> return ThinkResult.Reveal
-                    ThinkTime.Hear.ANSWER -> {
-                        val letters = answerLetters()
-                        if (letters != null) {
-                            val decision = SpokenLetter.decide(
-                                listOf(heard),
-                                emptyList(),
-                                letters,
-                                speechDetected = true
-                            )
-                            when (decision) {
-                                is SpokenLetter.Decision.Match -> {
-                                    thinkTranscript = if (noteChoice(decision.letter)) {
-                                        chosenLetter
-                                    } else {
-                                        decision.letter
-                                    }
-                                    return ThinkResult.Reveal
-                                }
-                                is SpokenLetter.Decision.Unmatched -> {
-                                    runCatching { DrillUi.update { it.copy(heard = decision.heard) } }
-                                    if (ThinkTime.unmatchedAction(decision.heard, ownWordsOpen()) ==
-                                        ThinkTime.UnmatchedAction.REVEAL_JUDGE
-                                    ) {
-                                        thinkTranscript = decision.heard.trim()
-                                        Log.i(TAG, "think own-words answer; reveal + judge")
-                                        return ThinkResult.Reveal
-                                    }
-                                    val step = SpokenLetter.advance(decision, letterAttempts, maxAttempts)
-                                    letterAttempts = step.attempts
-                                    Log.i(TAG, "think unmatched $letterAttempts/$maxAttempts")
-                                    if (step.giveUp) {
-                                        giveUpToSilent()
-                                        return ThinkResult.Again
-                                    }
-                                    continue
-                                }
-                                SpokenLetter.Decision.Empty -> {
-                                    Log.i(TAG, "think silence; mic restart")
-                                    continue
-                                }
-                            }
-                        }
-                        thinkTranscript = if (noteChoice(heard)) chosenLetter else heard?.trim().orEmpty()
                         return ThinkResult.Reveal
                     }
-                    ThinkTime.Hear.REPEAT -> return ThinkResult.Repeat
-                    ThinkTime.Hear.SKIP -> return ThinkResult.Skip
-                    ThinkTime.Hear.STOP_DRILL -> {
-                        stopFromSession()
-                        return ThinkResult.Stop
+                }
+                val hear = ThinkTime.classify(heard)
+                when (ThinkTime.nextStep(hear, buffer.isEmpty(), thinkDeadlineMs - SystemClock.elapsedRealtime(), settling)) {
+                    ThinkTime.Step.ACT -> {
+                        buffer.clear()
+                        return when (hear) {
+                            ThinkTime.Hear.SHOW_ANSWER -> ThinkResult.Reveal
+                            ThinkTime.Hear.REPEAT -> ThinkResult.Repeat
+                            ThinkTime.Hear.SKIP -> ThinkResult.Skip
+                            ThinkTime.Hear.STOP_DRILL -> {
+                                stopFromSession()
+                                ThinkResult.Stop
+                            }
+                            // Unreachable: nextStep routes ANSWER to SETTLE and EMPTY elsewhere.
+                            ThinkTime.Hear.ANSWER, ThinkTime.Hear.EMPTY -> ThinkResult.Reveal
+                        }
+                    }
+                    ThinkTime.Step.SETTLE -> {
+                        buffer.append(heard)
+                        runCatching { DrillUi.update { it.copy(heard = buffer.text()) } }
+                        settling = true
+                        quietListen = true
+                        continue
+                    }
+                    ThinkTime.Step.REVEAL -> {
+                        thinkTranscript = if (buffer.isEmpty()) null else buffer.text()
+                        return ThinkResult.Reveal
+                    }
+                    ThinkTime.Step.RESTART_QUIET -> {
+                        if (buffer.isEmpty()) settling = false
+                        restarts++
+                        if (restarts > ThinkTime.MAX_RESTARTS) SystemClock.sleep(300L)
+                        quietListen = true
+                        continue
                     }
                 }
             }
