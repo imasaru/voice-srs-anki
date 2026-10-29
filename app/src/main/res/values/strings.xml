@@ -284,4 +284,5 @@
     <!-- Visible switch text: balanced explicit break below 400dp; values-w400dp has the one-line form. -->
     <string name="timer_switch_text">End drill\nat goal</string>
     <string name="your_answer_label">YOUR ANSWER</string>
+    <string name="prompt_chip_add_desc">Add prompt</string>
 </resources>

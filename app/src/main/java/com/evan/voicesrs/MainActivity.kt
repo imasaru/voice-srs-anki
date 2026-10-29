@@ -847,7 +847,7 @@ class MainActivity : AppCompatActivity() {
         if (chipScroll != null && chipRow != null) {
             val showChips = !hasQuestion && cfg.aiEnabled
             val promptChips = if (showChips) Prefs.loadPromptChips(this) else emptyList()
-            chipScroll.visibility = if (showChips && promptChips.isNotEmpty()) View.VISIBLE else View.GONE
+            chipScroll.visibility = if (showChips) View.VISIBLE else View.GONE
             val sig = PromptChips.toJson(promptChips)
             if (showChips && chipRow.tag != sig) {
                 chipRow.tag = sig
@@ -858,6 +858,12 @@ class MainActivity : AppCompatActivity() {
                     chipView.setOnClickListener { runPromptChip(pc) }
                     chipRow.addView(chipView)
                 }
+                val addChip = layoutInflater.inflate(R.layout.item_prompt_chip, chipRow, false) as Chip
+                addChip.id = R.id.promptChipRowAdd
+                addChip.text = "＋"
+                addChip.contentDescription = getString(R.string.prompt_chip_add_desc)
+                addChip.setOnClickListener { startActivity(Intent(this, PromptChipEditActivity::class.java)) }
+                chipRow.addView(addChip)
             }
         }
         val controls = AnswerControls.of(
