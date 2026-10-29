@@ -177,10 +177,18 @@ object OwnWordsJudge {
     }
 
     /** Free speech on an MCQ, not a letter and not a drill command.
-     * Non-MCQ cards stay on the existing grader. */
-    fun shouldJudge(transcript: String, letters: Set<String>?): Boolean {
+     * Non-MCQ cards stay on the existing grader. h83: with [letterListen] false
+     * spoken letters are not matched, so everything is judged except the
+     * letter the learner [tapped]. */
+    fun shouldJudge(
+        transcript: String,
+        letters: Set<String>?,
+        letterListen: Boolean = true,
+        tapped: String? = null,
+    ): Boolean {
         if (transcript.isBlank() || letters.isNullOrEmpty()) return false
-        if (SpokenLetter.normalise(transcript, letters) != null) return false
+        if (tapped != null && transcript.trim().equals(tapped.trim(), ignoreCase = true)) return false
+        if (letterListen && SpokenLetter.normalise(transcript, letters) != null) return false
         return true
     }
 

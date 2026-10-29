@@ -67,6 +67,7 @@ data class AnkiConfig(
     val decisionEnabled: Boolean = false,
     val decisionUrl: String = "",
     val decisionModel: String = "",
+    val letterListen: Boolean = false,
     /** Wrap detected code on card faces. Display only. */
     val detectCode: Boolean = true,
     /** Deck for AI-generated Basic notes. */
@@ -119,6 +120,7 @@ object Prefs {
     private const val KEY_DECISION_ENABLED = "decision_enabled"
     private const val KEY_DECISION_URL = "decision_url"
     private const val KEY_DECISION_MODEL = "decision_model"
+    private const val KEY_LETTER_LISTEN = "letter_listen"
     private const val KEY_DETECT_CODE = "detect_code"
     private const val KEY_GENERATED_DECK = "generated_deck"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
@@ -230,6 +232,7 @@ object Prefs {
             .putBoolean(KEY_DECISION_ENABLED, cfg.decisionEnabled)
             .putString(KEY_DECISION_URL, cfg.decisionUrl.trim())
             .putString(KEY_DECISION_MODEL, cfg.decisionModel.trim())
+            .putBoolean(KEY_LETTER_LISTEN, cfg.letterListen)
             .putBoolean(KEY_DETECT_CODE, cfg.detectCode)
             .putString(KEY_GENERATED_DECK, cfg.generatedDeck.ifBlank { MakeCard.DEFAULT_DECK })
             .putBoolean(KEY_KEEP_SCREEN_ON, cfg.keepScreenOn)
@@ -433,6 +436,7 @@ object Prefs {
                 legacy = if (p.contains(KEY_AUTO_EXPLAIN)) p.getBoolean(KEY_AUTO_EXPLAIN, true) else null
             ),
             decisionEnabled = p.getBoolean(KEY_DECISION_ENABLED, false),
+            letterListen = p.getBoolean(KEY_LETTER_LISTEN, false),
             decisionUrl = p.getString(KEY_DECISION_URL, DEFAULT_DECISION_URL).orEmpty()
                 .ifBlank { DEFAULT_DECISION_URL },
             decisionModel = p.getString(KEY_DECISION_MODEL, DEFAULT_DECISION_MODEL).orEmpty()

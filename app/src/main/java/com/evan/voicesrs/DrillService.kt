@@ -431,6 +431,7 @@ class DrillService : Service(), VoiceIo {
      */
     @Volatile private var listenSpeechDetected = false
     private var silenceRestarts = 0
+    @Volatile private var ownListen: OwnWordsListen? = null
     private var restartRecognizer = false
     private var restartBusyRetries = 0
     private var listenDeadlineMs = 0L
@@ -1408,7 +1409,7 @@ class DrillService : Service(), VoiceIo {
             consumeMicFault()
             if (stopped()) return null
             if (showAnswerEarly.get() || sessionSilent) return null
-            val letters = answerLetters()
+            val letters = spokenLetters()
             if (letters != null && !isAnswerCommand(heard)) {
                 val decision = SpokenLetter.decide(
                     if (heard.isNullOrBlank()) emptyList() else listOf(heard),
@@ -2141,7 +2142,7 @@ class DrillService : Service(), VoiceIo {
                         transcript = chosenLetter.orEmpty()
                         break
                     }
-                    when (val action = GradeMapper.parse(heard)) {
+                    when (val action = OwnWordsMode.answerAction(heard, lettersHeard())) {
                         VoiceAction.Repeat -> {
                             repeats++
                             if (repeats >= 8) break
@@ -2353,7 +2354,11 @@ class DrillService : Service(), VoiceIo {
                 val slice = if (settling) {
                     ThinkTime.settleMs(listenSilenceMs.toLong()).coerceAtMost(thinkDeadlineMs - now)
                 } else {
-                    minOf(ThinkTime.listenSliceMs(thinkDeadlineMs - now, listenWaitMs), ThinkTime.MIC_SLICE_MS)
+                    if (lettersHeard()) {
+                        minOf(ThinkTime.listenSliceMs(thinkDeadlineMs - now, listenWaitMs), ThinkTime.MIC_SLICE_MS)
+                    } else {
+                        thinkDeadlineMs - now
+                    }
                 }
                 if (slice <= 0L) return ThinkResult.Reveal
                 val heard = captureListen(slice)
@@ -2367,7 +2372,7 @@ class DrillService : Service(), VoiceIo {
                 if (stopRequested.get()) return ThinkResult.Stop
                 if (listenFault) consumeMicFault()
                 // A spoken letter on the card reveals at once, exactly as before.
-                val letters = answerLetters()
+                val letters = spokenLetters()
                 if (letters != null) {
                     val decision = SpokenLetter.decide(
                         listOf(heard),
@@ -2384,7 +2389,7 @@ class DrillService : Service(), VoiceIo {
                         return ThinkResult.Reveal
                     }
                 }
-                val hear = ThinkTime.classify(heard)
+                val hear = OwnWordsMode.thinkHear(heard, lettersHeard())
                 when (ThinkTime.nextStep(hear, buffer.isEmpty(), thinkDeadlineMs - SystemClock.elapsedRealtime(), settling)) {
                     ThinkTime.Step.ACT -> {
                         buffer.clear()
@@ -2533,7 +2538,14 @@ class DrillService : Service(), VoiceIo {
     }
 
     private fun letterChoice(raw: String?): TapAnswer.Choice? {
-        val letters = answerLetters() ?: return null
+        val all = answerLetters() ?: return null
+        val letters = spokenLetters() ?: run {
+            // h83: letters off -> only an explicit FINAL "answer B" / "option B" picks.
+            // letterChoice is reached only from final transcripts (noteChoice in
+            // listenForAnswer and thinkForAnswer); partials return early via spokenLetters().
+            val pick = OwnWordsMode.prefixedLetter(raw, all, partial = false) ?: return null
+            return TapAnswer.onSpoken(pick, all, correct = null, revealed = false)
+        }
         return TapAnswer.onSpoken(raw, letters, correct = null, revealed = false)
     }
 
@@ -2546,13 +2558,31 @@ class DrillService : Service(), VoiceIo {
     }
 
     /**
+     * h83: letters to match in SPEECH. Null when not an unrevealed MCQ, or own
+     * words is on with "Listen for letter answers" off. Taps use acceptLetter.
+     */
+    private fun spokenLetters(): Set<String>? {
+        val letters = answerLetters() ?: return null
+        val cfg = try { Prefs.load(this) } catch (_: Exception) { return letters }
+        return OwnWordsMode.spokenLetters(letters, cfg.decisionEnabled, cfg.letterListen)
+    }
+
+    /** h83: false only when own words is on and letter listening is off. */
+    private fun lettersHeard(): Boolean = try {
+        val cfg = Prefs.load(this)
+        OwnWordsMode.listensForLetters(cfg.decisionEnabled, cfg.letterListen)
+    } catch (_: Exception) {
+        true
+    }
+
+    /**
      * Free-speech MCQ answer. A letter still uses the existing path.
      * Unreachable or malformed judge results fall back to [VoiceSelfGrader].
      */
     private fun judgeOwnWordsIfNeeded(questionHtml: String, correctField: String, transcript: String) {
         judgedEase = null
         val letters = answerLetters()
-        if (!OwnWordsJudge.shouldJudge(transcript, letters)) return
+        if (!OwnWordsJudge.shouldJudge(transcript, letters, lettersHeard(), tapped = chosenLetter)) return
         val cfg = try {
             Prefs.load(this)
         } catch (_: Exception) {
@@ -3297,6 +3327,7 @@ class DrillService : Service(), VoiceIo {
             speechBegan = false
             listenSpeechDetected = false
             silenceRestarts = 0
+            ownListen = if (lettersHeard()) null else answerLetters()?.let { OwnWordsListen(it) }
             restartRecognizer = false
             restartBusyRetries = 0
             listenExtrasLogged = false
@@ -3308,17 +3339,17 @@ class DrillService : Service(), VoiceIo {
         val delay = (listenDeadlineMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
         listenEpoch = epoch
         handler.postDelayed({
-            if (token == listenToken) finishListen(null)
+            if (token == listenToken) finishListen((ownListen?.onDeadline() as? OwnWordsListen.Step.Finish)?.text)
         }, delay)
         mainHandler.post { beginListenOnMain(token, epoch) }
         try {
             if (!latch.await(delay + LISTEN_LATCH_SLACK_MS, TimeUnit.MILLISECONDS)) {
                 Log.w(TAG, "listen latch timed out")
-                finishListen(null)
+                finishListen((ownListen?.onDeadline() as? OwnWordsListen.Step.Finish)?.text)
             }
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
-            finishListen(null)
+            finishListen((ownListen?.onDeadline() as? OwnWordsListen.Step.Finish)?.text)
         }
         return listenResult.get()
     }
@@ -3567,6 +3598,21 @@ class DrillService : Service(), VoiceIo {
         }
     }
 
+    /** h83: own words + letters off. Restart the mic without touching silenceRestarts;
+     * a short remaining window finalizes with the stitched transcript. */
+    private fun restartOwnWordsListen(session: Int) {
+        val epoch = listenEpoch
+        mainHandler.post {
+            if (!listenEpochOpen(epoch) || !sessionOpen(session)) return@post
+            val left = listenDeadlineMs - SystemClock.elapsedRealtime()
+            if (left < ListenWindow.MIN_REMAINING_MS) {
+                finishListen(ownListen?.transcript())
+                return@post
+            }
+            restartSilenceListenAfter(session, SilenceRestart.RESTART_DELAY_MS)
+        }
+    }
+
     /** Destroy, wait [delayMs], recreate; a restart's busy error retries once. */
     private fun restartSilenceListenAfter(session: Int, delayMs: Long) {
         val epoch = listenEpoch
@@ -3740,7 +3786,7 @@ class DrillService : Service(), VoiceIo {
             val raw = hypotheses(partialResults)
             if (raw.none { it.isNotBlank() }) return
             partials = raw
-            if (answerLetters() == null) return
+            if (spokenLetters() == null) return
             listenSpeechDetected = true
             speechBegan = true
             // A letter in this partial ends the listen now. Other words keep listening.
@@ -3757,6 +3803,17 @@ class DrillService : Service(), VoiceIo {
             logNBest("final", results)
             val raw = hypotheses(results)
             lastFinals = raw.map { it.trim() }.filter { it.isNotEmpty() }
+            ownListen?.let { ow ->
+                when (val step = ow.onFinal(raw, listenDeadlineMs - SystemClock.elapsedRealtime())) {
+                    OwnWordsListen.Step.Restart -> { restartOwnWordsListen(session); return }
+                    is OwnWordsListen.Step.Finish -> {
+                        lastFinals = ow.alternatives()
+                        try { recognizer?.setRecognitionListener(null) } catch (_: Exception) {}
+                        finishListen(step.text); return
+                    }
+                    OwnWordsListen.Step.Keep -> return
+                }
+            }
             if (raw.any { it.isNotBlank() }) listenSpeechDetected = true
             if (absorbAnswer(raw, allowUnmatched = true)) return
             val text = raw.firstOrNull().orEmpty()
@@ -3774,7 +3831,7 @@ class DrillService : Service(), VoiceIo {
          * @return true when this listen was completed here.
          */
         private fun absorbAnswer(rawFinals: List<String>, allowUnmatched: Boolean): Boolean {
-            val letters = answerLetters() ?: return false
+            val letters = spokenLetters() ?: return false
             val decision = SpokenLetter.decide(
                 rawFinals,
                 partials,
@@ -3824,6 +3881,17 @@ class DrillService : Service(), VoiceIo {
             try { recognizer?.setRecognitionListener(null) } catch (_: Exception) {}
             // A tap already owns this listen. finishListen(null) would drop it.
             if (synchronized(injectLock) { inFlightClaimed }) return
+            ownListen?.let { ow ->
+                when (val step = ow.onError(error, listenDeadlineMs - SystemClock.elapsedRealtime())) {
+                    OwnWordsListen.Step.Restart -> { restartOwnWordsListen(session); return }
+                    is OwnWordsListen.Step.Finish -> {
+                        lastFinals = ow.alternatives()
+                        try { recognizer?.setRecognitionListener(null) } catch (_: Exception) {}
+                        finishListen(step.text); return
+                    }
+                    else -> Unit
+                }
+            }
             // A heard letter ends the window. A no-match after speech does too:
             // that used to look like silence and reopen the mic in a loop.
             if (absorbAnswer(emptyList(), allowUnmatched = normalEnd)) return

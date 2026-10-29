@@ -24,7 +24,7 @@ class SettingsOwnWordsLayoutTest {
         val list = strings.getElementsByTagName("string")
         for (i in 0 until list.length) {
             val el = list.item(i) as Element
-            if (el.getAttribute("name") == name) return el.textContent
+            if (el.getAttribute("name") == name) return el.textContent.replace("\\\"", "\"")
         }
         return null
     }
@@ -53,7 +53,7 @@ class SettingsOwnWordsLayoutTest {
         assertNotNull("missing letterListenSwitch", sw)
         assertEquals(
             "com.google.android.material.materialswitch.MaterialSwitch",
-            sw.javaClass.name
+            sw!!.tagName
         )
         assertEquals("@string/settings_letter_listen", sw.getAttribute("android:text"))
         val decision = byId("decisionEnabledSwitch")
@@ -67,7 +67,7 @@ class SettingsOwnWordsLayoutTest {
     @Test fun letterListenHelpAndVoiceCommandsSection() {
         val help = byId("letterListenHelp")
         assertNotNull("missing letterListenHelp", help)
-        assertEquals("@string/settings_letter_listen_help", help.getAttribute("android:text"))
+        assertEquals("@string/settings_letter_listen_help", help!!.getAttribute("android:text"))
         val list = byId("voiceCommandsList")
         assertNotNull("missing voiceCommandsList", list)
         val thinkHelp = byId("thinkTimeHelp")

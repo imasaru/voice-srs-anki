@@ -183,6 +183,10 @@
     <string name="settings_decision_heading">Decision model</string>
     <string name="settings_decision_enable">Answer in your own words</string>
     <string name="settings_decision_help">Judges free-speech answers on multiple-choice cards. 0.70 or higher is Good.</string>
+    <string name="settings_letter_listen">Listen for letter answers (A–D)</string>
+    <string name="settings_letter_listen_help">Off: only your own words are judged. Say “answer B” or tap a letter to pick one.</string>
+    <string name="settings_voice_commands">Voice commands</string>
+    <string name="settings_voice_commands_note">Commands count only when said alone. Inside a longer answer they are part of your answer. With own words off, \"next\" and \"pass\" also skip.</string>
     <string name="settings_decision_url">Decision model URL</string>
     <string name="settings_decision_model">Decision model</string>
     <string name="settings_decision_model_refresh">Refresh decision models</string>

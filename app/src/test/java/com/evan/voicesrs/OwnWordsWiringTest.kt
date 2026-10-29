@@ -1,6 +1,7 @@
 package com.evan.voicesrs
 
 import java.io.File
+import org.junit.Test
 
 class OwnWordsWiringTest {
 
@@ -110,8 +111,9 @@ class OwnWordsWiringTest {
 
     @Test fun ownListenStitchingWired() {
         requireAnywhere(listOf(
-            "ownListen?.onFinal(",
-            "ownListen?.onError(",
+            "ownListen?.let { ow ->",
+            "ow.onFinal(",
+            "ow.onError(",
             "ownListen?.onDeadline()",
             "restartOwnWordsListen("
         ))
@@ -124,7 +126,7 @@ class OwnWordsWiringTest {
             mustNotContain = listOf("answerLetters()")
         )
         requireInFun(
-            "private fun onPartialResults(",
+            "override fun onPartialResults(",
             mustContain = emptyList(),
             mustNotContain = listOf("answerLetters()")
         )

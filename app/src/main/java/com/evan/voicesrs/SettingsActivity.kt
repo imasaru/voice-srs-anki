@@ -16,6 +16,7 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.Filter
+import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -23,6 +24,7 @@ import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.slider.Slider
 import com.google.android.material.snackbar.Snackbar
@@ -703,8 +705,42 @@ class SettingsActivity : AppCompatActivity() {
         aiEnabledSwitch.setOnCheckedChangeListener { _, checked ->
             persist { it.copy(aiEnabled = checked) }
         }
+        val letterListenSwitch: MaterialSwitch = findViewById(R.id.letterListenSwitch)
+        val letterListenHelp: TextView = findViewById(R.id.letterListenHelp)
+        var letterListenNow = held.letterListen
+        fun paintLetterListen(ownWords: Boolean, letterListen: Boolean) {
+            // Own words off: letters are always heard, so show it on and disabled.
+            letterListenSwitch.setOnCheckedChangeListener(null)
+            letterListenSwitch.isChecked = letterListen || !ownWords
+            letterListenSwitch.isEnabled = ownWords
+            letterListenHelp.isEnabled = ownWords
+            letterListenHelp.alpha = if (ownWords) 1f else 0.38f
+            letterListenSwitch.setOnCheckedChangeListener { _, checked ->
+                letterListenNow = checked
+                persist { it.copy(letterListen = checked) }
+            }
+        }
+        paintLetterListen(held.decisionEnabled, held.letterListen)
         decisionEnabledSwitch.setOnCheckedChangeListener { _, checked ->
             persist { it.copy(decisionEnabled = checked) }
+            paintLetterListen(checked, letterListenNow)
+        }
+        val voiceCommandsList: LinearLayout = findViewById(R.id.voiceCommandsList)
+        voiceCommandsList.removeAllViews()
+        VoiceCommandHelp.ROWS.forEach { row ->
+            voiceCommandsList.addView(TextView(this).apply {
+                text = row.label
+                setPadding(0, (8 * resources.displayMetrics.density).toInt(), 0, 0)
+            })
+            val chips = ChipGroup(this)
+            row.phrases.forEach { p ->
+                chips.addView(Chip(this).apply {
+                    text = p
+                    isClickable = false
+                    isCheckable = false
+                })
+            }
+            voiceCommandsList.addView(chips)
         }
         fun commitGeneratedDeck() {
             val deck = generatedDeckInput.text?.toString()?.trim().orEmpty()
