@@ -1,6 +1,11 @@
 package com.evan.voicesrs
 
 import java.io.IOException
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.SocketException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 
 /**
  * What Send does with the composer.
@@ -9,7 +14,7 @@ import java.io.IOException
  * Sending does not pause the drill.
  */
 object ChatSend {
-    enum class Fail { EMPTY, NO_DECK, NO_NETWORK, AI }
+    enum class Fail { EMPTY, NO_DECK, NO_NETWORK, DROPPED, TIMEOUT_WAITING, TIMEOUT_GENERATING, AI }
 
     sealed class Outcome {
         data class Visible(val message: String) : Outcome()
@@ -48,10 +53,18 @@ object ChatSend {
         Fail.EMPTY -> "Type a question first."
         Fail.NO_DECK -> "Select a deck in Settings, then ask again."
         Fail.NO_NETWORK -> "No connection. The question was not sent."
+        Fail.DROPPED -> "Connection dropped while the model was working. Retry?"
+        Fail.TIMEOUT_WAITING -> "The model is busy and hasn't started answering yet. Your request was sent. Retry?"
+        Fail.TIMEOUT_GENERATING -> "The model stopped mid-answer. Retry?"
         Fail.AI -> "The AI could not answer. Try again."
     }
 
     fun kindOf(error: Exception): Fail = when (error) {
+        is AiTimeout -> if (error.phase == AiTimeout.Phase.GENERATING) Fail.TIMEOUT_GENERATING else Fail.TIMEOUT_WAITING
+        is SocketTimeoutException -> Fail.TIMEOUT_WAITING
+        is ConnectException, is UnknownHostException, is NoRouteToHostException -> Fail.NO_NETWORK
+        is SocketException -> Fail.DROPPED
+        is AiHttpException -> Fail.AI
         is IOException -> Fail.NO_NETWORK
         else -> Fail.AI
     }

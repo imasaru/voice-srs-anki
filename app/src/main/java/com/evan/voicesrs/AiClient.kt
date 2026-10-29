@@ -29,6 +29,11 @@ class EmptyStream : Exception("empty stream")
 /** A finished call that produced nothing useful, or a client-side reject. */
 class AiException(message: String, val retryable: Boolean) : Exception(message)
 
+/** Our own read clock ran out. WAITING = no token yet (request was sent), GENERATING = stalled or over time after tokens. */
+class AiTimeout(val phase: Phase) : SocketTimeoutException(phase.name.lowercase()) {
+    enum class Phase { WAITING, GENERATING }
+}
+
 object AiTimeouts {
     const val CONNECT_MS = 10_000
     const val FIRST_TOKEN_MS = 180_000
@@ -415,17 +420,17 @@ class AiClient {
         while (!parser.done) {
             if (cancelled()) throw AiCancelled()
             if (System.currentTimeMillis() - started > AiTimeouts.TOTAL_MS) {
-                throw SocketTimeoutException("total")
+                throw AiTimeout(if (saw) AiTimeout.Phase.GENERATING else AiTimeout.Phase.WAITING)
             }
             val n = try {
                 reader.read(buf)
             } catch (e: SocketTimeoutException) {
                 if (!saw) {
                     waited += SLICE_MS
-                    if (waited >= AiTimeouts.FIRST_TOKEN_MS) throw e
+                    if (waited >= AiTimeouts.FIRST_TOKEN_MS) throw AiTimeout(AiTimeout.Phase.WAITING)
                 } else {
                     idle += SLICE_MS
-                    if (idle >= AiTimeouts.IDLE_MS) throw e
+                    if (idle >= AiTimeouts.IDLE_MS) throw AiTimeout(AiTimeout.Phase.GENERATING)
                 }
                 continue
             }
@@ -515,17 +520,17 @@ class AiClient {
         while (true) {
             if (cancelled()) throw AiCancelled()
             if (System.currentTimeMillis() - started > AiTimeouts.TOTAL_MS) {
-                throw SocketTimeoutException("total")
+                throw AiTimeout(if (saw) AiTimeout.Phase.GENERATING else AiTimeout.Phase.WAITING)
             }
             val n = try {
                 reader.read(buf)
             } catch (e: SocketTimeoutException) {
                 if (!saw) {
                     waited += SLICE_MS
-                    if (waited >= AiTimeouts.FIRST_TOKEN_MS) throw e
+                    if (waited >= AiTimeouts.FIRST_TOKEN_MS) throw AiTimeout(AiTimeout.Phase.WAITING)
                 } else {
                     idle += SLICE_MS
-                    if (idle >= AiTimeouts.IDLE_MS) throw e
+                    if (idle >= AiTimeouts.IDLE_MS) throw AiTimeout(AiTimeout.Phase.GENERATING)
                 }
                 continue
             }
