@@ -6,33 +6,96 @@ import org.json.JSONObject
 /**
  * Free-speech MCQ answers judged by a local decision model over OpenAI
  * `chat/completions`. POST `{base}/chat/completions` with an OpenAI-compatible
- * JSON body (temperature 0, `response_format` json_object). A `correct` of true
- * at or above [THRESHOLD] is Good (ease 3); otherwise Again (ease 1). Malformed
+ * JSON body (temperature 0, `response_format` json_object). The model rates the
+ * answer again/hard/good/easy (ease 1-4) from a written rubric; see [systemPrompt].
  * bodies and transport failures are [Verdict.Fallback] so the existing grader
  * still runs.
  */
 object OwnWordsJudge {
-    const val THRESHOLD = 0.70
-    const val QUESTION_ID = "correct"
-    const val MAX_TOKENS = 64
+    const val QUESTION_ID = "rating"
+    const val REASON_FIELD = "reason"
+    const val REASON_MAX = 160
+    /** Easy stands only when speech started within window / EASY_START_DIVISOR. */
+    const val EASY_START_DIVISOR = 3L
+
+    enum class Rating(val word: String, val ease: Int) {
+        AGAIN("again", 1), HARD("hard", 2), GOOD("good", 3), EASY("easy", 4);
+        companion object {
+            fun of(raw: String?): Rating? {
+                val w = raw?.trim()?.lowercase() ?: return null
+                return values().firstOrNull { it.word == w }
+            }
+        }
+    }
+
+    enum class Strictness(val key: String) {
+        LENIENT("lenient"), NORMAL("normal"), STRICT("strict");
+        companion object {
+            val DEFAULT = NORMAL
+            fun of(key: String?): Strictness {
+                val k = key?.trim()?.lowercase() ?: return DEFAULT
+                return values().firstOrNull { it.key == k } ?: DEFAULT
+            }
+        }
+    }
+    const val MAX_TOKENS = 160
     const val CONNECT_MS = 5_000
     const val READ_MS = 15_000
 
-    /** The model must reply with exactly this shape; the user answer means the
-     * same as the correct answer. */
-    private const val SYSTEM_PROMPT =
-        "You judge whether a learner's own-words answer means the same as the " +
-        "correct answer. Reply with exactly one JSON object and nothing else: " +
-        "{\"correct\": <boolean>, \"confidence\": <number 0..1>}. " +
-        "Set correct=true only when the meaning matches; otherwise correct=false. " +
+    /** Rubric the model rates against. The n-best sentence is h79's. */
+    private const val RUBRIC =
+        "You rate a learner's own-words answer against the correct answer. " +
+        "Reply with exactly one JSON object and nothing else: " +
+        "{\"rating\": \"again|hard|good|easy\", \"reason\": \"<at most 12 words>\"}. " +
+        "Rubric: again = wrong, or missing the key idea. " +
+        "hard = mostly right but incomplete, vague or partly wrong. " +
+        "good = correct meaning. " +
+        "easy = correct and complete. " +
+        "The reason says in plain words what was right or missing."
+
+    private const val NBEST_LINE =
         "The learner's answer may list several speech-recognition results separated by \" | \". " +
         "These are alternative transcriptions of one spoken answer; judge the most plausible reading."
+
+    fun strictnessLine(s: Strictness): String = when (s) {
+        Strictness.LENIENT -> "Strictness: lenient. When an answer is between two ratings, choose the higher one."
+        Strictness.NORMAL -> "Strictness: normal. Give the rating the answer earns under the rubric."
+        Strictness.STRICT -> "Strictness: strict. When an answer is between two ratings, choose the lower one. " +
+            "The key terms of the correct answer must be said; without them the rating is at most hard."
+    }
+
+    /** Q21 (count distinct -> B): a short spoken name of the correct choice counts. */
+    const val SHORT_FORM_LINE =
+        "When choices are listed, an answer that clearly names the correct choice in short or spoken form " +
+        "(for example 'count distinct' for COUNT(DISTINCT column)) is correct, unless it better matches a different choice " +
+        "(for example 'approx count distinct' means APPROX_COUNT_DISTINCT(column))."
+
+    /** Q28 (misheard read-aloud of option C): sound-alike ASR errors are read as the fitting word. */
+    const val SOUND_ALIKE_LINE =
+        "The answer comes from speech recognition, so treat sound-alike errors (for example 'as' for 'adds', " +
+        "'steam table scheme' for 'table schema') as the word that fits the question and choices; " +
+        "if the answer read that way clearly matches the correct choice, rate it as that choice."
+
+    /** Q1 (DBFS heard as "dbfs" / "DB FS"): spelled-out letters are the acronym; acronym = expansion. */
+    const val ACRONYM_LINE =
+        "Acronyms may come out as letters said one by one, with spaces, dots or any capitals " +
+        "(for example 'DB FS', 'd b f s' or 'dbfs' for DBFS); read them as the acronym, " +
+        "and an acronym and its expansion name the same thing (DBFS = Databricks File System)."
+
+    /** Q2 guard (scikit-learn heard as "Hitler"/"can't learn", rest = option C's words): fair pass kept, guesses blocked. */
+    const val SOUND_ALIKE_GUARD =
+        "Reinterpret only the words that sound like words in the question or choices, and judge on the words that " +
+        "were heard clearly; if those words name a different choice, or name nothing in the question, rate it again. " +
+        "Rate the answer as the correct choice because its words match it, not because it is the only choice that fits."
+
+    fun systemPrompt(s: Strictness): String =
+        "$RUBRIC ${strictnessLine(s)} $SHORT_FORM_LINE $SOUND_ALIKE_LINE $SOUND_ALIKE_GUARD $ACRONYM_LINE $NBEST_LINE"
 
     sealed class Verdict {
         data class Graded(
             val ease: Int,
-            val confidence: Double,
-            val correct: Boolean
+            val rating: Rating,
+            val reason: String
         ) : Verdict()
         data object Fallback : Verdict()
     }
@@ -69,22 +132,28 @@ object OwnWordsJudge {
     }
 
     /**
-     * OpenAI `chat/completions` request. `temperature` 0, `max_tokens` 64,
+     * OpenAI `chat/completions` request. `temperature` 0, `max_tokens` 160,
      * thinking disabled, JSON-only response.
      */
     fun requestJson(
         model: String,
         question: String,
         correctAnswer: String,
-        userAnswer: String
+        userAnswer: String,
+        strictness: Strictness = Strictness.DEFAULT
     ): JSONObject {
         val user = buildString {
             appendLine("Question: $question")
             appendLine("Correct answer: $correctAnswer")
+            val options = QuestionCard.parse(question).options
+            if (options.isNotEmpty()) {
+                appendLine("Choices:")
+                options.forEach { appendLine("${it.letter}. ${it.text}") }
+            }
             appendLine("Learner's own-words answer: $userAnswer")
         }
         val messages = JSONArray()
-            .put(JSONObject().put("role", "system").put("content", SYSTEM_PROMPT))
+            .put(JSONObject().put("role", "system").put("content", systemPrompt(strictness)))
             .put(JSONObject().put("role", "user").put("content", user))
         return JSONObject()
             .put("model", model)
@@ -115,37 +184,79 @@ object OwnWordsJudge {
         model: String,
         question: String,
         correctAnswer: String,
-        userAnswer: String
-    ): String = requestJson(model, question, correctAnswer, userAnswer).toString()
+        userAnswer: String,
+        strictness: Strictness = Strictness.DEFAULT
+    ): String = requestJson(model, question, correctAnswer, userAnswer, strictness).toString()
 
     /**
      * Parse an OpenAI chat completion. Reads `choices[0].message.content`, takes
      * the first `{...}` block (ignoring surrounding text or code fences), and
-     * grades on `correct` and `confidence`. Anything malformed or missing is
+     * reads `rating` and `reason`. Anything malformed or missing is
      * [Verdict.Fallback].
      */
     fun parse(body: String): Verdict {
         val content = responseContent(body) ?: return Verdict.Fallback
         val obj = jsonBlock(content) ?: return Verdict.Fallback
-        if (!obj.has(QUESTION_ID)) return Verdict.Fallback
-        val confidence = obj.optDouble("confidence", Double.NaN)
-        if (confidence.isNaN() || confidence.isInfinite()) return Verdict.Fallback
-        val correct = obj.optBoolean(QUESTION_ID, false)
-        return if (correct && confidence >= THRESHOLD) {
-            Verdict.Graded(ease = 3, confidence = confidence, correct = true)
-        } else {
-            Verdict.Graded(ease = 1, confidence = confidence, correct = false)
-        }
+        val rating = Rating.of(obj.optString(QUESTION_ID, "")) ?: return Verdict.Fallback
+        val reason = obj.optString(REASON_FIELD, "").trim().replace(Regex("\\s+"), " ").take(REASON_MAX)
+        return Verdict.Graded(ease = rating.ease, rating = rating, reason = reason)
     }
 
-    fun grade(confidence: Double): Verdict {
-        if (confidence.isNaN() || confidence.isInfinite()) return Verdict.Fallback
-        val correct = confidence >= THRESHOLD
-        return Verdict.Graded(
-            ease = if (correct) 3 else 1,
-            confidence = confidence,
-            correct = correct
-        )
+    fun easyLimitMs(windowMs: Long): Long = if (windowMs <= 0L) 0L else windowMs / EASY_START_DIVISOR
+
+    /** Easy stands only if speech started within [easyLimitMs]; unknown start or window -> Good.
+     * Never upgrades. */
+    fun applyTiming(rating: Rating, startedAfterMs: Long?, windowMs: Long): Rating {
+        if (rating != Rating.EASY) return rating
+        if (startedAfterMs == null || startedAfterMs < 0L || windowMs <= 0L) return Rating.GOOD
+        return if (startedAfterMs <= easyLimitMs(windowMs)) Rating.EASY else Rating.GOOD
+    }
+
+    fun spokenLine(rating: Rating): Int = when (rating) {
+        Rating.AGAIN -> R.string.own_words_incorrect
+        Rating.HARD -> R.string.own_words_partly
+        Rating.GOOD, Rating.EASY -> R.string.own_words_correct
+    }
+
+    fun verdictLog(
+        judged: Rating, final: Rating, reason: String, strictness: Strictness,
+        startedAfterMs: Long?, windowMs: Long, input: String
+    ): String = "own-words judge rating=${final.word} judged=${judged.word} reason=\"$reason\" " +
+        "strictness=${strictness.key} startedMs=${startedAfterMs ?: "unknown"} " +
+        "easyLimitMs=${easyLimitMs(windowMs)} windowMs=$windowMs input=$input"
+
+    const val RAW_LOG_MAX = 120
+    private val SECRET = Regex("(?i)(bearer\\s+|sk-|api[_-]?key[\"=: ]+|token[\"=: ]+)[A-Za-z0-9._-]+")
+
+    /** First [RAW_LOG_MAX] chars of a judge reply for the log, whitespace collapsed, keys redacted. */
+    fun rawSnippet(raw: String?): String {
+        if (raw == null) return "none"
+        return raw.replace(SECRET, "<redacted>").replace(Regex("\\s+"), " ").trim().take(RAW_LOG_MAX)
+    }
+
+    data class Attempt(
+        val verdict: Verdict, val raw: String?, val reason: String?, val failLine: Int?, val tries: Int
+    )
+
+    /** Retry only a bad/empty reply or a network error (timeout, refused, reset); not HTTP errors. */
+    private fun retryable(raw: String?, error: Exception?): Boolean =
+        if (error != null) error is java.io.IOException && error !is AiHttpException else true
+
+    /** At most two tries. Bad reply -> own_words_unreadable; any exception -> own_words_fallback. */
+    fun judgeWithRetry(stopped: () -> Boolean, post: () -> String): Attempt {
+        var raw: String? = null
+        var error: Exception? = null
+        var tries = 0
+        while (tries < 2) {
+            tries++
+            raw = null; error = null
+            try { raw = post() } catch (e: Exception) { error = e }
+            val v = result(raw, error)
+            if (v is Verdict.Graded) return Attempt(v, raw, null, null, tries)
+            if (tries >= 2 || stopped() || !retryable(raw, error)) break
+        }
+        val line = if (error != null) R.string.own_words_fallback else R.string.own_words_unreadable
+        return Attempt(Verdict.Fallback, raw, fallbackReason(raw, error), line, tries)
     }
 
     fun result(body: String?, error: Exception?): Verdict {

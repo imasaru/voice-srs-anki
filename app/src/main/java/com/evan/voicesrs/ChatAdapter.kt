@@ -106,6 +106,7 @@ class ChatAdapter(
         private val userLabel: TextView = view.findViewById(R.id.userAnswerLabel)
         private val userAnswer: TextView = view.findViewById(R.id.userAnswerText)
         private val userPill: TextView = view.findViewById(R.id.userRatingPill)
+        private val userReason: TextView = view.findViewById(R.id.userJudgeReason)
         private val ai: View = view.findViewById(R.id.aiBubble)
         private val section: View = view.findViewById(R.id.explSection)
         private val badge: TextView = view.findViewById(R.id.explBadge)
@@ -189,6 +190,9 @@ class ChatAdapter(
                 cardStem.ellipsize = if (expanded) null else TextUtils.TruncateAt.END
             }
             CardFaceBinder.bindPills(userAnswer, userPill, turn.transcript, turn.ease, onRegrade, userLabel)
+            val why = JudgeNote.shown(turn)
+            userReason.text = if (why == null) "" else itemView.context.getString(R.string.own_words_reason, why)
+            userReason.visibility = if (why == null) View.GONE else View.VISIBLE
             val shown = BubbleModel.displayAi(turn.explanation, turn.frontText, turn.backText, turn.unread)
             val showExplain = AutoExplain.showButton(turn.explanation)
             body.visibility = View.GONE

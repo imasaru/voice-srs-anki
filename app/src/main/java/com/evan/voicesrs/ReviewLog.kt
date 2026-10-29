@@ -25,7 +25,11 @@ data class ReviewTurn(
     /** Think-to-grade duration in ms. 0 when unknown. */
     val durationMs: Long = ThinkTime.UNKNOWN_DURATION_MS,
     /** Wall clock when the turn was created. 0 until wired; rows order by this. */
-    val at: Long = 0L
+    val at: Long = 0L,
+    /** Own-words judge reason, saved with the turn. Empty on turns without a judge verdict (and before h84). */
+    val judgeReason: String = "",
+    /** Ease the judge gave; the reason is shown only while [ease] equals it. Null when no reason. */
+    val judgeEase: Int? = null
 )
 
 sealed interface ExplState {
@@ -101,6 +105,7 @@ object ReviewLog {
             autoExplain -> ExplState.Queued
             else -> ExplState.None
         }
+        val judgeReason = JudgeNote.take(cardId, ease)
         val turn = synchronized(lock) {
             val created = ReviewTurn(
                 turnId = nextId++,
@@ -116,7 +121,9 @@ object ReviewLog {
                 questionLabel = questionLabel,
                 correctField = correctField,
                 durationMs = durationMs,
-                at = System.currentTimeMillis()
+                at = System.currentTimeMillis(),
+                judgeReason = judgeReason.orEmpty(),
+                judgeEase = if (judgeReason != null) ease else null
             )
             turns = turns + created
             created

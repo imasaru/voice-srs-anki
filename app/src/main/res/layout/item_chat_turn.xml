@@ -109,6 +109,16 @@
             android:paddingEnd="10dp"
             android:paddingBottom="3dp"
             android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+        <TextView
+            android:id="@+id/userJudgeReason"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:alpha="0.9"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="@color/bubble_user_on"
+            android:visibility="gone" />
     </LinearLayout>
 
     <!-- Left, distinct colour: explanation only. Never the prompt. -->

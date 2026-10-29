@@ -23,6 +23,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.materialswitch.MaterialSwitch
@@ -721,10 +722,43 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
         paintLetterListen(held.decisionEnabled, held.letterListen)
+        val strictnessLabel: TextView = findViewById(R.id.judgeStrictnessLabel)
+        val strictnessGroup: MaterialButtonToggleGroup = findViewById(R.id.judgeStrictnessGroup)
+        val strictnessHelp: TextView = findViewById(R.id.judgeStrictnessHelp)
+        fun strictnessHelpText(s: OwnWordsJudge.Strictness): String = getString(when (s) {
+            OwnWordsJudge.Strictness.LENIENT -> R.string.settings_strictness_help_lenient
+            OwnWordsJudge.Strictness.NORMAL -> R.string.settings_strictness_help_normal
+            OwnWordsJudge.Strictness.STRICT -> R.string.settings_strictness_help_strict
+        })
+        fun paintStrictness(ownWords: Boolean) {
+            for (i in 0 until strictnessGroup.childCount) strictnessGroup.getChildAt(i).isEnabled = ownWords
+            strictnessGroup.isEnabled = ownWords
+            strictnessLabel.alpha = if (ownWords) 1f else 0.38f
+            strictnessHelp.alpha = if (ownWords) 1f else 0.38f
+        }
+        val heldStrictness = OwnWordsJudge.Strictness.of(held.judgeStrictness)
+        strictnessGroup.check(when (heldStrictness) {
+            OwnWordsJudge.Strictness.LENIENT -> R.id.strictnessLenient
+            OwnWordsJudge.Strictness.NORMAL -> R.id.strictnessNormal
+            OwnWordsJudge.Strictness.STRICT -> R.id.strictnessStrict
+        })
+        strictnessHelp.text = strictnessHelpText(heldStrictness)
+        strictnessGroup.addOnButtonCheckedListener { _, id, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            val s = when (id) {
+                R.id.strictnessLenient -> OwnWordsJudge.Strictness.LENIENT
+                R.id.strictnessStrict -> OwnWordsJudge.Strictness.STRICT
+                else -> OwnWordsJudge.Strictness.NORMAL
+            }
+            strictnessHelp.text = strictnessHelpText(s)
+            persist { it.copy(judgeStrictness = s.key) }
+        }
         decisionEnabledSwitch.setOnCheckedChangeListener { _, checked ->
             persist { it.copy(decisionEnabled = checked) }
             paintLetterListen(checked, letterListenNow)
+            paintStrictness(checked)
         }
+        paintStrictness(decisionEnabledSwitch.isChecked)
         val voiceCommandsList: LinearLayout = findViewById(R.id.voiceCommandsList)
         voiceCommandsList.removeAllViews()
         VoiceCommandHelp.ROWS.forEach { row ->

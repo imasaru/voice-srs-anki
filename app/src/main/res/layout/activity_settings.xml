@@ -1015,6 +1015,59 @@
                         android:text="@string/settings_letter_listen_help"
                         android:textAppearance="?attr/textAppearanceBodySmall" />
 
+                    <TextView
+                        android:id="@+id/judgeStrictnessLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginTop="12dp"
+                        android:text="@string/settings_judge_strictness"
+                        android:textAppearance="?attr/textAppearanceBodyLarge" />
+
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/judgeStrictnessGroup"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginTop="4dp"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
+
+                        <Button
+                            android:id="@+id/strictnessLenient"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/settings_strictness_lenient" />
+
+                        <Button
+                            android:id="@+id/strictnessNormal"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/settings_strictness_normal" />
+
+                        <Button
+                            android:id="@+id/strictnessStrict"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/settings_strictness_strict" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                    <TextView
+                        android:id="@+id/judgeStrictnessHelp"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginBottom="8dp"
+                        android:text="@string/settings_strictness_help_normal"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/decisionUrlLayout"
                         android:layout_width="match_parent"

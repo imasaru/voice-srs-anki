@@ -20,7 +20,9 @@ data class StoredChat(
     val ease: Int? = null,
     val transcript: String = "",
     val questionLabel: String = "",
-    val contentHash: String = ""
+    val contentHash: String = "",
+    val judgeReason: String = "",
+    val judgeEase: Int? = null
 ) {
     val key: String get() = "$kind:$id"
 
@@ -42,6 +44,8 @@ data class StoredChat(
             ease = ease,
             explanation = explanation,
             questionLabel = questionLabel,
+            judgeReason = judgeReason,
+            judgeEase = judgeEase,
             at = this.at
         )
     }
@@ -84,7 +88,9 @@ data class StoredChat(
                 ease = turn.ease,
                 transcript = turn.transcript,
                 questionLabel = turn.questionLabel,
-                contentHash = turn.contentHash
+                contentHash = turn.contentHash,
+                judgeReason = turn.judgeReason,
+                judgeEase = turn.judgeEase
             )
         }
     }
@@ -154,6 +160,8 @@ object ChatHistoryStore {
             if (row.transcript.isNotBlank()) o.put("transcript", row.transcript)
             if (row.questionLabel.isNotBlank()) o.put("questionLabel", row.questionLabel)
             if (row.contentHash.isNotBlank()) o.put("contentHash", row.contentHash)
+            if (row.judgeReason.isNotBlank()) o.put("judgeReason", row.judgeReason)
+            if (row.judgeEase != null) o.put("judgeEase", row.judgeEase)
             arr.put(o)
         }
         return JSONObject().put("messages", arr).toString()
@@ -182,7 +190,9 @@ object ChatHistoryStore {
                     ease = if (o.has("ease") && !o.isNull("ease")) o.optInt("ease") else null,
                     transcript = o.optString("transcript"),
                     questionLabel = o.optString("questionLabel"),
-                    contentHash = o.optString("contentHash")
+                    contentHash = o.optString("contentHash"),
+                    judgeReason = o.optString("judgeReason"),
+                    judgeEase = if (o.has("judgeEase") && !o.isNull("judgeEase")) o.optInt("judgeEase") else null
                 )
             }
             trim(out)

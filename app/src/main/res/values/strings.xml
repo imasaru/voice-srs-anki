@@ -182,7 +182,7 @@
     <string name="settings_chat_model">Chat model</string>
     <string name="settings_decision_heading">Decision model</string>
     <string name="settings_decision_enable">Answer in your own words</string>
-    <string name="settings_decision_help">Judges free-speech answers on multiple-choice cards. 0.70 or higher is Good.</string>
+    <string name="settings_decision_help">Judges free-speech answers on multiple-choice cards and rates them Again, Hard, Good or Easy.</string>
     <string name="settings_letter_listen">Listen for letter answers (A–D)</string>
     <string name="settings_letter_listen_help">Off: only your own words are judged. Say “answer B” or tap a letter to pick one.</string>
     <string name="settings_voice_commands">Voice commands</string>
@@ -192,6 +192,16 @@
     <string name="settings_decision_model_refresh">Refresh decision models</string>
     <string name="own_words_correct">Correct.</string>
     <string name="own_words_incorrect">That\'s not quite right.</string>
+    <string name="own_words_partly">Partly right.</string>
+    <string name="own_words_unreadable">The judge\'s reply was unreadable. Grade this yourself.</string>
+    <string name="own_words_reason">Judge: %1$s</string>
+    <string name="settings_judge_strictness">Judge strictness</string>
+    <string name="settings_strictness_lenient">Lenient</string>
+    <string name="settings_strictness_normal">Normal</string>
+    <string name="settings_strictness_strict">Strict</string>
+    <string name="settings_strictness_help_lenient">Borderline answers get the higher rating.</string>
+    <string name="settings_strictness_help_normal">Rates on meaning. Borderline answers keep the rating they earn.</string>
+    <string name="settings_strictness_help_strict">Borderline answers get the lower rating. Key terms must be said.</string>
     <string name="own_words_fallback">Couldn\'t reach the judge. Grade this yourself.</string>
     <string name="own_words_checking">Checking your answer…</string>
     <string name="settings_ai_enable">Explain cards</string>

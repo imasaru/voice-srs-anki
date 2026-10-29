@@ -354,6 +354,10 @@ class DrillService : Service(), VoiceIo {
     @Volatile private var chosenLetter: String? = null
     /** Ease from the decision model for a free-speech MCQ answer. */
     @Volatile private var judgedEase: Int? = null
+    /** h84: first answer window of this card (elapsedRealtime, 0 = not opened), its length, and first speech in it. */
+    @Volatile private var answerWindowStartMs = 0L
+    @Volatile private var answerWindowMs = 0L
+    @Volatile private var answerSpeechStartMs = 0L
     /** Wall clock at session start. Option order is seeded with this and the card id. */
     @Volatile private var sessionStartedMs = 0L
     /** Question HTML of the card in [drillOne]. Letter parsing reads it. */
@@ -2047,6 +2051,9 @@ class DrillService : Service(), VoiceIo {
         silentReveal.set(false)
         chosenLetter = null
         judgedEase = null
+        answerWindowStartMs = 0L
+        answerWindowMs = 0L
+        answerSpeechStartMs = 0L
         if (!awaitChatResume()) return CardStep.Paused
         showQuestionUi(
             questionHtml,
@@ -2163,7 +2170,7 @@ class DrillService : Service(), VoiceIo {
         }
         showAnswerEarly.set(false)
         if (transcript.isBlank()) chosenLetter?.let { transcript = it }
-        judgeOwnWordsIfNeeded(questionHtml, correct, transcript)
+        judgeOwnWordsIfNeeded(questionHtml, correct, transcript, cardId, buttons)
         if (!awaitChatResume()) return CardStep.Paused
         if (stopRequested.get()) return CardStep.Paused
         val revealed = reveal()
@@ -2315,6 +2322,10 @@ class DrillService : Service(), VoiceIo {
             restored
         } else {
             opened + ThinkTime.durationMs(thinkTimeSec)
+        }
+        if (answerWindowStartMs == 0L) {
+            answerWindowStartMs = opened
+            answerWindowMs = (thinkDeadlineMs - opened).coerceAtLeast(0L)
         }
         quietListen = true
         thinkTranscript = null
@@ -2579,7 +2590,8 @@ class DrillService : Service(), VoiceIo {
      * Free-speech MCQ answer. A letter still uses the existing path.
      * Unreachable or malformed judge results fall back to [VoiceSelfGrader].
      */
-    private fun judgeOwnWordsIfNeeded(questionHtml: String, correctField: String, transcript: String) {
+    private fun judgeOwnWordsIfNeeded(questionHtml: String, correctField: String, transcript: String, cardId: Long, buttons: List<Int>) {
+        JudgeNote.drop(cardId)
         judgedEase = null
         val letters = answerLetters()
         if (!OwnWordsJudge.shouldJudge(transcript, letters, lettersHeard(), tapped = chosenLetter)) return
@@ -2589,6 +2601,7 @@ class DrillService : Service(), VoiceIo {
             return
         }
         if (!cfg.decisionEnabled || sessionSilent) return
+        val strictness = OwnWordsJudge.Strictness.of(cfg.judgeStrictness)
         val decisionBase = OwnWordsJudge.effectiveBase(cfg.decisionUrl, cfg.aiBaseUrl)
         if (decisionBase.isBlank()) {
             val line = getString(R.string.own_words_fallback)
@@ -2608,38 +2621,31 @@ class DrillService : Service(), VoiceIo {
             AnkiText.stripHtml(questionHtml)
         }
         val judgeInput = OwnWordsJudge.judgeInput(transcript, lastFinals)
-        var raw: String? = null
-        var failReason: String? = null
-        val verdict = try {
-            val body = OwnWordsJudge.requestBody(
-                cfg.decisionModel,
-                question,
-                correctAnswer,
-                judgeInput
-            )
-            raw = AiClient().postDecision(decisionBase, cfg.aiApiKey, body) {
-                stopRequested.get() || destroyed
-            }
-            OwnWordsJudge.result(raw, null)
-        } catch (e: Exception) {
-            failReason = OwnWordsJudge.fallbackReason(null, e)
-            OwnWordsJudge.result(null, e)
+        val body = OwnWordsJudge.requestBody(cfg.decisionModel, question, correctAnswer, judgeInput, strictness)
+        val attempt = OwnWordsJudge.judgeWithRetry({ stopRequested.get() || destroyed }) {
+            AiClient().postDecision(decisionBase, cfg.aiApiKey, body) { stopRequested.get() || destroyed }
         }
+        val verdict = attempt.verdict
+        Log.i(TAG, "own-words judge tries=${attempt.tries} raw=${OwnWordsJudge.rawSnippet(attempt.raw)}")
         when (verdict) {
             is OwnWordsJudge.Verdict.Graded -> {
-                judgedEase = verdict.ease
-                Log.i(TAG, "own-words judge verdict=${verdict.correct} conf=${verdict.confidence} input=$judgeInput")
-                val line = getString(
-                    if (verdict.correct) R.string.own_words_correct else R.string.own_words_incorrect
-                )
+                val startedAfter = if (answerWindowStartMs > 0L && answerSpeechStartMs >= answerWindowStartMs) {
+                    answerSpeechStartMs - answerWindowStartMs
+                } else null
+                val rating = OwnWordsJudge.applyTiming(verdict.rating, startedAfter, answerWindowMs)
+                judgedEase = rating.ease
+                JudgeNote.put(cardId, GradeMapper.toAvailableEase(rating.ease, buttons), verdict.reason)
+                Log.i(TAG, OwnWordsJudge.verdictLog(verdict.rating, rating, verdict.reason, strictness,
+                    startedAfter, answerWindowMs, judgeInput))
+                val line = getString(OwnWordsJudge.spokenLine(rating))
                 showStatus(line)
                 speak(line)
             }
             OwnWordsJudge.Verdict.Fallback -> {
-                val reason = failReason ?: OwnWordsJudge.fallbackReason(raw, null)
+                val reason = attempt.reason
                 if (reason != null) Log.w(TAG, "own-words judge fallback: $reason")
-                Log.i(TAG, "own-words judge verdict=fallback conf=none input=$judgeInput")
-                val line = getString(R.string.own_words_fallback)
+                Log.i(TAG, "own-words judge rating=fallback strictness=${strictness.key} input=$judgeInput")
+                val line = getString(attempt.failLine ?: R.string.own_words_fallback)
                 showStatus(line)
                 speak(line)
             }
@@ -3334,6 +3340,10 @@ class DrillService : Service(), VoiceIo {
             listenWaitMs = timeoutMs
             listenSilenceMs = configuredSilenceMs
             listenDeadlineMs = openedAt + timeoutMs
+            if (answerWindowStartMs == 0L) {
+                answerWindowStartMs = openedAt
+                answerWindowMs = timeoutMs
+            }
             ++listenToken
         }
         val delay = (listenDeadlineMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
@@ -3770,6 +3780,9 @@ class DrillService : Service(), VoiceIo {
             if (closeIfSilent()) return
             if (!current()) return
             speechBegan = true
+            if (answerSpeechStartMs == 0L && answerWindowStartMs != 0L) {
+                answerSpeechStartMs = SystemClock.elapsedRealtime()
+            }
         }
         override fun onRmsChanged(rmsdB: Float) {}
         override fun onBufferReceived(buffer: ByteArray) {}
