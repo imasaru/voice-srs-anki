@@ -2,6 +2,7 @@ package com.evan.voicesrs
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -38,5 +39,23 @@ class SkipQueueTest {
     fun `f speed mode says short`() {
         assertEquals(SkipQueue.SAY_SHORT, SkipQueue.say(1, true))
         assertEquals(SkipQueue.SAY, SkipQueue.say(1, false))
+    }
+
+    @Test
+    fun `g third skip returns only when the deck runs dry`() {
+        val m = SkipQueue.returnMark(3, 10)!!
+        assertFalse(SkipQueue.dueForReturn(m, 1000))
+        assertTrue(SkipQueue.dueForReturn(m, Int.MAX_VALUE))
+    }
+
+    @Test
+    fun `h first and second skip mark the graded count`() {
+        assertEquals(10, SkipQueue.returnMark(1, 10))
+        assertEquals(10, SkipQueue.returnMark(2, 10))
+    }
+
+    @Test
+    fun `i fourth skip stays out`() {
+        assertNull(SkipQueue.returnMark(4, 10))
     }
 }

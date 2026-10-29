@@ -1723,7 +1723,7 @@ class DrillService : Service(), VoiceIo {
         if (card.cardId !in skipped) skipped += card.cardId
         store.writeSkipped(skipped)
         runCatching { anki.suspendCards(listOf(card.cardId)) }
-        if (SkipQueue.requeue(n)) skipReturns[card.cardId] = done
+        SkipQueue.returnMark(n, done)?.let { skipReturns[card.cardId] = it }
         runCatching { anki.guiDeckReview(deck) }
     }
 

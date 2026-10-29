@@ -21,6 +21,16 @@ object SkipQueue {
     /** Skip number [count] (1-based) for one card: false = over the cap, goes to the end / stays suspended. */
     fun requeue(count: Int): Boolean = count <= MAX_SKIPS_PER_CARD
 
+    /** p91a: online return mark for skip [count] at graded count [done]; due only when the deck runs dry (done = Int.MAX_VALUE). */
+    const val END_MARK = Int.MAX_VALUE - SKIP_GAP
+
+    /** p91a: skipReturns value for skip number [count]: done (normal), END_MARK (last skip, back at the end), null (over the cap, stays out). */
+    fun returnMark(count: Int, done: Int): Int? = when {
+        requeue(count) -> done
+        count == MAX_SKIPS_PER_CARD + 1 -> END_MARK
+        else -> null
+    }
+
     fun say(count: Int, speedMode: Boolean): String = when {
         !requeue(count) -> SAY_LAST
         speedMode -> SAY_SHORT
