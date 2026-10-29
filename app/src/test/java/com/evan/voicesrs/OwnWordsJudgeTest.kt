@@ -12,9 +12,8 @@ import java.net.SocketTimeoutException
 class OwnWordsJudgeTest {
     /** Build a valid OpenAI-style chat completion. [wrap] surrounds the model's
      * JSON content with extra text / code fences. */
-    private fun chat(correct: Boolean, confidence: Double, wrap: String = ""): String {
-        val inner = JSONObject().put("correct", correct)
-            .put("confidence", confidence).toString()
+    private fun chat(rating: String, reason: String = "ok", wrap: String = ""): String {
+        val inner = JSONObject().put("rating", rating).put("reason", reason).toString()
         val choices = JSONArray().put(
             JSONObject().put("message", JSONObject().put("content", wrap + inner + wrap))
         )
@@ -31,7 +30,7 @@ class OwnWordsJudgeTest {
         )
         assertEquals("clef", json.getString("model"))
         assertEquals(0, json.getInt("temperature"))
-        assertEquals(64, json.getInt("max_tokens"))
+        assertEquals(160, json.getInt("max_tokens"))
         assertFalse(json.getJSONObject("chat_template_kwargs").getBoolean("enable_thinking"))
         assertEquals("json_object", json.getJSONObject("response_format").getString("type"))
 
@@ -68,40 +67,36 @@ class OwnWordsJudgeTest {
             "http://omlx.example.invalid/v1/chat/completions",
             OwnWordsJudge.endpoint("http://omlx.example.invalid/v1/chat/completions/")
         )
-        assertEquals(0.70, OwnWordsJudge.THRESHOLD, 0.0)
+        assertEquals("rating", OwnWordsJudge.QUESTION_ID)
     }
 
     @Test
-    fun `parse grades on correct and confidence`() {
-        val good = OwnWordsJudge.parse(chat(correct = true, confidence = 0.70)) as OwnWordsJudge.Verdict.Graded
+    fun `parse grades on rating`() {
+        val good = OwnWordsJudge.parse(chat("good")) as OwnWordsJudge.Verdict.Graded
         assertEquals(3, good.ease)
-        assertTrue(good.correct)
-        assertEquals(0.70, good.confidence, 0.0)
-
-        // correct but below threshold is incorrect
-        val low = OwnWordsJudge.parse(chat(correct = true, confidence = 0.69)) as OwnWordsJudge.Verdict.Graded
-        assertEquals(1, low.ease)
-        assertFalse(low.correct)
-
-        // correct=false is incorrect even at high confidence
-        val no = OwnWordsJudge.parse(chat(correct = false, confidence = 0.99)) as OwnWordsJudge.Verdict.Graded
+        assertEquals(OwnWordsJudge.Rating.GOOD, good.rating)
+        val hard = OwnWordsJudge.parse(chat("hard")) as OwnWordsJudge.Verdict.Graded
+        assertEquals(2, hard.ease)
+        val no = OwnWordsJudge.parse(chat("again")) as OwnWordsJudge.Verdict.Graded
         assertEquals(1, no.ease)
-        assertFalse(no.correct)
+        // the old correct/confidence shape is no longer accepted
+        assertEquals(OwnWordsJudge.Verdict.Fallback, OwnWordsJudge.parse(
+            """{"choices":[{"message":{"content":"{\"correct\":true,\"confidence\":0.99}"}}]}"""))
     }
 
     @Test
     fun `parse ignores extra text and code fences`() {
         val wrapped = OwnWordsJudge.parse(
-            chat(correct = true, confidence = 0.95, wrap = "Here: ```json ")
+            chat("easy", wrap = "Here: ```json ")
         ) as OwnWordsJudge.Verdict.Graded
-        assertTrue(wrapped.correct)
-        assertEquals(0.95, wrapped.confidence, 0.0)
+        assertEquals(OwnWordsJudge.Rating.EASY, wrapped.rating)
+        assertEquals(4, wrapped.ease)
 
         // leading text before the block still parses
         val leading = OwnWordsJudge.parse(
-            chat(correct = true, confidence = 0.8, wrap = "ok here ")
+            chat("good", wrap = "ok here ")
         ) as OwnWordsJudge.Verdict.Graded
-        assertTrue(leading.correct)
+        assertEquals(3, leading.ease)
     }
 
     @Test
@@ -114,7 +109,7 @@ class OwnWordsJudgeTest {
             OwnWordsJudge.Verdict.Fallback,
             OwnWordsJudge.parse("""{"choices":[{"message":{"content":"not json at all"}}]}""")
         )
-        // missing confidence / correct fields
+        // missing rating field
         assertEquals(
             OwnWordsJudge.Verdict.Fallback,
             OwnWordsJudge.parse(
@@ -127,18 +122,12 @@ class OwnWordsJudgeTest {
         )
         assertEquals(OwnWordsJudge.Verdict.Fallback, OwnWordsJudge.result("", null))
         assertEquals(OwnWordsJudge.Verdict.Fallback, OwnWordsJudge.result(null, null))
-        assertEquals(OwnWordsJudge.Verdict.Fallback, OwnWordsJudge.grade(Double.NaN))
-    }
-
-    @Test
-    fun `grade keeps threshold behaviour`() {
-        assertEquals(3, (OwnWordsJudge.grade(0.70) as OwnWordsJudge.Verdict.Graded).ease)
-        assertEquals(1, (OwnWordsJudge.grade(0.69) as OwnWordsJudge.Verdict.Graded).ease)
+        assertEquals(OwnWordsJudge.Verdict.Fallback, OwnWordsJudge.parse(chat("excellent")))
     }
 
     @Test
     fun `fallback reason surfaces without secrets`() {
-        assertNull(OwnWordsJudge.fallbackReason(chat(correct = true, confidence = 0.9), null))
+        assertNull(OwnWordsJudge.fallbackReason(chat("good"), null))
         assertEquals("no response", OwnWordsJudge.fallbackReason(null, null))
         val reason = OwnWordsJudge.fallbackReason(null, java.net.ConnectException("boom"))
         assertTrue(reason!!.startsWith("ConnectException"))
