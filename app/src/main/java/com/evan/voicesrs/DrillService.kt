@@ -2903,7 +2903,8 @@ class DrillService : Service(), VoiceIo {
         if (!chatPaused.get()) publishCue(false, null)
     }
 
-    private fun publishCue(paused: Boolean, think: Int?, manual: Boolean = false) {
+    /** [manual] defaults to the current flag, so a plain re-publish while paused keeps a manual pause. */
+    private fun publishCue(paused: Boolean, think: Int?, manual: Boolean = DrillUi.state.manualPause) {
         val shown = if (paused) null else think
         val manualNow = paused && manual
         if (paused == shownPaused && shown == shownThinkSec && DrillUi.state.manualPause == manualNow) return
