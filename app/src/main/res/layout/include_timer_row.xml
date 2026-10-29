@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- h82 narrow-v2 Timer B: two lines, same ids. Line 1 icon + elapsed; line 2 stepper | Space | label + switch. -->
+<!-- p82a: line 1 icon + elapsed + label(weight 1) + switch; line 2 stepper. Same ids. -->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/timerRow"
@@ -41,14 +41,34 @@
 
             <TextView
                 android:id="@+id/elapsedChip"
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
                 android:layout_marginStart="6dp"
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:visibility="gone"
                 android:textAppearance="?attr/textAppearanceLabelLarge" />
+
+            <TextView
+                android:id="@+id/timerSwitchLabel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:layout_marginEnd="@dimen/timer_switch_label_gap"
+                android:gravity="end|center_vertical"
+                android:labelFor="@+id/timerSwitch"
+                android:maxLines="2"
+                android:text="@string/timer_switch_text"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/timerSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:contentDescription="@string/timer_switch_label" />
         </LinearLayout>
 
         <LinearLayout
@@ -113,25 +133,6 @@
                 android:layout_width="0dp"
                 android:layout_height="1dp"
                 android:layout_weight="1" />
-
-            <TextView
-                android:id="@+id/timerSwitchLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="@dimen/timer_switch_label_gap"
-                android:gravity="end|center_vertical"
-                android:labelFor="@+id/timerSwitch"
-                android:maxLines="2"
-                android:text="@string/timer_switch_text"
-                android:textAppearance="?attr/textAppearanceLabelSmall"
-                android:textColor="?attr/colorOnSurfaceVariant" />
-
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/timerSwitch"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minHeight="48dp"
-                android:contentDescription="@string/timer_switch_label" />
         </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>
