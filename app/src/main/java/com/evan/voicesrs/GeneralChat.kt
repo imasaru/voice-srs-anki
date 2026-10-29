@@ -123,6 +123,7 @@ object GeneralChat {
         val app = context.applicationContext
         Thread({
             var lastPaint = -1L
+            var blobChars = 0
             try {
                 val cfg = Prefs.load(app)
                 val client = AiClient()
@@ -138,6 +139,7 @@ object GeneralChat {
                         ""
                     }
                     contextBlob = if (chip != null) ChipContext.build(chip.source, reviews, cardBlob, chatsBlob) else reviews
+                    blobChars = contextBlob.length
                 } else {
                     contextBlob = ""
                     tools = StudyTools.schemas()
@@ -203,7 +205,7 @@ object GeneralChat {
                     ))
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "general ask failed: ${e.javaClass.simpleName}")
+                Log.w(TAG, "general ask failed: ${AiDiag.error(e)} report=$injectReport chip=${chip?.id ?: "none"} blobChars=$blobChars")
                 mark(id, ExplState.Error(ChatSend.visible(ChatSend.kindOf(e)), retryable = true))
             }
         }, "general-ask").start()
@@ -221,7 +223,7 @@ object GeneralChat {
         StudyToolRunner(anki, cfg.deck, pending = { LocalQueueStore(app.filesDir).readGrades() })
             .dailyReport(cfg.deck, issuedAt, threads, Prefs.loadBlockHistory(app))
     } catch (e: Exception) {
-        Log.w(TAG, "today report failed: ${e.javaClass.simpleName}")
+        Log.w(TAG, "today report failed: ${AiDiag.error(e)}")
         "Error: could not build today's report (${e.javaClass.simpleName})."
     }
 

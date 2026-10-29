@@ -352,6 +352,8 @@ class AiClient {
         onDelta: (String) -> Unit
     ): String {
         val started = System.currentTimeMillis()
+        val probe = AiDiag.Probe(started, stream)
+        val chars = (0 until messages.length()).sumOf { messages.optJSONObject(it)?.optString("content").orEmpty().length }
         val conn = open(baseUrl, apiKey, "POST", "/chat/completions")
         val sink: (String) -> Unit = { onDelta(SelfTalk.clip(it)) }
         try {
@@ -377,13 +379,17 @@ class AiClient {
             val eventStream = type.contains("event-stream")
             val jsonType = type.contains("json")
             val text = if (eventStream || (stream && !jsonType)) {
-                readSse(conn, started, cancelled, onThinking, sink)
+                readSse(conn, started, cancelled, onThinking, sink, probe)
             } else {
-                finishBody(readBody(conn, started, cancelled))
+                finishBody(readBody(conn, started, cancelled, probe))
             }
             val clipped = SelfTalk.clip(text)
             sink(clipped)
+            diag(AiDiag.success(probe, System.currentTimeMillis(), baseUrl, model, chars))
             return clipped
+        } catch (e: Exception) {
+            diag(AiDiag.failure(e, probe, System.currentTimeMillis(), baseUrl, model, chars))
+            throw e
         } finally {
             conn.disconnect()
         }
@@ -394,7 +400,8 @@ class AiClient {
         started: Long,
         cancelled: () -> Boolean,
         onThinking: () -> Unit,
-        onDelta: (String) -> Unit
+        onDelta: (String) -> Unit,
+        probe: AiDiag.Probe? = null
     ): String {
         conn.readTimeout = SLICE_MS
         val parser = SseParser()
@@ -423,6 +430,7 @@ class AiClient {
                 continue
             }
             if (n < 0) break
+            probe?.byteAt(System.currentTimeMillis())
             val chunk = String(buf, 0, n)
             if (mode == 0) {
                 undecided.append(chunk)
@@ -432,12 +440,18 @@ class AiClient {
                     head.startsWith("data:") || head.startsWith(":") -> {
                         mode = 1
                         note(parser, parser.push(undecided.toString()), onThinking, onDelta)
-                        if (parser.rawText().isNotEmpty() || parser.consumedReasoning()) saw = true
+                        if (parser.rawText().isNotEmpty() || parser.consumedReasoning()) {
+                            saw = true
+                            probe?.tokenAt(System.currentTimeMillis())
+                        }
                     }
                     undecided.length > 64 -> {
                         mode = 1
                         note(parser, parser.push(undecided.toString()), onThinking, onDelta)
-                        if (parser.rawText().isNotEmpty() || parser.consumedReasoning()) saw = true
+                        if (parser.rawText().isNotEmpty() || parser.consumedReasoning()) {
+                            saw = true
+                            probe?.tokenAt(System.currentTimeMillis())
+                        }
                     }
                 }
                 continue
@@ -450,6 +464,7 @@ class AiClient {
             val reasoning = parser.consumedReasoning()
             if (pieces.isNotEmpty() || reasoning) {
                 saw = true
+                probe?.tokenAt(System.currentTimeMillis())
                 idle = 0
             }
             if (reasoning && parser.visibleText().isBlank()) onThinking()
@@ -489,7 +504,7 @@ class AiClient {
         return AiMessages.require(parsed.content.orEmpty(), parsed.finishReason)
     }
 
-    private fun readBody(conn: HttpURLConnection, started: Long, cancelled: () -> Boolean): String {
+    private fun readBody(conn: HttpURLConnection, started: Long, cancelled: () -> Boolean, probe: AiDiag.Probe? = null): String {
         conn.readTimeout = SLICE_MS
         val reader = InputStreamReader(conn.inputStream, Charsets.UTF_8)
         val buf = CharArray(1024)
@@ -515,7 +530,9 @@ class AiClient {
                 continue
             }
             if (n < 0) break
+            probe?.byteAt(System.currentTimeMillis())
             saw = true
+            probe?.tokenAt(System.currentTimeMillis())
             idle = 0
             out.append(buf, 0, n)
         }
@@ -529,6 +546,9 @@ class AiClient {
             ""
         }
     }
+
+    /** One diagnostic line per AI request. Never logs the key or any header. */
+    private fun diag(line: String) { runCatching { android.util.Log.i("AiClient", line) } }
 
     private fun open(baseUrl: String, apiKey: String, method: String, path: String): HttpURLConnection {
         val root = baseUrl.trim().trimEnd('/')
