@@ -246,7 +246,7 @@ object GeneralChat {
                 }
                 val shown = ThinkStrip.strip(text).trim()
                 if (shown.isBlank()) {
-                    mark(id, ExplState.Error(ChatSend.visible(ChatSend.Fail.AI), retryable = true))
+                    mark(id, ExplState.Error(ChatSend.tapRetry(ChatSend.Fail.AI), retryable = true))
                 } else {
                     mark(id, ExplState.Ready(
                         if (injectReport) withHeader(issuedAt, shown) else shown,
@@ -258,7 +258,7 @@ object GeneralChat {
                 mark(id, ExplState.Error(
                     AiRetry.keptText(
                         if (injectReport && lastPartial.isNotBlank()) withHeader(issuedAt, lastPartial) else lastPartial,
-                        ChatSend.visible(ChatSend.kindOf(e))
+                        ChatSend.tapRetry(ChatSend.kindOf(e))
                     ),
                     retryable = true
                 ))

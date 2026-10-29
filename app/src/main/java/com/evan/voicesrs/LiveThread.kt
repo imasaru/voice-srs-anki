@@ -176,7 +176,7 @@ object LiveThread {
                 mark(
                     shot.screen,
                     shot.index,
-                    ExplState.Error(ChatSend.visible(ChatSend.kindOf(e)), retryable = true)
+                    ExplState.Error(ChatSend.askAgain(ChatSend.kindOf(e)), retryable = true)
                 )
             }
         }, "live-ask").start()

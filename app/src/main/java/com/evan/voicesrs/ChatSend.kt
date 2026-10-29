@@ -59,6 +59,16 @@ object ChatSend {
         Fail.AI -> "The AI could not answer. Try again."
     }
 
+    /** p88a: general-chat error bubbles retry on tap, so the text says so. */
+    fun tapRetry(fail: Fail): String =
+        visible(fail).removeSuffix("Retry?").removeSuffix("Try again.").trimEnd() + " Tap to retry."
+
+    /** p88b: paths with no tap retry ask the user to send the question again instead. */
+    fun askAgain(fail: Fail): String {
+        val base = visible(fail).removeSuffix("Retry?").trimEnd()
+        return if (base.endsWith("Try again.")) base else "$base Ask again."
+    }
+
     fun kindOf(error: Exception): Fail = when (error) {
         is AiTimeout -> if (error.phase == AiTimeout.Phase.GENERATING) Fail.TIMEOUT_GENERATING else Fail.TIMEOUT_WAITING
         is SocketTimeoutException -> Fail.TIMEOUT_WAITING

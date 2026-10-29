@@ -88,7 +88,7 @@ object ThreadAsk {
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "thread reply failed: ${e.javaClass.simpleName}")
-                ReviewLog.markFollowFailed(turnId, index, ChatSend.visible(ChatSend.kindOf(e)))
+                ReviewLog.markFollowFailed(turnId, index, ChatSend.askAgain(ChatSend.kindOf(e)))
             }
             persist(app, turnId)
         }, "thread-ask").start()
