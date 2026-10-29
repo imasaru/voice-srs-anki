@@ -289,8 +289,8 @@
     <string name="prompt_edit_reset_confirm">Reset</string>
     <!-- h82 narrow-v2 Timer B / Bubble A -->
     <string name="timer_switch_label">End drill at goal</string>
-    <!-- Visible switch text: balanced explicit break below 400dp; values-w400dp has the one-line form. -->
-    <string name="timer_switch_text">End drill\nat goal</string>
+    <!-- Visible switch text: one line now, fits above 400dp too. -->
+    <string name="timer_switch_text">End at goal</string>
     <string name="your_answer_label">YOUR ANSWER</string>
     <string name="prompt_chip_add_desc">Add prompt</string>
 </resources>
