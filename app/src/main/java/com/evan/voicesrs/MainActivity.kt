@@ -426,13 +426,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        // ChatDictation holds this Activity as its Context and its recognizer,
+        // so dictation always stops, even on a configuration-change recreate.
         chatDictation?.stop()
         chatDictation = null
         DrillService.dictationFinished()
         stopResumePulse(findViewById(R.id.chatResumeButton))
         chatPane?.detach()
         chatPane = null
-        PlaybackSpeaker.stop()
+        // Split-screen resize / fold recreates the activity: keep read-aloud playing.
+        if (ActivityTeardown.shouldStopPlayback(isChangingConfigurations)) PlaybackSpeaker.stop()
         super.onDestroy()
     }
 
