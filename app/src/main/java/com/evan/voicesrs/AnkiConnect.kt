@@ -406,6 +406,21 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) : Stu
             ?: throw AnkiConnectException("unexpected setDueDate response: $r")
     }
 
+    /** Review "due" day numbers (queue 2 or 3) by card id; other cards are left out. */
+    fun dueDayNumbers(ids: List<Long>): Map<Long, Int> {
+        if (ids.isEmpty()) return emptyMap()
+        val r = post("cardsInfo", mapOf("cards" to ids)) as? JSONArray ?: return emptyMap()
+        val out = LinkedHashMap<Long, Int>()
+        for (i in 0 until r.length()) {
+            val o = r.optJSONObject(i) ?: continue
+            val id = o.optLong("cardId", 0L)
+            val q = o.optInt("queue", -99)
+            if (id == 0L || (q != 2 && q != 3)) continue
+            out[id] = o.optInt("due", 0)
+        }
+        return out
+    }
+
     /**
      * A media file's bytes as base64, or null when the file does not exist
      * (AnkiConnect returns false) or the result is unexpected.

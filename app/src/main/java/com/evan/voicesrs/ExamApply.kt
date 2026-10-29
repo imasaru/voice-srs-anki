@@ -34,6 +34,8 @@ object ExamApply {
         val spoken: String,
         val daysLeft: Int,
         val coveragePercent: Int
+        ,
+        val error: String? = null
     )
 
     fun cloneName(deck: String): String {
@@ -109,7 +111,7 @@ object ExamApply {
         val hasConfig = (input.configId ?: 0L) != 0L
         val clone = !hasClone
         if (clone && !hasConfig) {
-            return enabled
+            return enabled.copy(error = ExamError.NO_PRESET)
         }
         val sweepRange = if (ExamPlan.inSweepWindow(days)) ExamPlan.sweepRange(days) else null
         val assignId = if (clone) null else input.cloneId

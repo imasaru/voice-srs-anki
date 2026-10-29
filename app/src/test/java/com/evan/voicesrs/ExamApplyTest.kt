@@ -108,6 +108,7 @@ class ExamApplyTest {
         assertTrue(plan.skipWrites)
         assertFalse(plan.clone)
         assertFalse(plan.save)
+        assertEquals(ExamError.NO_PRESET, plan.error)
     }
 
     @Test
@@ -218,5 +219,10 @@ class ExamApplyTest {
         assertNull(ExamStore.parseTarget(""))
         assertNull(ExamStore.parseTarget("0.5"))
         assertNull(ExamStore.parseTarget("abc"))
+    }
+
+    @Test
+    fun `normal plan has no error`() {
+        assertNull(ExamApply.plan(input()).error)
     }
 }

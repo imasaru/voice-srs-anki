@@ -13,6 +13,9 @@ object ExamStore {
     const val PREFIX_ORIG = "exam_orig_cfg:"
     const val PREFIX_APPLIED = "exam_applied:"
     const val PREFIX_COVERAGE = "exam_coverage:"
+    const val PREFIX_SNAP_CFG = "exam_snap_cfg:"
+    const val PREFIX_SNAP_DUE = "exam_snap_due:"
+    const val PREFIX_SNAP_TODAY = "exam_snap_today:"
 
     data class State(
         val date: LocalDate? = null,
@@ -21,6 +24,13 @@ object ExamStore {
         val origCfg: Long? = null,
         val lastApplied: LocalDate? = null,
         val coverage: Int? = null
+        ,
+        /** Full getDeckConfig JSON of the original preset, saved once before the clone is first assigned. */
+        val snapConfig: String? = null,
+        /** card id -> ORIGINAL ABSOLUTE Anki due day number (cardsInfo "due", review cards), for cards the sweep moved. */
+        val snapDue: Map<Long, Int> = emptyMap(),
+        /** Absolute Anki today day number when snapDue was captured. */
+        val snapToday: Int? = null
     )
 
     fun isExamKey(key: String): Boolean =
@@ -29,7 +39,8 @@ object ExamStore {
             key.startsWith(PREFIX_CLONE) ||
             key.startsWith(PREFIX_ORIG) ||
             key.startsWith(PREFIX_APPLIED) ||
-            key.startsWith(PREFIX_COVERAGE)
+            key.startsWith(PREFIX_COVERAGE) ||
+            key.startsWith(PREFIX_SNAP_CFG) || key.startsWith(PREFIX_SNAP_DUE) || key.startsWith(PREFIX_SNAP_TODAY)
 
     fun dateKey(deck: String) = PREFIX_DATE + deck
     fun targetKey(deck: String) = PREFIX_TARGET + deck
@@ -37,6 +48,9 @@ object ExamStore {
     fun origKey(deck: String) = PREFIX_ORIG + deck
     fun appliedKey(deck: String) = PREFIX_APPLIED + deck
     fun coverageKey(deck: String) = PREFIX_COVERAGE + deck
+    fun snapCfgKey(deck: String) = PREFIX_SNAP_CFG + deck
+    fun snapDueKey(deck: String) = PREFIX_SNAP_DUE + deck
+    fun snapTodayKey(deck: String) = PREFIX_SNAP_TODAY + deck
 
     fun read(map: Map<String, *>, deck: String): State {
         return State(
@@ -45,7 +59,10 @@ object ExamStore {
             cloneId = parseLong(map[cloneKey(deck)]),
             origCfg = parseLong(map[origKey(deck)]),
             lastApplied = parseDate(asString(map[appliedKey(deck)])),
-            coverage = parseInt(map[coverageKey(deck)])
+            coverage = parseInt(map[coverageKey(deck)]),
+            snapConfig = asString(map[snapCfgKey(deck)])?.takeIf { it.isNotBlank() },
+            snapDue = parseDue(asString(map[snapDueKey(deck)])),
+            snapToday = parseInt(map[snapTodayKey(deck)])
         )
     }
 
@@ -56,11 +73,39 @@ object ExamStore {
         putOrRemove(map, origKey(deck), state.origCfg?.toString())
         putOrRemove(map, appliedKey(deck), state.lastApplied?.toString())
         putOrRemove(map, coverageKey(deck), state.coverage?.toString())
+        putOrRemove(map, snapCfgKey(deck), state.snapConfig)
+        putOrRemove(map, snapDueKey(deck), formatDue(state.snapDue))
+        putOrRemove(map, snapTodayKey(deck), state.snapToday?.toString())
     }
 
     /** Drop the date and ramp override; keep clone/orig so a later restore reuses them. */
     fun disable(state: State): State =
         state.copy(date = null, target = null, lastApplied = null, coverage = null)
+
+    /** Snapshot present when we have both the original preset id and its saved config JSON. */
+    fun hasSnapshot(state: State): Boolean = state.origCfg != null && state.snapConfig != null
+
+    /** Drop the exam date and the snapshot after a revert; keep cloneId so the clone preset is reused. */
+    fun afterRevert(state: State): State =
+        disable(state).copy(origCfg = null, snapConfig = null, snapDue = emptyMap(), snapToday = null)
+
+    /** "id:days,id:days"; null when empty. */
+    fun formatDue(due: Map<Long, Int>): String? =
+        if (due.isEmpty()) null else due.entries.joinToString(",") { "${it.key}:${it.value}" }
+
+    fun parseDue(raw: String?): Map<Long, Int> {
+        val t = raw?.trim().orEmpty()
+        if (t.isEmpty()) return emptyMap()
+        val out = LinkedHashMap<Long, Int>()
+        for (part in t.split(',')) {
+            val kv = part.split(':')
+            if (kv.size != 2) continue
+            val id = kv[0].trim().toLongOrNull() ?: continue
+            val d = kv[1].trim().toIntOrNull() ?: continue
+            out[id] = d
+        }
+        return out
+    }
 
     /**
      * Retention override. Blank is none. Values above 1 are treated as percents

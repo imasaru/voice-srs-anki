@@ -35,6 +35,7 @@ object ExamSync {
         }
         val skip = state.lastApplied == today
         var configId: Long? = null
+        var configJson: String? = null
         val coveragePct = if (skip) {
             state.coverage ?: 0
         } else {
@@ -45,7 +46,9 @@ object ExamSync {
                 ExamPlan.Coverage(0, state.coverage ?: 0)
             }
             configId = try {
-                val id = anki.getDeckConfig(deck).optLong("id", 0L)
+                val cfgJson = anki.getDeckConfig(deck)
+                configJson = cfgJson.toString()
+                val id = cfgJson.optLong("id", 0L)
                 if (id == 0L) null else id
             } catch (e: Exception) {
                 Log.w(TAG, "getDeckConfig failed: ${e.javaClass.simpleName}")
@@ -65,9 +68,10 @@ object ExamSync {
                 coveragePercent = coveragePct
             )
         )
+        if (plan.error != null) return Result(spoken = plan.spoken, error = plan.error)
         if (!plan.skipWrites) {
             try {
-                execute(ctx, anki, deck, plan, state, today, coveragePct)
+                execute(ctx, anki, deck, plan, state, today, coveragePct, configJson)
                 return Result(spoken = plan.spoken)
             } catch (e: Exception) {
                 return Result(spoken = plan.spoken, error = ExamError.format(e))
@@ -87,6 +91,18 @@ object ExamSync {
         return ExamPlan.Coverage(total, covered)
     }
 
+    /** Anki's absolute today day number, from one probe card in [days] (id -> absolute due) via binary search. Null if [days] is empty. */
+    fun ankiToday(anki: AnkiConnect, days: Map<Long, Int>): Int? {
+        val probe = days.keys.firstOrNull() ?: return null
+        var lo = 0
+        var hi = 36500
+        while (lo < hi) {
+            val mid = (lo + hi + 1) / 2
+            if (anki.findCardIds("cid:$probe prop:due>=$mid").isNotEmpty()) lo = mid else hi = mid - 1
+        }
+        return ExamRevert.todayAbs(days.getValue(probe), lo)
+    }
+
     private fun execute(
         ctx: Context,
         anki: AnkiConnect,
@@ -94,20 +110,30 @@ object ExamSync {
         plan: ExamApply.Plan,
         state: ExamStore.State,
         today: LocalDate,
-        coveragePct: Int
+        coveragePct: Int,
+        configJson: String?
     ) {
+        var snap = state
         var cloneId = state.cloneId
         var assignedId: Long? = null
         var assigned = false
         var origCfg = state.origCfg
+        if (!ExamStore.hasSnapshot(state) && (plan.clone || plan.assign) && configJson != null) {
+            val origId = org.json.JSONObject(configJson).optLong("id", 0L)
+            if (origId != 0L && origId != state.cloneId) {
+                snap = state.copy(origCfg = origId, snapConfig = configJson, snapDue = emptyMap())
+                try { Prefs.saveExam(ctx, deck, snap) } catch (_: Exception) { }
+            }
+        }
         if (plan.clone) {
             val from = plan.cloneFrom ?: return
             val name = plan.cloneName ?: ExamApply.cloneName(deck)
-            val newId = anki.cloneDeckConfigId(name, from) ?: return
+            val newId = anki.cloneDeckConfigId(name, from)
+                ?: throw AnkiConnectException(ExamError.CLONE_REFUSED)
             cloneId = newId
-            origCfg = from
+            origCfg = snap.origCfg ?: from
             try {
-                Prefs.saveExam(ctx, deck, state.copy(cloneId = newId, origCfg = from))
+                Prefs.saveExam(ctx, deck, snap.copy(cloneId = newId, origCfg = from))
             } catch (_: Exception) {
             }
             assigned = anki.setDeckConfigId(listOf(deck), newId)
@@ -125,14 +151,25 @@ object ExamSync {
         }
         if (plan.sweep && plan.sweepRange != null) {
             val ids = anki.findCardIds(ExamApply.sweepQuery(deck, plan.daysLeft))
-            if (ids.isNotEmpty()) anki.setDueDate(ids, plan.sweepRange)
+            if (ids.isNotEmpty()) {
+                val newIds = ids.filter { it !in snap.snapDue }
+                if (ExamStore.hasSnapshot(snap) && newIds.isNotEmpty()) {
+                    val due = try { anki.dueDayNumbers(newIds) } catch (_: Exception) { emptyMap() }
+                    val today = if (due.isEmpty()) null else try { ankiToday(anki, due) } catch (_: Exception) { null }
+                    if (due.isNotEmpty() && today != null) {
+                        snap = snap.copy(snapDue = snap.snapDue + due, snapToday = snap.snapToday ?: today)
+                        try { Prefs.saveExam(ctx, deck, snap) } catch (_: Exception) { }
+                    }
+                }
+                anki.setDueDate(ids, plan.sweepRange)
+            }
         }
         if (assigned) {
             try {
                 Prefs.saveExam(
                     ctx,
                     deck,
-                    state.copy(
+                    snap.copy(
                         cloneId = cloneId,
                         origCfg = origCfg,
                         lastApplied = today,
