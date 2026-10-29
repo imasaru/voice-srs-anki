@@ -4,10 +4,12 @@ package com.evan.voicesrs
 object SilentAsk {
     const val QUESTION = "Do you want to go into silent mode?"
 
+    const val KEEP_VOICE = "Okay, staying in voice. Your rating?"
+
     enum class Reply { YES, NO, NONE }
 
     private val yes = setOf("yes", "yeah", "yep", "sure", "ok", "okay", "silent", "go silent", "silent mode", "yes please")
-    private val no = setOf("no", "nope", "nah", "no thanks", "not now", "keep voice", "voice", "stay")
+    private val no = setOf("no", "nope", "nah", "no thanks", "not now", "keep voice", "voice", "stay", "not really", "stay in voice")
 
     fun parse(heard: String?): Reply {
         val t = (heard ?: return Reply.NONE).lowercase()

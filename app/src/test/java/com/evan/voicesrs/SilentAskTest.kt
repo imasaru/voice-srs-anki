@@ -35,4 +35,15 @@ class SilentAskTest {
     fun e_questionText() {
         assertEquals("Do you want to go into silent mode?", SilentAsk.QUESTION)
     }
+
+    @Test
+    fun f_moreNoVariants() {
+        for (s in listOf("not really", "Not really.", "stay in voice"))
+            assertEquals(s, SilentAsk.Reply.NO, SilentAsk.parse(s))
+    }
+
+    @Test
+    fun g_keepVoiceText() {
+        assertEquals("Okay, staying in voice. Your rating?", SilentAsk.KEEP_VOICE)
+    }
 }

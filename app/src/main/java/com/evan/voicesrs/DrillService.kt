@@ -2275,6 +2275,7 @@ class DrillService : Service(), VoiceIo {
                     } catch (_: ListenGaveUp) {
                         if (!askSilentFirst(listenWaitMs)) {
                             // Item 36: "no" keeps voice; listen for the rating again.
+                            if (!stopRequested.get() && !destroyed) speak(SilentAsk.KEEP_VOICE)
                             speakAnswer = false
                             continue
                         }
