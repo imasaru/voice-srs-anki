@@ -28,6 +28,12 @@ object ListenWindow {
     const val DEFAULT_ATTEMPTS = 3
 
     const val ANSWER_RELISTEN_CUE = "Take your time."
+
+    /** p92a: on NO_MATCH after speech, the first non-blank partial (trimmed) is the answer; otherwise null. */
+    fun noMatchPartial(error: Int, spoke: Boolean, partials: List<String>): String? {
+        if (error != ERROR_NO_MATCH || !spoke) return null
+        return partials.firstOrNull { it.isNotBlank() }?.trim()
+    }
     const val SILENT_NOTICE = "Didn't hear a grade, switched to silent"
     const val ATTEMPTS_LABEL = "Listen attempts"
     const val ATTEMPTS_HELP = "How many times to listen before switching to silent."

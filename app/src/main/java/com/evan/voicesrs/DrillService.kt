@@ -3908,6 +3908,12 @@ class DrillService : Service(), VoiceIo {
             // A heard letter ends the window. A no-match after speech does too:
             // that used to look like silence and reopen the mic in a loop.
             if (absorbAnswer(emptyList(), allowUnmatched = normalEnd)) return
+            ListenWindow.noMatchPartial(error, speechBegan || listenSpeechDetected, partials)?.let {
+                Log.i(TAG, "listen ok: NO_MATCH kept partial")
+                Log.d(TAG, "heard: $it")
+                finishListen(it)
+                return
+            }
             when (val p = SilenceRestart.onError(error, restartRecognizer, restartBusyRetries, SystemClock.elapsedRealtime(), listenDeadlineMs)) {
                 is SilenceRestart.Plan.Retry -> {
                     restartBusyRetries += 1
