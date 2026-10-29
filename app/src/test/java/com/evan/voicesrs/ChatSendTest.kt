@@ -98,4 +98,22 @@ class ChatSendTest {
         assertEquals("Type a question first.", (rows[1] as ChatRow.Notice).message)
         assertTrue(rows.none { it is ChatRow.Live })
     }
+
+    @Test
+    fun `kindOf names timeouts drops and offline honestly`() {
+        assertEquals(ChatSend.Fail.TIMEOUT_WAITING, ChatSend.kindOf(AiTimeout(AiTimeout.Phase.WAITING)))
+        assertEquals(ChatSend.Fail.TIMEOUT_GENERATING, ChatSend.kindOf(AiTimeout(AiTimeout.Phase.GENERATING)))
+        assertEquals(ChatSend.Fail.TIMEOUT_WAITING, ChatSend.kindOf(java.net.SocketTimeoutException("Read timed out")))
+        assertEquals(ChatSend.Fail.NO_NETWORK, ChatSend.kindOf(java.net.ConnectException("refused")))
+        assertEquals(ChatSend.Fail.NO_NETWORK, ChatSend.kindOf(java.net.UnknownHostException("h")))
+        assertEquals(ChatSend.Fail.DROPPED, ChatSend.kindOf(java.net.SocketException("Connection reset")))
+        assertEquals(ChatSend.Fail.AI, ChatSend.kindOf(AiHttpException(503)))
+        for (f in listOf(ChatSend.Fail.DROPPED, ChatSend.Fail.TIMEOUT_WAITING, ChatSend.Fail.TIMEOUT_GENERATING)) {
+            assertFalse(ChatSend.visible(f).contains("not sent"))
+            assertTrue(ChatSend.visible(f).endsWith("Retry?"))
+        }
+        assertEquals("Connection dropped while the model was working. Retry?", ChatSend.visible(ChatSend.Fail.DROPPED))
+        assertEquals("The model is busy and hasn't started answering yet. Your request was sent. Retry?", ChatSend.visible(ChatSend.Fail.TIMEOUT_WAITING))
+        assertEquals("The model stopped mid-answer. Retry?", ChatSend.visible(ChatSend.Fail.TIMEOUT_GENERATING))
+    }
 }
