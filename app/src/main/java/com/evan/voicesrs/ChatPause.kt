@@ -25,6 +25,9 @@ object ChatPause {
     fun inlineResumeVisible(manual: Boolean, chatShowResume: Boolean, bottomIsResume: Boolean): Boolean =
         !bottomIsResume && showsInlineResume(manual, chatShowResume)
 
+    /** The pause row shows only while a drill runs and is paused. */
+    fun pauseRowVisible(drilling: Boolean, paused: Boolean): Boolean = drilling && paused
+
     enum class Trigger { FOCUS_INPUT, OPEN_THREAD, TYPING, DICTATION, MANUAL }
 
     enum class Action { RESUME, RATING, SHOW_ANSWER, DISMISS, OTHER }

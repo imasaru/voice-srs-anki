@@ -1023,7 +1023,7 @@ class MainActivity : AppCompatActivity() {
         val seconds = state.thinkSecondsLeft
         val resume = findViewById<Button>(R.id.chatResumeButton)
         val bottomIsResume = PlaybackControl.bottomShowsDrillResume(PlaybackUi.state, drilling, state.chatPaused)
-        if (drilling && state.chatPaused) {
+        if (ChatPause.pauseRowVisible(drilling, state.chatPaused)) {
             pauseRow?.visibility = View.VISIBLE
             countdown?.visibility = View.GONE
             findViewById<TextView>(R.id.chatPauseLabel)?.text = ChatPause.label(state.manualPause)

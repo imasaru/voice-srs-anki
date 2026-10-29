@@ -236,8 +236,7 @@ class DrillService : Service(), VoiceIo {
             val svc = active ?: return
             if (!ChatPause.pauses(running, trigger)) return
             svc.releaseFocus()
-            svc.enterChatPause()
-            runCatching { DrillUi.update { it.copy(manualPause = trigger == ChatPause.Trigger.MANUAL) } }
+            svc.enterChatPause(manual = trigger == ChatPause.Trigger.MANUAL)
             if (ChatPause.triggerReengages(trigger)) svc.cancelAutoResume(showButton = true)
         }
 
@@ -992,7 +991,6 @@ class DrillService : Service(), VoiceIo {
             screenReadyOrdinal = 0
             val gate = synchronized(gateLock) { listenGate }
             val silent = gate.silent
-            val pausedNow = chatPaused.get()
             val waitForTap = CardImages.waitForTap(questionHtml)
             val front = CardMedia.display(questionHtml, resolved)
             runCatching {
@@ -1018,7 +1016,6 @@ class DrillService : Service(), VoiceIo {
                         chosenLetter = null,
                         suggestedEase = null,
                         thinkSecondsLeft = null,
-                        chatPaused = pausedNow,
                         questionLabel = QuestionLabel.of(questionHtml, ordinal).label,
                         correctField = correct,
                         noteId = noteId,
@@ -2784,7 +2781,7 @@ class DrillService : Service(), VoiceIo {
         publishResume(show = false, pulse = false)
     }
 
-    private fun enterChatPause(endTone: Boolean = true) {
+    private fun enterChatPause(endTone: Boolean = true, manual: Boolean = false) {
         if (dictating) {
             // The dictation recognizer owns the mic. Freeze the card and leave it alone.
             if (chatPaused.compareAndSet(false, true)) {
@@ -2801,11 +2798,11 @@ class DrillService : Service(), VoiceIo {
                 if (::mainHandler.isInitialized) mainHandler.removeCallbacks(thinkTicker)
                 publishEnterChrome()
             }
-            publishCue(true, null)
+            publishCue(true, null, manual)
             return
         }
         if (!chatPaused.compareAndSet(false, true)) {
-            publishCue(true, null)
+            publishCue(true, null, manual)
             return
         }
         elapsedPausedSinceMs = SystemClock.elapsedRealtime()
@@ -2819,7 +2816,7 @@ class DrillService : Service(), VoiceIo {
         showAnswerLatch.get()?.countDown()
         silentGradeLatch.get()?.countDown()
         chatPauseLatch.get()?.countDown()
-        publishCue(true, null)
+        publishCue(true, null, manual)
         mainHandler.removeCallbacks(thinkTicker)
         publishEnterChrome()
     }
@@ -2833,7 +2830,6 @@ class DrillService : Service(), VoiceIo {
     private fun leaveChatPause(action: ChatPause.Action) {
         if (!ChatPause.accepts(action)) return
         if (!chatPaused.compareAndSet(true, false)) return
-        runCatching { DrillUi.update { it.copy(manualPause = false) } }
         val now = SystemClock.elapsedRealtime()
         if (elapsedPausedSinceMs > 0L) {
             elapsedPausedTotalMs += now - elapsedPausedSinceMs
@@ -2907,15 +2903,17 @@ class DrillService : Service(), VoiceIo {
         if (!chatPaused.get()) publishCue(false, null)
     }
 
-    private fun publishCue(paused: Boolean, think: Int?) {
+    private fun publishCue(paused: Boolean, think: Int?, manual: Boolean = false) {
         val shown = if (paused) null else think
-        if (paused == shownPaused && shown == shownThinkSec) return
+        val manualNow = paused && manual
+        if (paused == shownPaused && shown == shownThinkSec && DrillUi.state.manualPause == manualNow) return
         shownPaused = paused
         shownThinkSec = shown
         runCatching {
             DrillUi.update {
                 it.copy(
                     chatPaused = paused,
+                    manualPause = manualNow,
                     thinkSecondsLeft = shown,
                     elapsedStartMs = elapsedStartMs,
                     elapsedPausedTotalMs = elapsedPausedTotalMs,

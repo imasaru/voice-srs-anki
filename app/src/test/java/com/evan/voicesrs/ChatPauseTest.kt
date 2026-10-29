@@ -97,4 +97,11 @@ class ChatPauseTest {
         assertTrue(ChatPause.showsInlineResume(manual = false, chatShowResume = true))
         assertFalse(ChatPause.showsInlineResume(manual = false, chatShowResume = false))
     }
+
+    @Test
+    fun pauseRowHiddenWhenNotPaused() {
+        assertFalse(ChatPause.pauseRowVisible(drilling = true, paused = false))
+        assertFalse(ChatPause.pauseRowVisible(drilling = false, paused = true))
+        assertTrue(ChatPause.pauseRowVisible(drilling = true, paused = true))
+    }
 }
