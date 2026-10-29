@@ -39,7 +39,7 @@ class OwnWordsRetryTest {
 
     @Test
     fun `b two bad replies give the unreadable line, never a third call`() {
-        val f = Fake(bad, reply(""))
+        val f = Fake(bad, bad)
         val a = OwnWordsJudge.judgeWithRetry({ false }) { f.post() }
         assertEquals(2, f.calls)
         assertEquals(OwnWordsJudge.Verdict.Fallback, a.verdict)
