@@ -319,6 +319,13 @@ class ChatAdapter(
                     reply.text = text
                 }
             }
+            val retryable = row.state is ExplState.Error && (row.state as ExplState.Error).retryable
+            if (retryable) {
+                reply.setOnClickListener { GeneralChat.retry(it.context, row.id) }
+            } else {
+                reply.setOnClickListener(null)
+            }
+            reply.isClickable = retryable
         }
     }
 

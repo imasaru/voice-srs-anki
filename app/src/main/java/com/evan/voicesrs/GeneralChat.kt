@@ -3,6 +3,7 @@ package com.evan.voicesrs
 import android.content.Context
 import android.util.Log
 import org.json.JSONArray
+import java.util.HashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -16,6 +17,20 @@ object GeneralChat {
     private var nextId = 1L
     private var items: List<ChatRow.Ask> = emptyList()
     private var notice: String? = null
+
+    /** A stored general-ask request so a dropped report can be retried as-is. */
+    private data class Req(
+        val deck: String,
+        val question: String,
+        val injectReport: Boolean,
+        val chip: PromptChip?,
+        val cardBlob: String,
+        val chatsBlob: String,
+        var blob: String?,
+        val issuedAt: Long
+    )
+
+    private val requests = HashMap<Long, Req>()
 
     fun addListener(listener: () -> Unit) {
         listeners.add(listener)
@@ -44,6 +59,7 @@ object GeneralChat {
         synchronized(lock) {
             items = emptyList()
             notice = null
+            requests.clear()
         }
         dispatch()
     }
@@ -104,7 +120,8 @@ object GeneralChat {
         injectReport: Boolean,
         chip: PromptChip? = null,
         cardBlob: String = "",
-        chatsBlob: String = ""
+        chatsBlob: String = "",
+        retryId: Long? = null
     ) {
         val q = question.trim()
         if (q.isEmpty()) {
@@ -113,16 +130,30 @@ object GeneralChat {
         }
         val name = deck.trim()
         val id: Long
+        val retryReq: Req
+        val issuedAt: Long
         synchronized(lock) {
             notice = null
-            id = nextId++
-            items = items + ChatRow.Ask(id, q, ExplState.Pending, name, at = System.currentTimeMillis())
+            if (retryId != null) {
+                retryReq = requests.getValue(retryId)
+                id = retryId
+                issuedAt = retryReq.issuedAt
+            } else {
+                id = nextId++
+                items = items + ChatRow.Ask(id, q, ExplState.Pending, name, at = System.currentTimeMillis())
+                retryReq = Req(name, q, injectReport, chip, cardBlob, chatsBlob, null, System.currentTimeMillis())
+                requests[id] = retryReq
+                issuedAt = retryReq.issuedAt
+            }
         }
-        val issuedAt = System.currentTimeMillis()
+        if (retryId != null) {
+            mark(retryId, ExplState.Pending)
+        }
         dispatch()
         val app = context.applicationContext
         Thread({
             var lastPaint = -1L
+            var lastPartial = ""
             var blobChars = 0
             try {
                 val cfg = Prefs.load(app)
@@ -133,7 +164,10 @@ object GeneralChat {
                 if (injectReport || chip != null) {
                     tools = null
                     onTool = null
-                    val reviews = if (injectReport || chip?.source == ChipSource.TODAY_REVIEWS) {
+                    val cached = retryReq.blob
+                    val reviews = if (cached != null) {
+                        cached
+                    } else if (injectReport || chip?.source == ChipSource.TODAY_REVIEWS) {
                         reportBlob(app, cfg, issuedAt)
                     } else {
                         ""
@@ -148,46 +182,60 @@ object GeneralChat {
                         StudyToolRunner(anki, cfg.deck, pending = { LocalQueueStore(app.filesDir).readGrades() }).invoke(toolName, args)
                     }
                 }
+                synchronized(lock) { retryReq.blob = contextBlob }
                 val paint: (String) -> Unit = { partial ->
                     val now = System.currentTimeMillis()
                     if (ScrollAnchor.paintNow(now, lastPaint, streamingOnly = true)) {
                         val shown = ThinkStrip.strip(partial).trim()
                         if (shown.isNotBlank()) {
                             lastPaint = now
+                            lastPartial = shown
                             mark(id, ExplState.Streaming(
                                 if (injectReport) withHeader(issuedAt, shown) else shown
                             ))
                         }
                     }
                 }
-                val text = try {
-                    client.completeChat(
-                        baseUrl = cfg.aiBaseUrl,
-                        apiKey = cfg.aiApiKey,
-                        model = cfg.aiModel,
-                        system = when {
-                            chip != null -> PromptBuilder.chipSystem()
-                            injectReport -> PromptBuilder.reportSystem()
-                            else -> PromptBuilder.generalSystem(true)
-                        },
-                        messages = if (chip != null) PromptBuilder.chipMessages(name, q, contextBlob) else PromptBuilder.generalMessages(name, q, contextBlob),
-                        cancelled = { false },
-                        tools = tools,
-                        onTool = onTool,
-                        onDelta = paint
-                    )
-                } catch (e: ToolsRejected) {
-                    Log.w(TAG, "study tools rejected")
-                    showNotice(app.getString(R.string.today_report_fallback))
-                    client.completeChat(
-                        baseUrl = cfg.aiBaseUrl,
-                        apiKey = cfg.aiApiKey,
-                        model = cfg.aiModel,
-                        system = PromptBuilder.generalSystem(false),
-                        messages = PromptBuilder.generalMessages(name, q),
-                        cancelled = { false },
-                        onDelta = paint
-                    )
+                var autoDone = 0
+                val text: String
+                while (true) {
+                    text = try {
+                        client.completeChat(
+                            baseUrl = cfg.aiBaseUrl,
+                            apiKey = cfg.aiApiKey,
+                            model = cfg.aiModel,
+                            system = when {
+                                chip != null -> PromptBuilder.chipSystem()
+                                injectReport -> PromptBuilder.reportSystem()
+                                else -> PromptBuilder.generalSystem(true)
+                            },
+                            messages = if (chip != null) PromptBuilder.chipMessages(name, q, contextBlob) else PromptBuilder.generalMessages(name, q, contextBlob),
+                            cancelled = { false },
+                            tools = tools,
+                            onTool = onTool,
+                            onDelta = paint
+                        )
+                    } catch (e: ToolsRejected) {
+                        Log.w(TAG, "study tools rejected")
+                        showNotice(app.getString(R.string.today_report_fallback))
+                        client.completeChat(
+                            baseUrl = cfg.aiBaseUrl,
+                            apiKey = cfg.aiApiKey,
+                            model = cfg.aiModel,
+                            system = PromptBuilder.generalSystem(false),
+                            messages = PromptBuilder.generalMessages(name, q),
+                            cancelled = { false },
+                            onDelta = paint
+                        )
+                    } catch (e: Exception) {
+                        if (AiRetry.autoRetry(ChatSend.kindOf(e), autoDone, false)) {
+                            autoDone++
+                            Log.w(TAG, "auto retry after drop: ${AiDiag.error(e)}")
+                            continue
+                        }
+                        throw e
+                    }
+                    break
                 }
                 if (!injectReport && chip == null &&
                     StudyTools.needsFallbackChip(true, client.lastSawToolCalls, false) &&
@@ -206,9 +254,41 @@ object GeneralChat {
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "general ask failed: ${AiDiag.error(e)} report=$injectReport chip=${chip?.id ?: "none"} blobChars=$blobChars")
-                mark(id, ExplState.Error(ChatSend.visible(ChatSend.kindOf(e)), retryable = true))
+                mark(id, ExplState.Error(
+                    AiRetry.keptText(
+                        if (injectReport) withHeader(issuedAt, lastPartial) else lastPartial,
+                        ChatSend.visible(ChatSend.kindOf(e))
+                    ),
+                    retryable = true
+                ))
             }
         }, "general-ask").start()
+    }
+
+    /** Re-sends a dropped general ask from its stored request. False if not retryable. */
+    fun retry(context: Context, id: Long): Boolean {
+        val deck: String
+        val question: String
+        val injectReport: Boolean
+        val chip: PromptChip?
+        val cardBlob: String
+        val chatsBlob: String
+        val hasRequest: Boolean
+        synchronized(lock) {
+            val row = items.indexOfFirst { it.id == id }
+            if (row < 0) return false
+            hasRequest = requests[id] != null
+            if (!AiRetry.canManualRetry(items[row].state, hasRequest)) return false
+            val req = requests.getValue(id)
+            deck = req.deck
+            question = req.question
+            injectReport = req.injectReport
+            chip = req.chip
+            cardBlob = req.cardBlob
+            chatsBlob = req.chatsBlob
+        }
+        startAsk(context, deck, question, injectReport, chip, cardBlob, chatsBlob, retryId = id)
+        return true
     }
 
     /** Today's study report blob, same as the Today's report path. Never throws. */
