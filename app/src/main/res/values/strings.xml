@@ -239,6 +239,13 @@
     <string name="settings_exam_target">Target retention</string>
     <string name="settings_exam_target_help" formatted="false">Optional. 0.70–0.99, or 70–99. Blank ramps from 90% to 95% over the last 21 days.</string>
     <string name="settings_exam_target_error">Enter a retention from 0.70 to 0.99.</string>
+    <string name="settings_exam_revert">Revert exam mode</string>
+    <string name="settings_exam_revert_title">Revert exam mode?</string>
+    <string name="settings_exam_revert_body">Puts this deck back on its original preset and moves pulled-forward cards back to their old due dates.</string>
+    <string name="settings_exam_revert_confirm">Revert</string>
+    <string name="settings_exam_reverting">Reverting…</string>
+    <string name="settings_exam_reverted">Exam mode reverted: original preset restored, %1$d cards moved back.</string>
+    <string name="settings_exam_revert_failed">Revert failed: %1$s</string>
     <string name="section_backup">Backup</string>
     <string name="settings_export">Export</string>
     <string name="settings_import">Import</string>

@@ -397,6 +397,23 @@
                             android:text="@string/settings_exam_clear" />
                     </LinearLayout>
 
+                    <Button
+                        android:id="@+id/examRevertButton"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="48dp"
+                        android:visibility="gone"
+                        android:text="@string/settings_exam_revert" />
+
+                    <TextView
+                        android:id="@+id/examStatusText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:visibility="gone"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/examTargetLayout"
                         android:layout_width="match_parent"

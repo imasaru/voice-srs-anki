@@ -136,6 +136,12 @@ class SettingsActivity : AppCompatActivity() {
         )
         val examDateButton: Button = findViewById(R.id.examDateButton)
         val examClearButton: Button = findViewById(R.id.examClearButton)
+        val examRevertButton: Button = findViewById(R.id.examRevertButton)
+        val examStatusText: TextView = findViewById(R.id.examStatusText)
+        fun setExamStatus(text: String) {
+            examStatusText.text = text
+            examStatusText.visibility = if (text.isBlank()) View.GONE else View.VISIBLE
+        }
         val examTargetLayout: TextInputLayout = findViewById(R.id.examTargetLayout)
         val examTargetInput: TextInputEditText = findViewById(R.id.examTargetInput)
         val examDateFmt = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US)
@@ -156,6 +162,7 @@ class SettingsActivity : AppCompatActivity() {
             }
             val shown = ExamStore.formatTarget(state.target).orEmpty()
             if (examTargetInput.text?.toString() != shown) examTargetInput.setText(shown)
+            examRevertButton.visibility = if (ExamStore.hasSnapshot(state)) View.VISIBLE else View.GONE
         }
         fun persistExam(transform: (ExamStore.State) -> ExamStore.State) {
             if (destroyed) return
@@ -198,6 +205,43 @@ class SettingsActivity : AppCompatActivity() {
                 }
                 runOnUiThread {
                     if (!destroyed && done) showExam()
+                }
+            }.start()
+        }
+        fun revertExamDeck(deck: String) {
+            val url = held.url
+            val key = held.apiKey
+            if (key.isBlank() || url.isBlank()) return
+            examRevertButton.isEnabled = false
+            setExamStatus(getString(R.string.settings_exam_reverting))
+            Thread {
+                val message = try {
+                    val anki = AnkiConnect(url, key)
+                    val state = Prefs.loadExam(this, deck)
+                    val orig = state.origCfg ?: throw IllegalStateException("no snapshot")
+                    if (!anki.setDeckConfigId(listOf(deck), orig)) throw AnkiConnectException("Anki refused the original preset")
+                    val live = try { anki.getDeckConfig(deck).toString() } catch (_: Exception) { null }
+                    val todayAbs = try {
+                        ExamSync.ankiToday(anki, anki.dueDayNumbers(state.snapDue.keys.toList()))
+                    } catch (_: Exception) { null }
+                    var moved = 0
+                    for (step in ExamRevert.plan(state, live, todayAbs)) {
+                        when (step) {
+                            is ExamRevert.Step.AssignPreset -> Unit
+                            is ExamRevert.Step.SaveConfig -> anki.saveDeckConfig(org.json.JSONObject(step.json))
+                            is ExamRevert.Step.SetDue -> { anki.setDueDate(step.cardIds, step.days); moved += step.cardIds.size }
+                        }
+                    }
+                    Prefs.saveExam(this, deck, ExamStore.afterRevert(state))
+                    getString(R.string.settings_exam_reverted, moved)
+                } catch (e: Exception) {
+                    getString(R.string.settings_exam_revert_failed, ExamError.format(e))
+                }
+                runOnUiThread {
+                    if (destroyed) return@runOnUiThread
+                    examRevertButton.isEnabled = true
+                    showExam()
+                    setExamStatus(message)
                 }
             }.start()
         }
@@ -251,6 +295,14 @@ class SettingsActivity : AppCompatActivity() {
             if (state != null && ExamRestore.needsRestore(state, LocalDate.now())) {
                 restoreExamDeck(deck)
             }
+        }
+        examRevertButton.setOnClickListener {
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.settings_exam_revert_title)
+                .setMessage(R.string.settings_exam_revert_body)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.settings_exam_revert_confirm) { _, _ -> revertExamDeck(examDeckName()) }
+                .show()
         }
         showExam()
         neuralUrlView.setText(held.neuralUrl)
