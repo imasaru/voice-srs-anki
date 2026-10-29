@@ -213,6 +213,7 @@ object GeneralChat {
                             cancelled = { false },
                             tools = tools,
                             onTool = onTool,
+                            timeouts = if (injectReport || chip?.source == ChipSource.TODAY_REVIEWS) AiTimeoutProfile.REPORT else AiTimeoutProfile.DEFAULT,
                             onDelta = paint
                         )
                     } catch (e: ToolsRejected) {

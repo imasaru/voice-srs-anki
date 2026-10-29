@@ -39,6 +39,8 @@ object AiTimeouts {
     const val FIRST_TOKEN_MS = 180_000
     const val TOTAL_MS = 300_000
     const val IDLE_MS = 60_000
+    const val REPORT_FIRST_TOKEN_MS = 600_000
+    const val REPORT_TOTAL_MS = 600_000
     const val TEMPERATURE = 0.2
 
     /** Explanation completions. Reasoning models need room past the visible answer. */
@@ -56,6 +58,26 @@ object AiTimeouts {
     fun budget(requested: Int): Int {
         if (PROVIDER_MAX_TOKENS > 0) return PROVIDER_MAX_TOKENS
         return requested
+    }
+}
+
+/** Read clocks for one request. DEFAULT is today's behaviour; REPORT is for big report blobs. */
+data class AiTimeoutProfile(val firstTokenMs: Int, val totalMs: Int, val idleMs: Int, val totalFromFirstToken: Boolean) {
+    /** Pure clock check. Null = keep reading. [firstTokenAt]/[lastDataAt] are null until seen. */
+    fun expired(now: Long, started: Long, firstTokenAt: Long?, lastDataAt: Long?): AiTimeout.Phase? {
+        if (firstTokenAt == null) {
+            if (now - started >= firstTokenMs) return AiTimeout.Phase.WAITING
+            if (!totalFromFirstToken && now - started > totalMs) return AiTimeout.Phase.WAITING
+            return null
+        }
+        if (now - (lastDataAt ?: firstTokenAt) >= idleMs) return AiTimeout.Phase.GENERATING
+        val base = if (totalFromFirstToken) firstTokenAt else started
+        if (now - base > totalMs) return AiTimeout.Phase.GENERATING
+        return null
+    }
+    companion object {
+        val DEFAULT = AiTimeoutProfile(AiTimeouts.FIRST_TOKEN_MS, AiTimeouts.TOTAL_MS, AiTimeouts.IDLE_MS, false)
+        val REPORT = AiTimeoutProfile(AiTimeouts.REPORT_FIRST_TOKEN_MS, AiTimeouts.REPORT_TOTAL_MS, AiTimeouts.IDLE_MS, true)
     }
 }
 
@@ -154,6 +176,7 @@ class AiClient {
         tools: JSONArray? = null,
         onTool: ((name: String, args: String) -> String)? = null,
         maxToolRounds: Int = StudyTools.MAX_ROUNDS,
+        timeouts: AiTimeoutProfile = AiTimeoutProfile.DEFAULT,
         onDelta: (String) -> Unit = {}
     ): String {
         if (cancelled()) throw AiCancelled()
@@ -167,7 +190,7 @@ class AiClient {
                 baseUrl, apiKey, model, array, maxTokens, tools, onTool, maxToolRounds, cancelled, onThinking, onDelta
             )
         }
-        return completeMessages(baseUrl, apiKey, model, array, maxTokens, cancelled, onThinking, onDelta)
+        return completeMessages(baseUrl, apiKey, model, array, maxTokens, cancelled, onThinking, onDelta, timeouts)
     }
 
     /**
@@ -329,18 +352,19 @@ class AiClient {
         maxTokens: Int,
         cancelled: () -> Boolean,
         onThinking: () -> Unit,
-        onDelta: (String) -> Unit
+        onDelta: (String) -> Unit,
+        timeouts: AiTimeoutProfile = AiTimeoutProfile.DEFAULT
     ): String {
         val budget = AiTimeouts.budget(maxTokens)
         return try {
             TextToolCalls.stripLeftover(
-                completeOnce(baseUrl, apiKey, model, messages, budget, stream = true, cancelled, onThinking, onDelta)
+                completeOnce(baseUrl, apiKey, model, messages, budget, stream = true, cancelled, onThinking, onDelta, timeouts)
             )
         } catch (e: Exception) {
             if (e !is StreamRejected && e !is EmptyStream) throw e
             if (cancelled()) throw AiCancelled()
             TextToolCalls.stripLeftover(
-                completeOnce(baseUrl, apiKey, model, messages, budget, stream = false, cancelled, onThinking, onDelta)
+                completeOnce(baseUrl, apiKey, model, messages, budget, stream = false, cancelled, onThinking, onDelta, timeouts)
             )
         }
     }
@@ -354,7 +378,8 @@ class AiClient {
         stream: Boolean,
         cancelled: () -> Boolean,
         onThinking: () -> Unit,
-        onDelta: (String) -> Unit
+        onDelta: (String) -> Unit,
+        timeouts: AiTimeoutProfile = AiTimeoutProfile.DEFAULT
     ): String {
         val started = System.currentTimeMillis()
         val probe = AiDiag.Probe(started, stream)
@@ -365,7 +390,7 @@ class AiClient {
             conn.doOutput = true
             conn.useCaches = false
             conn.connectTimeout = AiTimeouts.CONNECT_MS
-            conn.readTimeout = AiTimeouts.FIRST_TOKEN_MS
+            conn.readTimeout = timeouts.firstTokenMs
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("Accept", if (stream) "text/event-stream" else "application/json")
             conn.setRequestProperty("Connection", "close")
@@ -384,9 +409,9 @@ class AiClient {
             val eventStream = type.contains("event-stream")
             val jsonType = type.contains("json")
             val text = if (eventStream || (stream && !jsonType)) {
-                readSse(conn, started, cancelled, onThinking, sink, probe)
+                readSse(conn, started, cancelled, onThinking, sink, probe, timeouts)
             } else {
-                finishBody(readBody(conn, started, cancelled, probe))
+                finishBody(readBody(conn, started, cancelled, probe, timeouts))
             }
             val clipped = SelfTalk.clip(text)
             sink(clipped)
@@ -406,32 +431,25 @@ class AiClient {
         cancelled: () -> Boolean,
         onThinking: () -> Unit,
         onDelta: (String) -> Unit,
-        probe: AiDiag.Probe? = null
+        probe: AiDiag.Probe? = null,
+        timeouts: AiTimeoutProfile = AiTimeoutProfile.DEFAULT
     ): String {
         conn.readTimeout = SLICE_MS
         val parser = SseParser()
         val reader = InputStreamReader(conn.inputStream, Charsets.UTF_8)
         val buf = CharArray(512)
-        var waited = 0
-        var idle = 0
         var saw = false
+        var firstTokenAt: Long? = null
+        var lastDataAt: Long? = null
         val undecided = StringBuilder()
         var mode = 0 // 0 unknown, 1 sse, 2 json
         while (!parser.done) {
             if (cancelled()) throw AiCancelled()
-            if (System.currentTimeMillis() - started > AiTimeouts.TOTAL_MS) {
-                throw AiTimeout(if (saw) AiTimeout.Phase.GENERATING else AiTimeout.Phase.WAITING)
-            }
+            timeouts.expired(System.currentTimeMillis(), started, firstTokenAt, lastDataAt)?.let { throw AiTimeout(it) }
             val n = try {
                 reader.read(buf)
             } catch (e: SocketTimeoutException) {
-                if (!saw) {
-                    waited += SLICE_MS
-                    if (waited >= AiTimeouts.FIRST_TOKEN_MS) throw AiTimeout(AiTimeout.Phase.WAITING)
-                } else {
-                    idle += SLICE_MS
-                    if (idle >= AiTimeouts.IDLE_MS) throw AiTimeout(AiTimeout.Phase.GENERATING)
-                }
+                timeouts.expired(System.currentTimeMillis(), started, firstTokenAt, lastDataAt)?.let { throw AiTimeout(it) }
                 continue
             }
             if (n < 0) break
@@ -447,6 +465,7 @@ class AiClient {
                         note(parser, parser.push(undecided.toString()), onThinking, onDelta)
                         if (parser.rawText().isNotEmpty() || parser.consumedReasoning()) {
                             saw = true
+                            firstTokenAt = firstTokenAt ?: System.currentTimeMillis()
                             probe?.tokenAt(System.currentTimeMillis())
                         }
                     }
@@ -455,6 +474,7 @@ class AiClient {
                         note(parser, parser.push(undecided.toString()), onThinking, onDelta)
                         if (parser.rawText().isNotEmpty() || parser.consumedReasoning()) {
                             saw = true
+                            firstTokenAt = firstTokenAt ?: System.currentTimeMillis()
                             probe?.tokenAt(System.currentTimeMillis())
                         }
                     }
@@ -469,8 +489,9 @@ class AiClient {
             val reasoning = parser.consumedReasoning()
             if (pieces.isNotEmpty() || reasoning) {
                 saw = true
+                firstTokenAt = firstTokenAt ?: System.currentTimeMillis()
                 probe?.tokenAt(System.currentTimeMillis())
-                idle = 0
+                lastDataAt = System.currentTimeMillis()
             }
             if (reasoning && parser.visibleText().isBlank()) onThinking()
             if (pieces.isNotEmpty()) {
@@ -509,36 +530,29 @@ class AiClient {
         return AiMessages.require(parsed.content.orEmpty(), parsed.finishReason)
     }
 
-    private fun readBody(conn: HttpURLConnection, started: Long, cancelled: () -> Boolean, probe: AiDiag.Probe? = null): String {
+    private fun readBody(conn: HttpURLConnection, started: Long, cancelled: () -> Boolean, probe: AiDiag.Probe? = null, timeouts: AiTimeoutProfile = AiTimeoutProfile.DEFAULT): String {
         conn.readTimeout = SLICE_MS
         val reader = InputStreamReader(conn.inputStream, Charsets.UTF_8)
         val buf = CharArray(1024)
         val out = StringBuilder()
-        var waited = 0
-        var idle = 0
         var saw = false
+        var firstTokenAt: Long? = null
+        var lastDataAt: Long? = null
         while (true) {
             if (cancelled()) throw AiCancelled()
-            if (System.currentTimeMillis() - started > AiTimeouts.TOTAL_MS) {
-                throw AiTimeout(if (saw) AiTimeout.Phase.GENERATING else AiTimeout.Phase.WAITING)
-            }
+            timeouts.expired(System.currentTimeMillis(), started, firstTokenAt, lastDataAt)?.let { throw AiTimeout(it) }
             val n = try {
                 reader.read(buf)
             } catch (e: SocketTimeoutException) {
-                if (!saw) {
-                    waited += SLICE_MS
-                    if (waited >= AiTimeouts.FIRST_TOKEN_MS) throw AiTimeout(AiTimeout.Phase.WAITING)
-                } else {
-                    idle += SLICE_MS
-                    if (idle >= AiTimeouts.IDLE_MS) throw AiTimeout(AiTimeout.Phase.GENERATING)
-                }
+                timeouts.expired(System.currentTimeMillis(), started, firstTokenAt, lastDataAt)?.let { throw AiTimeout(it) }
                 continue
             }
             if (n < 0) break
             probe?.byteAt(System.currentTimeMillis())
             saw = true
+            firstTokenAt = firstTokenAt ?: System.currentTimeMillis()
             probe?.tokenAt(System.currentTimeMillis())
-            idle = 0
+            lastDataAt = System.currentTimeMillis()
             out.append(buf, 0, n)
         }
         return out.toString()
