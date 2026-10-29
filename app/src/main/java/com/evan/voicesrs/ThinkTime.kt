@@ -20,6 +20,9 @@ object ThinkTime {
     /** Think-time mic restarts are capped here so a stuck mic stops retrying. */
     const val MAX_RESTARTS = 10
 
+    /** p92c: true only on the first restart past the cap, so the cap is logged once per think. */
+    fun capJustReached(restarts: Int): Boolean = restarts == MAX_RESTARTS + 1
+
     fun normalize(sec: Int): Int = if (sec in CHOICES_SEC) sec else DEFAULT_SEC
 
     fun label(sec: Int): String {

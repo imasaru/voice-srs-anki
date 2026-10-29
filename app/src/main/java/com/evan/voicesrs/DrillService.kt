@@ -2431,6 +2431,7 @@ class DrillService : Service(), VoiceIo {
                         if (buffer.isEmpty()) settling = false
                         restarts++
                         if (restarts > ThinkTime.MAX_RESTARTS) SystemClock.sleep(300L)
+                        if (ThinkTime.capJustReached(restarts)) Log.i(TAG, "think: mic restart cap reached, slowing restarts")
                         quietListen = true
                         continue
                     }
