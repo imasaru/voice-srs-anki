@@ -94,13 +94,8 @@ object ExamSync {
     /** Anki's absolute today day number, from one probe card in [days] (id -> absolute due) via binary search. Null if [days] is empty. */
     fun ankiToday(anki: AnkiConnect, days: Map<Long, Int>): Int? {
         val probe = days.keys.firstOrNull() ?: return null
-        var lo = 0
-        var hi = 36500
-        while (lo < hi) {
-            val mid = (lo + hi + 1) / 2
-            if (anki.findCardIds("cid:$probe prop:due>=$mid").isNotEmpty()) lo = mid else hi = mid - 1
-        }
-        return ExamRevert.todayAbs(days.getValue(probe), lo)
+        val rel = ExamRevert.searchRelDue { m -> anki.findCardIds("cid:$probe prop:due>=$m").isNotEmpty() } ?: return null
+        return ExamRevert.todayAbs(days.getValue(probe), rel)
     }
 
     private fun execute(

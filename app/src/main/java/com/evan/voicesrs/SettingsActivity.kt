@@ -224,16 +224,19 @@ class SettingsActivity : AppCompatActivity() {
                     val todayAbs = try {
                         ExamSync.ankiToday(anki, anki.dueDayNumbers(state.snapDue.keys.toList()))
                     } catch (_: Exception) { null }
-                    var moved = 0
-                    for (step in ExamRevert.plan(state, live, todayAbs)) {
+                    val out = ExamRevert.runSteps(ExamRevert.plan(state, live, todayAbs)) { step ->
                         when (step) {
-                            is ExamRevert.Step.AssignPreset -> Unit
+                            is ExamRevert.Step.AssignPreset -> true
                             is ExamRevert.Step.SaveConfig -> anki.saveDeckConfig(org.json.JSONObject(step.json))
-                            is ExamRevert.Step.SetDue -> { anki.setDueDate(step.cardIds, step.days); moved += step.cardIds.size }
+                            is ExamRevert.Step.SetDue -> anki.setDueDate(step.cardIds, step.days)
                         }
                     }
-                    Prefs.saveExam(this, deck, ExamStore.afterRevert(state))
-                    getString(R.string.settings_exam_reverted, moved)
+                    if (out.failed == 0) {
+                        Prefs.saveExam(this, deck, ExamStore.afterRevert(state))
+                        getString(R.string.settings_exam_reverted, out.moved)
+                    } else {
+                        getString(R.string.settings_exam_reverted_partial, out.moved, out.failed)
+                    }
                 } catch (e: Exception) {
                     getString(R.string.settings_exam_revert_failed, ExamError.format(e))
                 }
