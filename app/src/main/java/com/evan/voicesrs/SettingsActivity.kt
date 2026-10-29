@@ -1021,7 +1021,7 @@ class SettingsActivity : AppCompatActivity() {
                                 if (verdict is OwnWordsJudge.Verdict.Fallback) {
                                     throw AiException("Decision reply not understood", retryable = false)
                                 }
-                                ConnectionSummary.aiOk(t.model.ifBlank { "decision" }, SystemClock.elapsedRealtime() - started, verdict.toString())
+                                ConnectionSummary.aiOk(t.model.ifBlank { "decision" }, SystemClock.elapsedRealtime() - started, ModelTestTargets.decisionReply(verdict))
                             }
                         }
                     } catch (e: Exception) {

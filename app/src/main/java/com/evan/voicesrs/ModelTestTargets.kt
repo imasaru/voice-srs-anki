@@ -25,6 +25,12 @@ object ModelTestTargets {
         return listOf(chat, decision)
     }
 
+    /** p74a: plain word for the decision test reply (rating word, e.g. "good"), never the data class dump. */
+    fun decisionReply(verdict: OwnWordsJudge.Verdict): String = when (verdict) {
+        is OwnWordsJudge.Verdict.Graded -> verdict.rating.word
+        OwnWordsJudge.Verdict.Fallback -> "not understood"
+    }
+
     fun line(kind: Kind, body: String): String = when (kind) {
         Kind.CHAT -> "Chat: $body"
         Kind.DECISION -> "Decision: $body"
