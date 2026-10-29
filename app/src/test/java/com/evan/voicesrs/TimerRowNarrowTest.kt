@@ -17,7 +17,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** h82 / R17: narrow split-screen (320dp) two-line timer row: nothing clipped or overlapping, switch full width, 48dp targets, 36dp visible stepper circles with >= 8dp to the value. */
+/** h82 / p82a / R17: narrow split-screen timer row in every real host, at 320-700dp: nothing clipped or overlapping, switch full width at the right edge of line 1, 48dp targets, 36dp visible stepper circles with >= 8dp to the value. */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w320dp-h640dp")
 class TimerRowNarrowTest {
@@ -25,10 +25,10 @@ class TimerRowNarrowTest {
     private val density get() = ctx.resources.displayMetrics.density
     private fun dp(v: Int) = (v * density).toInt()
 
-    /** Inflates the row drilling at 1:26:23 with a 180-min goal (widest value) and lays it out like activity_main's slimHeader (16dp sides). */
-    private fun row(): ViewGroup {
+    /** Inflates the row drilling at 1:26:23 with a 180-min goal (widest value) and lays it out in a host with the given side padding. */
+    private fun row(sidePadDp: Int = 16): ViewGroup {
         val host = FrameLayout(ctx)
-        host.setPadding(dp(16), 0, dp(16), 0)
+        host.setPadding(dp(sidePadDp), 0, dp(sidePadDp), 0)
         val row = LayoutInflater.from(ctx).inflate(R.layout.include_timer_row, host, false) as ViewGroup
         host.addView(row)
         row.findViewById<TextView>(R.id.elapsedChip).apply {
@@ -47,31 +47,24 @@ class TimerRowNarrowTest {
 
     /** Every visible child lies inside its parent's padding box, is not narrower than it measured, and does not overlap a visible sibling. */
     private fun assertNoClipOrOverlap(root: ViewGroup) {
+        ViewClipCheck.assertNoChildClipped(root)
         val visible = (0 until root.childCount).map { root.getChildAt(it) }.filter { it.visibility == View.VISIBLE }
-        for (c in visible) {
-            assertTrue("${name(c)} clipped left in ${name(root)}", c.left >= 0)
-            assertTrue("${name(c)} clipped right in ${name(root)} (${c.right} > ${root.width})", c.right <= root.width)
-            assertTrue("${name(c)} clipped top in ${name(root)}", c.top >= 0)
-            assertTrue("${name(c)} clipped bottom in ${name(root)}", c.bottom <= root.height)
-            assertTrue("${name(c)} squeezed (${c.width} < measured ${c.measuredWidth})", c.width >= c.measuredWidth)
-        }
         for (i in visible.indices) for (j in i + 1 until visible.size) {
             val a = Rect(visible[i].left, visible[i].top, visible[i].right, visible[i].bottom)
             val b = Rect(visible[j].left, visible[j].top, visible[j].right, visible[j].bottom)
             assertTrue("${name(visible[i])} overlaps ${name(visible[j])}", !Rect.intersects(a, b))
         }
-        visible.filterIsInstance<ViewGroup>().forEach { assertNoClipOrOverlap(it) }
     }
 
     @Test
-    fun `a two lines line 1 icon and elapsed line 2 stepper and switch`() {
+    fun `a line 1 icon elapsed label switch line 2 stepper`() {
         val row = row()
         val l1 = row.findViewById<ViewGroup>(R.id.timerLine1)
         val l2 = row.findViewById<ViewGroup>(R.id.timerLine2)
         assertTrue("line 2 is not below line 1", l2.top >= l1.bottom)
-        assertTrue(l1.indexOfChild(row.findViewById(R.id.timerIcon)) >= 0)
-        assertTrue(l1.indexOfChild(row.findViewById(R.id.elapsedChip)) >= 0)
-        listOf(R.id.timerMinus, R.id.timerValue, R.id.timerPlus, R.id.timerSpacer, R.id.timerSwitchLabel, R.id.timerSwitch)
+        listOf(R.id.timerIcon, R.id.elapsedChip, R.id.timerSwitchLabel, R.id.timerSwitch)
+            .forEachIndexed { i, id -> assertEquals("line 1 order", i, l1.indexOfChild(row.findViewById(id))) }
+        listOf(R.id.timerMinus, R.id.timerValue, R.id.timerPlus, R.id.timerSpacer)
             .forEachIndexed { i, id -> assertEquals("line 2 order", i, l2.indexOfChild(row.findViewById(id))) }
         val chip = row.findViewById<TextView>(R.id.elapsedChip)
         assertEquals("Elapsed 1:26:23", chip.text.toString())
@@ -88,11 +81,8 @@ class TimerRowNarrowTest {
         val lines = (0 until label.layout.lineCount).map {
             label.text.subSequence(label.layout.getLineStart(it), label.layout.getLineEnd(it)).toString().trim()
         }
-        if (ctx.resources.configuration.screenWidthDp < 400) {
-            assertEquals("balanced break below 400dp", listOf("End drill", "at goal"), lines)
-        } else {
-            assertEquals("one line from 400dp", listOf("End drill at goal"), lines)
-        }
+        assertTrue("label > 2 lines", label.layout.lineCount <= 2)
+        assertEquals("End drill at goal", lines.joinToString(" "))
         assertEquals("End drill at goal", row.findViewById<View>(R.id.timerSwitch).contentDescription.toString())
         val value = row.findViewById<TextView>(R.id.timerValue)
         assertEquals(1, value.layout.lineCount)
@@ -107,8 +97,8 @@ class TimerRowNarrowTest {
         val spec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
         sw.measure(spec, spec)
         assertTrue("switch ${laidOut}px < natural ${sw.measuredWidth}px", laidOut >= sw.measuredWidth)
-        val l2 = row.findViewById<ViewGroup>(R.id.timerLine2)
-        assertTrue("switch not at the right edge", sw.right == l2.width - l2.paddingRight)
+        val l1 = row.findViewById<ViewGroup>(R.id.timerLine1)
+        assertTrue("switch not at the right edge", sw.right == l1.width - l1.paddingRight)
         assertTrue("switch ${sw.height} < 48dp", sw.height >= dp(48))
     }
 
@@ -137,16 +127,127 @@ class TimerRowNarrowTest {
         assertTrue("gap value->plus ${gapR}px < 8dp", gapR >= dp(8))
         assertEquals("180 min", value.text.toString())
         assertEquals(1, value.layout.lineCount)
+        assertEquals("value ellipsized", 0, value.layout.getEllipsisCount(0))
         assertTrue("180 min wider than its box", value.layout.getLineWidth(0) <= value.width - value.paddingLeft - value.paddingRight)
     }
 
     @Test
     @Config(qualifiers = "w411dp-h891dp")
     fun `e same at w411dp`() {
-        `a two lines line 1 icon and elapsed line 2 stepper and switch`()
+        `a line 1 icon elapsed label switch line 2 stepper`()
         `b nothing clipped or overlapping`()
         `c switch has its full measured width at the right edge`()
         `d stepper targets are 48dp`()
         `f value has 8dp to each visible button edge and fits 180 min`()
     }
+
+    /** p82a REPRO: the deck card insets the row more than the slim header, so at w411dp with a 48dp host the label+switch on line 2 of the old layout overflow the right edge. Fails on 978a534, passes after the fix. */
+    @Test
+    @Config(qualifiers = "w411dp-h891dp")
+    fun `g deck card inset at w411dp`() {
+        val row = row(48)
+        val l1 = row.findViewById<ViewGroup>(R.id.timerLine1)
+        assertNoClipOrOverlap(row.findViewById(R.id.timerLines))
+        val sw = row.findViewById<MaterialSwitch>(R.id.timerSwitch)
+        assertTrue("switch not at right edge", sw.right == l1.width - l1.paddingRight)
+        // idle case: elapsedChip GONE -> icon and switch both on line 1
+        row.findViewById<View>(R.id.elapsedChip).visibility = View.GONE
+        assertTrue("icon not on line 1", l1.indexOfChild(row.findViewById(R.id.timerIcon)) >= 0)
+        assertTrue("switch not on line 1", l1.indexOfChild(sw) >= 0)
+        assertEquals("switch not at right edge (idle)", sw.right, l1.width - l1.paddingRight)
+    }
+
+    // Hosts of include_timer_row (grep app/src/main/res):
+    //  - drill header: layout/activity_main.xml (timerRow inside slimHeader, 16dp sides) at w320/w411/w700,
+    //    and layout-w600dp/activity_main.xml at w600 (its left pane's statusCard -> include_timer_row;
+    //    the timerRow is reached transitively, see the timerRowInclude ?: timerRow fallback in hostTest).
+    //  - deck card: include_status_card.xml (statusCard app:contentPadding=20dp), hosted in the w600 list
+    //    in a LinearLayout padding="@dimen/screen_padding"=20dp (replicated on the test's deckHost FrameLayout).
+
+    private fun measureHost(root: View) {
+        val w = dp(ctx.resources.configuration.screenWidthDp)
+        val h = dp(ctx.resources.configuration.screenHeightDp)
+        root.measure(
+            View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY),
+        )
+        root.layout(0, 0, root.measuredWidth, root.measuredHeight)
+    }
+
+    private fun setTimerState(row: ViewGroup, drilling: Boolean) {
+        val chip = row.findViewById<TextView>(R.id.elapsedChip)
+        val sw = row.findViewById<MaterialSwitch>(R.id.timerSwitch)
+        if (drilling) {
+            chip.text = ElapsedChip.format(5_183_000L)
+            chip.visibility = View.VISIBLE
+            row.findViewById<TextView>(R.id.timerValue).text = "180 min"
+            sw.isChecked = true
+        } else {
+            chip.visibility = View.GONE
+            sw.isChecked = false
+        }
+    }
+
+    private fun verifyRow(row: ViewGroup) {
+        val l1 = row.findViewById<ViewGroup>(R.id.timerLine1)
+        val sw = row.findViewById<MaterialSwitch>(R.id.timerSwitch)
+        ViewClipCheck.assertNoChildClipped(row)
+        assertTrue("switch not at right edge", sw.right == l1.width - l1.paddingRight)
+        assertTrue("icon not in line1", l1.indexOfChild(row.findViewById(R.id.timerIcon)) >= 0)
+        assertTrue("switch not in line1", l1.indexOfChild(sw) >= 0)
+    }
+
+    private fun hostTest() {
+        // Drill-header host: base activity_main (timerRow inside slimHeader, 16dp sides).
+        // The <include android:id="@+id/timerRowInclude"> overrides the timerRow CardView's own
+        // id on the narrow layout (findViewById(R.id.timerRow) is null there), so take timerRowInclude
+        // when present and fall back to timerRow (the only path at w600dp, reached via include_status_card).
+        val drillRoot = LayoutInflater.from(ctx).inflate(R.layout.activity_main, null)
+        val drillRow = drillRoot.findViewById<ViewGroup>(R.id.timerRowInclude)
+                ?: drillRoot.findViewById<ViewGroup>(R.id.timerRow)
+        for (drilling in listOf(true, false)) {
+            setTimerState(drillRow, drilling)
+            measureHost(drillRoot)
+            verifyRow(drillRow)
+        }
+
+        // Deck-card host: include_status_card into a FrameLayout of screen width with the same
+        // 20dp side padding the home list uses (layout-w600dp/activity_main.xml hosts statusCard in a
+        // LinearLayout padding="@dimen/screen_padding"=20dp; statusCard itself has app:contentPadding=20dp).
+        val w = dp(ctx.resources.configuration.screenWidthDp)
+        val deckHost = FrameLayout(ctx)
+        deckHost.setPadding(dp(20), 0, dp(20), 0)
+        val card = LayoutInflater.from(ctx).inflate(R.layout.include_status_card, deckHost, false) as ViewGroup
+        deckHost.addView(card)
+        deckHost.measure(
+            View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(dp(ctx.resources.configuration.screenHeightDp), View.MeasureSpec.EXACTLY),
+        )
+        deckHost.layout(0, 0, w, deckHost.measuredHeight)
+        for (drilling in listOf(true, false)) {
+            setTimerState(card, drilling)
+            deckHost.measure(
+                View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(deckHost.measuredHeight, View.MeasureSpec.EXACTLY),
+            )
+            deckHost.layout(0, 0, w, deckHost.measuredHeight)
+            verifyRow(card)
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w320dp-h640dp")
+    fun `h hosts at 320dp`() = hostTest()
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp")
+    fun `i hosts at 411dp`() = hostTest()
+
+    @Test
+    @Config(qualifiers = "w600dp-h891dp")
+    fun `j hosts at 600dp`() = hostTest()
+
+    @Test
+    @Config(qualifiers = "w700dp-h891dp")
+    fun `k hosts at 700dp`() = hostTest()
 }
