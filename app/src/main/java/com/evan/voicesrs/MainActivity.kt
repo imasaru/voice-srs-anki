@@ -434,8 +434,8 @@ class MainActivity : AppCompatActivity() {
         stopResumePulse(findViewById(R.id.chatResumeButton))
         chatPane?.detach()
         chatPane = null
-        // Split-screen resize / fold recreates the activity: keep read-aloud playing.
-        if (ActivityTeardown.shouldStopPlayback(isChangingConfigurations)) PlaybackSpeaker.stop()
+        // Split-screen resize / fold recreate, or a running drill (DrillService owns its read-aloud): keep read-aloud playing.
+        if (ActivityTeardown.shouldStopPlayback(isChangingConfigurations, DrillService.running)) PlaybackSpeaker.stop()
         super.onDestroy()
     }
 
