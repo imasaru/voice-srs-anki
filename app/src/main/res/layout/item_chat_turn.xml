@@ -65,44 +65,50 @@
         android:paddingEnd="14dp"
         android:paddingBottom="10dp">
 
-        <TextView
-            android:id="@+id/userAnswerLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:letterSpacing="0.06"
-            android:text="@string/answer_rating_label"
-            android:textAllCaps="true"
-            android:textAppearance="?attr/textAppearanceLabelSmall"
-            android:textColor="@color/bubble_user_on" />
-
+        <!-- h82 narrow-v2 Bubble A: header = YOUR ANSWER (weight 1) + rating pill right; answer full width below. -->
         <LinearLayout
-            android:layout_width="wrap_content"
+            android:id="@+id/userAnswerHeader"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginBottom="@dimen/answer_header_bottom"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
             <TextView
-                android:id="@+id/userAnswerText"
+                android:id="@+id/userAnswerLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:paddingStart="10dp"
-                android:paddingTop="3dp"
-                android:paddingEnd="10dp"
-                android:paddingBottom="3dp"
-                android:textAppearance="?attr/textAppearanceBodyMedium" />
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:letterSpacing="0.06"
+                android:maxLines="1"
+                android:text="@string/your_answer_label"
+                android:textAllCaps="true"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
+                android:textColor="@color/bubble_user_on" />
 
             <TextView
                 android:id="@+id/userRatingPill"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
+                android:layout_marginStart="@dimen/answer_header_gap"
+                android:maxLines="1"
                 android:paddingStart="10dp"
                 android:paddingTop="3dp"
                 android:paddingEnd="10dp"
                 android:paddingBottom="3dp"
                 android:textAppearance="?attr/textAppearanceLabelLarge" />
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/userAnswerText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="10dp"
+            android:paddingTop="3dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="3dp"
+            android:textAppearance="?attr/textAppearanceBodyMedium" />
     </LinearLayout>
 
     <!-- Left, distinct colour: explanation only. Never the prompt. -->

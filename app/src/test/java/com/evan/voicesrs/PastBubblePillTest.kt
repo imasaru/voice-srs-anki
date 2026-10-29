@@ -26,6 +26,7 @@ class PastBubblePillTest {
 
     @After
     fun tearDown() = ReviewLog.clear()
+
     private fun bubble(): ViewGroup {
         val turn = ReviewLog.appendAfterGrade(
             ease = 3, cardId = 7L, noteId = null, frontText = "Q7", backText = "%run",
@@ -71,7 +72,7 @@ class PastBubblePillTest {
     @Test
     fun `c pill sits inside the bubble padding`() {
         val b = bubble()
-        val pill = b.findById<TextView>(R.id.userRatingPill)
+        val pill = b.findViewById<TextView>(R.id.userRatingPill)
         val left = leftIn(pill, b)
         assertTrue("pill left $left < paddingStart ${b.paddingLeft}", left >= b.paddingLeft)
         assertTrue("pill right ${left + pill.width} > ${b.width - b.paddingRight}", left + pill.width <= b.width - b.paddingRight)
@@ -84,4 +85,12 @@ class PastBubblePillTest {
         assertEquals("YOUR ANSWER", label.text.toString())
     }
 
+    @Test
+    @Config(qualifiers = "w411dp-h891dp")
+    fun `e same at w411dp`() {
+        `a pill is visible and says Good`()
+        `b pill has its full width on one line`()
+        `c pill sits inside the bubble padding`()
+        `d header has no RATING`()
+    }
 }

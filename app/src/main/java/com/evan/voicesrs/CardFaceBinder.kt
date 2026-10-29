@@ -126,7 +126,12 @@ object CardFaceBinder {
         onRegrade: (() -> Unit)? = null,
         heading: TextView? = null
     ) {
-        heading?.text = TapAnswer.heading(transcript)
+        // h82 Bubble A: the pill sits in the header row, so the header reads just
+        // "YOUR ANSWER" (tapped letter answers keep "YOUR ANSWER: B"); never "· RATING".
+        if (heading != null) {
+            val h = TapAnswer.heading(transcript)
+            heading.text = if (h == QuestionCard.ANSWER_RATING) heading.context.getString(R.string.your_answer_label) else h
+        }
         val (quote, answered) = QuestionCard.quotedAnswer(transcript)
         spoken.text = quote
         spoken.setTypeface(null, if (answered) Typeface.NORMAL else Typeface.ITALIC)

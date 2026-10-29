@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- h82 narrow-v2 Timer B: two lines, same ids. Line 1 icon + elapsed; line 2 stepper | Space | label + switch. -->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/timerRow"
@@ -14,62 +15,123 @@
     app:strokeWidth="1dp">
 
     <LinearLayout
+        android:id="@+id/timerLines"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp">
+        android:orientation="vertical"
+        android:paddingStart="@dimen/timer_row_padding"
+        android:paddingEnd="@dimen/timer_row_padding">
 
-        <TextView
-            android:id="@+id/elapsedChip"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:id="@+id/timerLine1"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="4dp"
-            android:visibility="gone"
-            android:textAppearance="?attr/textAppearanceLabelLarge" />
+            android:layout_marginBottom="@dimen/timer_line_gap"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="@dimen/timer_row_padding"
+            android:paddingEnd="@dimen/timer_row_padding">
 
-        <ImageView
-            android:id="@+id/timerIcon"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:contentDescription="@string/timer_title"
-            android:src="@drawable/ic_timer" />
+            <ImageView
+                android:id="@+id/timerIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:contentDescription="@string/timer_title"
+                android:src="@drawable/ic_timer" />
 
-        <Button
-            android:id="@+id/timerMinus"
-            style="@style/Widget.Material3.Button.IconButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:contentDescription="@string/timer_fewer"
-            android:text="−" />
+            <TextView
+                android:id="@+id/elapsedChip"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:visibility="gone"
+                android:textAppearance="?attr/textAppearanceLabelLarge" />
+        </LinearLayout>
 
-        <TextView
-            android:id="@+id/timerValue"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:id="@+id/timerLine2"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
-            android:layout_marginEnd="4dp"
-            android:minWidth="56dp"
-            android:gravity="center"
-            android:textAppearance="?attr/textAppearanceBodyLarge"
-            android:text="10 min" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <Button
-            android:id="@+id/timerPlus"
-            style="@style/Widget.Material3.Button.IconButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:contentDescription="@string/timer_more"
-            android:text="+" />
+            <!-- 48dp touch target, 36dp visible outlined circle (48 - 2 x 6dp inset). -->
+            <Button
+                android:id="@+id/timerMinus"
+                style="@style/Widget.Material3.Button.IconButton.Outlined"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:insetLeft="@dimen/timer_stepper_inset"
+                android:insetTop="@dimen/timer_stepper_inset"
+                android:insetRight="@dimen/timer_stepper_inset"
+                android:insetBottom="@dimen/timer_stepper_inset"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:padding="0dp"
+                android:contentDescription="@string/timer_fewer"
+                android:text="−"
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.Material3.Corner.Full"
+                app:strokeColor="?attr/colorOutline"
+                app:strokeWidth="@dimen/timer_stepper_stroke" />
 
-        <com.google.android.material.materialswitch.MaterialSwitch
-            android:id="@+id/timerSwitch"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="end|center_vertical"
-            android:minHeight="48dp"
-            android:contentDescription="@string/timer_switch" />
+            <TextView
+                android:id="@+id/timerValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/timer_value_margin"
+                android:layout_marginEnd="@dimen/timer_value_margin"
+                android:minWidth="@dimen/timer_value_min_width"
+                android:gravity="center"
+                android:maxLines="1"
+                android:textAppearance="?attr/textAppearanceLabelLarge"
+                android:text="10 min" />
+
+            <!-- 48dp touch target, 36dp visible outlined circle (48 - 2 x 6dp inset). -->
+            <Button
+                android:id="@+id/timerPlus"
+                style="@style/Widget.Material3.Button.IconButton.Outlined"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:insetLeft="@dimen/timer_stepper_inset"
+                android:insetTop="@dimen/timer_stepper_inset"
+                android:insetRight="@dimen/timer_stepper_inset"
+                android:insetBottom="@dimen/timer_stepper_inset"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:padding="0dp"
+                android:contentDescription="@string/timer_more"
+                android:text="+"
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.Material3.Corner.Full"
+                app:strokeColor="?attr/colorOutline"
+                app:strokeWidth="@dimen/timer_stepper_stroke" />
+
+            <Space
+                android:id="@+id/timerSpacer"
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/timerSwitchLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="@dimen/timer_switch_label_gap"
+                android:gravity="end|center_vertical"
+                android:labelFor="@+id/timerSwitch"
+                android:maxLines="2"
+                android:text="@string/timer_switch_text"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/timerSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:contentDescription="@string/timer_switch_label" />
+        </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>
