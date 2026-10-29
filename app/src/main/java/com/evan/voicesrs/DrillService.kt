@@ -2273,6 +2273,11 @@ class DrillService : Service(), VoiceIo {
                         speakAnswer = true
                         continue
                     } catch (_: ListenGaveUp) {
+                        if (!askSilentFirst(listenWaitMs)) {
+                            // Item 36: "no" keeps voice; listen for the rating again.
+                            speakAnswer = false
+                            continue
+                        }
                         // No ease. Silent stays on this card with the rating buttons.
                         giveUpToSilent()
                         speakAnswer = true
@@ -3162,6 +3167,24 @@ class DrillService : Service(), VoiceIo {
         } catch (e: Exception) {
             Log.w(TAG, "foreground type update failed", e)
         }
+    }
+
+    /** Item 36: ask aloud before auto-silent. True = go silent (yes, no reply, or not understood). */
+    private fun askSilentFirst(listenWaitMs: Long): Boolean {
+        if (stopRequested.get() || destroyed || sessionSilent) return true
+        speak(SilentAsk.QUESTION)
+        if (stopRequested.get() || destroyed) return true
+        val heard = try {
+            captureListen(listenWaitMs)
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "silent ask listen failed", e)
+            null
+        }
+        val reply = SilentAsk.parse(heard)
+        Log.i(TAG, "silent ask reply=$reply")
+        return SilentAsk.goSilent(reply)
     }
 
     /**
