@@ -922,31 +922,62 @@ class SettingsActivity : AppCompatActivity() {
             commitAiModel()
             commitAiKey()
             commitAiLookahead()
-            if (aiBaseUrlLayout.error != null || aiLookaheadLayout.error != null) return@setOnClickListener
+            commitDecisionUrl()
+            commitDecisionModel()
+            if (aiBaseUrlLayout.error != null || aiLookaheadLayout.error != null || decisionUrlLayout.error != null) return@setOnClickListener
             val url = aiBaseUrlInput.text?.toString()?.trim().orEmpty().ifBlank { Prefs.DEFAULT_AI_URL }
             val model = aiModelInput.text?.toString()?.trim().orEmpty().ifBlank { Prefs.DEFAULT_AI_MODEL }
             val key = aiKeyInput.text?.toString()?.trim().orEmpty().ifBlank { held.aiApiKey }
+            val targets = ModelTestTargets.build(
+                chatUrl = url,
+                chatModel = model,
+                apiKey = key,
+                decisionEnabled = decisionEnabledSwitch.isChecked,
+                decisionUrl = decisionUrlInput.text?.toString()?.trim().orEmpty(),
+                decisionModel = decisionModelInput.text?.toString()?.trim().orEmpty()
+            )
             val button = it as Button
             button.isEnabled = false
             aiTestResult.text = getString(R.string.settings_ai_testing)
             Thread {
-                val message = try {
-                    val client = AiClient()
-                    client.probe(url, key) { destroyed }
-                    val started = SystemClock.elapsedRealtime()
-                    val reply = client.complete(
-                        baseUrl = url,
-                        apiKey = key,
-                        model = model,
-                        system = "Reply with the single word ok.",
-                        user = "Say ok.",
-                        maxTokens = AiTimeouts.TEST_MAX_TOKENS,
-                        cancelled = { destroyed }
-                    )
-                    ConnectionSummary.aiOk(model, SystemClock.elapsedRealtime() - started, reply)
-                } catch (e: Exception) {
-                    ConnectionSummary.failure(e)
+                val client = AiClient()
+                val lines = targets.map { t ->
+                    val body = try {
+                        when (t.kind) {
+                            ModelTestTargets.Kind.CHAT -> {
+                                client.probe(t.baseUrl, t.apiKey) { destroyed }
+                                val started = SystemClock.elapsedRealtime()
+                                val reply = client.complete(
+                                    baseUrl = t.baseUrl,
+                                    apiKey = t.apiKey,
+                                    model = t.model,
+                                    system = "Reply with the single word ok.",
+                                    user = "Say ok.",
+                                    maxTokens = AiTimeouts.TEST_MAX_TOKENS,
+                                    cancelled = { destroyed }
+                                )
+                                ConnectionSummary.aiOk(t.model, SystemClock.elapsedRealtime() - started, reply)
+                            }
+                            ModelTestTargets.Kind.DECISION -> {
+                                val started = SystemClock.elapsedRealtime()
+                                val raw = client.postDecision(
+                                    t.baseUrl,
+                                    t.apiKey,
+                                    OwnWordsJudge.requestBody(t.model, "Say ok.", "ok", "ok")
+                                ) { destroyed }
+                                val verdict = OwnWordsJudge.result(raw, null)
+                                if (verdict is OwnWordsJudge.Verdict.Fallback) {
+                                    throw AiException("Decision reply not understood", retryable = false)
+                                }
+                                ConnectionSummary.aiOk(t.model.ifBlank { "decision" }, SystemClock.elapsedRealtime() - started, verdict.toString())
+                            }
+                        }
+                    } catch (e: Exception) {
+                        ConnectionSummary.failure(e)
+                    }
+                    ModelTestTargets.line(t.kind, body)
                 }
+                val message = lines.joinToString("\n")
                 runOnUiThread {
                     if (destroyed) return@runOnUiThread
                     button.isEnabled = true
