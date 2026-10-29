@@ -257,7 +257,7 @@ object GeneralChat {
                 Log.w(TAG, "general ask failed: ${AiDiag.error(e)} report=$injectReport chip=${chip?.id ?: "none"} blobChars=$blobChars")
                 mark(id, ExplState.Error(
                     AiRetry.keptText(
-                        if (injectReport) withHeader(issuedAt, lastPartial) else lastPartial,
+                        if (injectReport && lastPartial.isNotBlank()) withHeader(issuedAt, lastPartial) else lastPartial,
                         ChatSend.visible(ChatSend.kindOf(e))
                     ),
                     retryable = true
