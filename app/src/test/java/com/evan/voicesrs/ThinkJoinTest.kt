@@ -16,22 +16,13 @@ class ThinkJoinTest {
         ThinkTime.nextStep(hear, bufferEmpty, remainingMs, settling)
 
     @Test
-    fun `a two fragments reveal once joined`() {
+    fun `a an answer is accepted at once`() {
+        // h100: no settle listen after an answer; it goes straight to reveal/judge.
         val buffer = ThinkBuffer()
-        var settling = false
-
-        // "the capital" is an answer: it settles into the buffer.
-        assertEquals(ThinkTime.Step.SETTLE, next(ThinkTime.classify("the capital"), buffer.isEmpty(), 10_000L, settling))
-        buffer.append("the capital")
-        settling = true
-
-        // "is canberra" settles too; the buffer joins them.
-        assertEquals(ThinkTime.Step.SETTLE, next(ThinkTime.classify("is canberra"), buffer.isEmpty(), 10_000L, settling))
-        buffer.append("is canberra")
-
-        // Silence while settled reveals the joined text.
-        assertEquals(ThinkTime.Step.REVEAL, next(ThinkTime.classify(""), buffer.isEmpty(), 10_000L, settling))
+        assertEquals(ThinkTime.Step.ACCEPT, next(ThinkTime.classify("the capital is canberra"), buffer.isEmpty(), 10_000L, false))
+        buffer.append("the capital is canberra")
         assertEquals("the capital is canberra", buffer.text())
+        assertEquals(false, ThinkTime.listensAgain(ThinkTime.Step.ACCEPT))
     }
 
     @Test
@@ -39,7 +30,7 @@ class ThinkJoinTest {
         val buffer = ThinkBuffer()
 
         // An answer settles into the buffer.
-        assertEquals(ThinkTime.Step.SETTLE, next(ThinkTime.classify("some answer"), buffer.isEmpty(), 10_000L, settling = false))
+        assertEquals(ThinkTime.Step.ACCEPT, next(ThinkTime.classify("some answer"), buffer.isEmpty(), 10_000L, settling = false))
         buffer.append("some answer")
 
         // A skip is ACT; the caller clears the buffer before leaving the loop.

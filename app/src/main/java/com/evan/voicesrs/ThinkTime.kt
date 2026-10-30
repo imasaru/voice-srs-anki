@@ -99,7 +99,10 @@ object ThinkTime {
     fun settleMs(listenSilenceMs: Long): Long = maxOf(1_500L, listenSilenceMs)
 
     /** What think time does next with the current speech state. */
-    enum class Step { SETTLE, REVEAL, RESTART_QUIET, ACT }
+    enum class Step { ACCEPT, REVEAL, RESTART_QUIET, ACT }
+
+    /** h100: only a quiet restart opens the mic again. ACCEPT reveals and judges with no new listen. */
+    fun listensAgain(step: Step): Boolean = step == Step.RESTART_QUIET
 
     /**
      * Decide the next think-time action from the latest speech [hear] and the
@@ -110,10 +113,11 @@ object ThinkTime {
     fun nextStep(hear: Hear, bufferEmpty: Boolean, remainingMs: Long, settling: Boolean): Step {
         // h98: an own-words listen (letters off) runs to the think deadline, so its answer
         // arrives with remainingMs <= 0. Settle it into the buffer instead of dropping it.
-        if (remainingMs <= 0L) return if (hear == Hear.ANSWER) Step.SETTLE else Step.REVEAL
+        if (remainingMs <= 0L) return if (hear == Hear.ANSWER) Step.ACCEPT else Step.REVEAL
         return when (hear) {
             Hear.REPEAT, Hear.SKIP, Hear.STOP_DRILL, Hear.SHOW_ANSWER -> Step.ACT
-            Hear.ANSWER -> Step.SETTLE
+            // h100: an accepted answer ends think time; no settle listen after it (mic flicker before 'Checking answer').
+            Hear.ANSWER -> Step.ACCEPT
             Hear.EMPTY -> if (settling && !bufferEmpty) Step.REVEAL else Step.RESTART_QUIET
         }
     }

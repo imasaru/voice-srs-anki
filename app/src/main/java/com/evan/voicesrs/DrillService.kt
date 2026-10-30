@@ -325,6 +325,8 @@ class DrillService : Service(), VoiceIo {
     @Volatile private var focusPhase = FocusPolicy.Phase.IDLE
     /** True from a focus-loss action until a RESUME clears it. Blocks re-speak/listen. */
     @Volatile private var focusPaused = false
+    /** h100: sentence index the read-aloud is on (what highlighting shows); -1 = unknown. */
+    @Volatile private var readingIndex = -1
     /** Latch the RESUME callback counts down. */
     @Volatile private var focusWake: CountDownLatch? = null
     /** The built audio-focus request, created lazily once. */
@@ -1211,6 +1213,7 @@ class DrillService : Service(), VoiceIo {
         var reSpeaks = 0
         speechInterrupted = false
         speechSkipped = false
+        readingIndex = -1
         if (focusPaused && !awaitFocusResume()) return
         if (!acquireFocus()) return
         focusPhase = FocusPolicy.Phase.SPEAKING
@@ -1226,6 +1229,7 @@ class DrillService : Service(), VoiceIo {
             if (stopRequested.get() || speechInterrupted || speechSkipped || sessionSilent) return
             for ((i, part) in parts.withIndex()) {
                 if (stopRequested.get() || speechInterrupted || speechSkipped || sessionSilent) break
+                readingIndex = i
                 DrillUi.update(SentenceReading.at(i, part))
                 if (neuralCard) {
                     if (speakOnDevice(part)) Log.i(TAG, "TTS engine=neural card fail; fallback on-device ok")
@@ -1237,9 +1241,13 @@ class DrillService : Service(), VoiceIo {
             DrillUi.update(SentenceReading.cleared())
             focusPhase = FocusPolicy.Phase.IDLE
         }
-        // Cut off by a focus-loss pause: re-read from the start after focus returns (Repeat-style),
-        // at most 3 re-speaks so a stuck focus can't loop forever.
-        while (focusPaused && reSpeaks++ < 3 && awaitFocusResume()) speak(spoken)
+        // Cut off by a focus-loss pause: after focus returns, h100 resumes from the start of the
+        // sentence that was playing (not the whole card); at most 3 re-speaks so a stuck focus can't loop.
+        while (focusPaused && reSpeaks++ < 3 && awaitFocusResume()) {
+            val rest = SentenceReading.resumeText(spoken, readingIndex)
+            Log.i(TAG, "tts resume from sentence ${readingIndex.coerceAtLeast(0)}")
+            speak(rest)
+        }
     }
 
     /** 58E: the whole card in one Edge request; readingIndex follows playback via ReadingTimeline. true = played to the end or the user stopped/skipped it. */
@@ -1261,6 +1269,7 @@ class DrillService : Service(), VoiceIo {
                     val i = ReadingTimeline.sentenceAt(spoken, timed, total, ms)
                     if (i != shown && i in ranges.indices) {
                         shown = i
+                        readingIndex = i
                         DrillUi.update(SentenceReading.at(i, spoken.substring(ranges[i])))
                     }
                 }
@@ -2415,16 +2424,15 @@ class DrillService : Service(), VoiceIo {
                                 stopFromSession()
                                 ThinkResult.Stop
                             }
-                            // Unreachable: nextStep routes ANSWER to SETTLE and EMPTY elsewhere.
+                            // Unreachable: nextStep routes ANSWER to ACCEPT and EMPTY elsewhere.
                             ThinkTime.Hear.ANSWER, ThinkTime.Hear.EMPTY -> ThinkResult.Reveal
                         }
                     }
-                    ThinkTime.Step.SETTLE -> {
+                    ThinkTime.Step.ACCEPT -> {
                         buffer.append(heard)
                         runCatching { DrillUi.update { it.copy(heard = buffer.text()) } }
-                        settling = true
-                        quietListen = true
-                        continue
+                        thinkTranscript = buffer.text()
+                        return ThinkResult.Reveal
                     }
                     ThinkTime.Step.REVEAL -> {
                         thinkTranscript = if (buffer.isEmpty()) null else buffer.text()

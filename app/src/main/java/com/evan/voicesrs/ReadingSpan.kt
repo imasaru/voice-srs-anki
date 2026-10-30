@@ -9,10 +9,16 @@ object ReadingSpan {
     fun pick(blocks: List<String>, sentence: String): Pick? {
         if (sentence.isBlank()) return null
         for ((i, text) in blocks.withIndex()) {
-            val range = SentenceReading.spanIn(text, sentence) ?: continue
+            val range = SentenceReading.strictSpanIn(text, sentence) ?: continue
             return Pick(i, range)
         }
-        return null
+        // h100: no literal match (code read as a paraphrase): best-scoring aligned block.
+        var best: Pick? = null; var bestScore = 0
+        for ((i, text) in blocks.withIndex()) {
+            val (range, score) = SentenceReading.alignedSpan(text, sentence) ?: continue
+            if (score > bestScore) { best = Pick(i, range); bestScore = score }
+        }
+        return best
     }
 
     /** True when the turn for [turnCardId] is the card the drill is reading now. */

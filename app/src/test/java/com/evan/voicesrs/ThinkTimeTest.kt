@@ -107,7 +107,7 @@ class ThinkTimeTest {
 
     @Test
     fun `answer with time left settles`() {
-        assertEquals(ThinkTime.Step.SETTLE, ThinkTime.nextStep(ThinkTime.Hear.ANSWER, bufferEmpty = true, remainingMs = 10_000L, settling = false))
+        assertEquals(ThinkTime.Step.ACCEPT, ThinkTime.nextStep(ThinkTime.Hear.ANSWER, bufferEmpty = true, remainingMs = 10_000L, settling = false))
     }
 
     @Test

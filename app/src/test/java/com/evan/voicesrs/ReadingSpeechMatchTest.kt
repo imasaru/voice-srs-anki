@@ -16,12 +16,12 @@ class ReadingSpeechMatchTest {
     }
 
     @Test
-    fun `b gap - a blank marker sentence does not match the shown text`() {
-        // KNOWN GAP (h80, not fixed here; sanitize is unchanged): "___" is spoken as "blank".
+    fun `b a blank marker sentence now matches the shown text`() {
+        // h80 gap closed by h100's aligned fallback: "___" is spoken as "blank".
         val shown = "The ___ policy hides a column."
         val spoken = AnkiText.sanitizeForSpeech(shown)
         assertEquals("The blank policy hides a column.", spoken)
-        assertNull(ReadingSpan.pick(listOf(shown), spoken))
+        assertEquals("The ___ policy hides a column", ReadingSpan.pick(listOf(shown), spoken)?.let { shown.substring(it.range) })
     }
 
     @Test

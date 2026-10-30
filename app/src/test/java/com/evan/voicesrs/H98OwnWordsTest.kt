@@ -8,8 +8,8 @@ class H98OwnWordsTest {
     @Test
     fun answer_arriving_at_think_deadline_settles_instead_of_being_dropped() {
         // Logcat 12:18:19 JST: stitched own-words listen ended at the deadline, transcript lost.
-        assertEquals(ThinkTime.Step.SETTLE, ThinkTime.nextStep(ThinkTime.Hear.ANSWER, bufferEmpty = true, remainingMs = 0L, settling = false))
-        assertEquals(ThinkTime.Step.SETTLE, ThinkTime.nextStep(ThinkTime.Hear.ANSWER, bufferEmpty = true, remainingMs = -120L, settling = false))
+        assertEquals(ThinkTime.Step.ACCEPT, ThinkTime.nextStep(ThinkTime.Hear.ANSWER, bufferEmpty = true, remainingMs = 0L, settling = false))
+        assertEquals(ThinkTime.Step.ACCEPT, ThinkTime.nextStep(ThinkTime.Hear.ANSWER, bufferEmpty = true, remainingMs = -120L, settling = false))
     }
 
     @Test
