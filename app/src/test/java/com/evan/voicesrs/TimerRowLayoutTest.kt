@@ -45,7 +45,7 @@ class TimerRowLayoutTest {
     }
 
     @Test
-    fun `minus and plus are 48dp and the switch is 48dp min`() {
+    fun `minus and plus are 48dp targets and the switch is natural size`() {
         val minus = elementById(parse("layout", "include_timer_row.xml"), "timerMinus")
         val plus = elementById(parse("layout", "include_timer_row.xml"), "timerPlus")
         val sw = elementById(parse("layout", "include_timer_row.xml"), "timerSwitch")
@@ -54,7 +54,7 @@ class TimerRowLayoutTest {
         assertNotNull(sw)
         assertEquals("48dp", minus!!.getAttribute("android:layout_height"))
         assertEquals("48dp", plus!!.getAttribute("android:layout_height"))
-        assertEquals("48dp", sw!!.getAttribute("android:minHeight"))
+        assertEquals("wrap_content", sw!!.getAttribute("android:layout_height"))
     }
 
     @Test

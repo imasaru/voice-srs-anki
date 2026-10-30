@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- h94c: TimerWrapRow: line1 = icon, elapsed, - value +; label+switch on line1 right if they fit the row width, else wrapped right-aligned on line 2. -->
+<!-- h94c: TimerWrapRow: line1 = icon, elapsed, - value + (48dp targets, 36dp circles); label+switch on line1 right when row content >= 360dp, else line 2 right-aligned. -->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/timerRow"
@@ -47,12 +47,12 @@
                 android:visibility="gone"
                 android:textAppearance="?attr/textAppearanceLabelLarge" />
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/timerMinus"
                 style="@style/Widget.Material3.Button.IconButton.Outlined"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_marginStart="8dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="4dp"
                 android:insetLeft="@dimen/timer_stepper_inset"
                 android:insetTop="@dimen/timer_stepper_inset"
                 android:insetRight="@dimen/timer_stepper_inset"
@@ -79,11 +79,11 @@
                 android:textAppearance="?attr/textAppearanceLabelLarge"
                 android:text="10 min" />
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/timerPlus"
                 style="@style/Widget.Material3.Button.IconButton.Outlined"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:insetLeft="@dimen/timer_stepper_inset"
                 android:insetTop="@dimen/timer_stepper_inset"
                 android:insetRight="@dimen/timer_stepper_inset"

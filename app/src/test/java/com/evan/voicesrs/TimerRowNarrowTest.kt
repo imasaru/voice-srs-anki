@@ -17,7 +17,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** h82 / p82a / R17: narrow split-screen timer row in every real host, at 320-700dp: nothing clipped or overlapping, switch full width at the right edge of line 1, 48dp targets, 36dp visible stepper circles with >= 8dp to the value. */
+/** h82 / p82a / R17 / h94c: timer row in every real host at 320-700dp: nothing clipped or overlapping, switch full width at the right edge (line 1, or line 2 when wrapped), 48dp targets, 36dp visible stepper circles with >= 4dp to the value. */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w320dp-h640dp")
 class TimerRowNarrowTest {
@@ -32,7 +32,7 @@ class TimerRowNarrowTest {
         val row = LayoutInflater.from(ctx).inflate(R.layout.include_timer_row, host, false) as ViewGroup
         host.addView(row)
         row.findViewById<TextView>(R.id.elapsedChip).apply {
-            text = ElapsedChip.format(5_183_000L)
+            text = ElapsedChip.short(5_183_000L)
             visibility = View.VISIBLE
         }
         row.findViewById<TextView>(R.id.timerValue).text = "180 min"
@@ -61,15 +61,30 @@ class TimerRowNarrowTest {
         val row = row()
         val l1 = row.findViewById<ViewGroup>(R.id.timerLine1)
         val l2 = row.findViewById<ViewGroup>(R.id.timerLine2)
-        assertTrue("line 2 is not below line 1", l2.top >= l1.bottom)
-        listOf(R.id.timerIcon, R.id.elapsedChip, R.id.timerSwitchLabel, R.id.timerSwitch)
+        val wrap = row.findViewById<TimerWrapRow>(R.id.timerLines)
+        if (wrap.oneLine) {
+            assertTrue("line 2 shares line 1", l2.top < l1.bottom)
+        } else {
+            assertTrue("line 2 is below line 1", l2.top >= l1.bottom)
+        }
+        listOf(R.id.timerIcon, R.id.elapsedChip, R.id.timerMinus, R.id.timerValue, R.id.timerPlus)
             .forEachIndexed { i, id -> assertEquals("line 1 order", i, l1.indexOfChild(row.findViewById(id))) }
-        listOf(R.id.timerMinus, R.id.timerValue, R.id.timerPlus, R.id.timerSpacer)
+        listOf(R.id.timerSwitchLabel, R.id.timerSwitch)
             .forEachIndexed { i, id -> assertEquals("line 2 order", i, l2.indexOfChild(row.findViewById(id))) }
         val chip = row.findViewById<TextView>(R.id.elapsedChip)
-        assertEquals("Elapsed 1:26:23", chip.text.toString())
+        assertEquals("1:26:23", chip.text.toString())
         assertEquals(1, chip.layout.lineCount)
         assertEquals("elapsed is ellipsized", 0, chip.layout.getEllipsisCount(0))
+        assertSwitchAtRightEdge(row)
+    }
+
+    /** The switch ends its group, and the group sits flush with the row's right padding edge (line 1 or line 2). */
+    private fun assertSwitchAtRightEdge(row: View) {
+        val wrap = row.findViewById<TimerWrapRow>(R.id.timerLines)
+        val l2 = row.findViewById<ViewGroup>(R.id.timerLine2)
+        val sw = row.findViewById<MaterialSwitch>(R.id.timerSwitch)
+        assertEquals("switch not at the end of its group", l2.width, sw.right)
+        assertEquals("switch group not at the right edge", wrap.width - wrap.paddingRight, l2.right)
     }
 
     @Test
@@ -82,7 +97,7 @@ class TimerRowNarrowTest {
             label.text.subSequence(label.layout.getLineStart(it), label.layout.getLineEnd(it)).toString().trim()
         }
         assertTrue("label > 2 lines", label.layout.lineCount <= 2)
-        assertEquals("End drill at goal", lines.joinToString(" "))
+        assertEquals("End at goal", lines.joinToString(" "))
         assertEquals("End drill at goal", row.findViewById<View>(R.id.timerSwitch).contentDescription.toString())
         val value = row.findViewById<TextView>(R.id.timerValue)
         assertEquals(1, value.layout.lineCount)
@@ -97,9 +112,7 @@ class TimerRowNarrowTest {
         val spec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
         sw.measure(spec, spec)
         assertTrue("switch ${laidOut}px < natural ${sw.measuredWidth}px", laidOut >= sw.measuredWidth)
-        val l1 = row.findViewById<ViewGroup>(R.id.timerLine1)
-        assertTrue("switch not at the right edge", sw.right == l1.width - l1.paddingRight)
-        assertTrue("switch ${sw.height} < 48dp", sw.height >= dp(48))
+        assertSwitchAtRightEdge(row)
     }
 
     @Test
@@ -109,7 +122,7 @@ class TimerRowNarrowTest {
             val v = row.findViewById<View>(id)
             assertTrue("${name(v)} ${v.width}x${v.height} < 48dp", v.width >= dp(48) && v.height >= dp(48))
         }
-        assertTrue(row.findViewById<View>(R.id.timerLine2).height >= dp(48))
+        assertTrue("line1 holds the 48dp steppers", row.findViewById<ViewGroup>(R.id.timerLine1).height >= dp(48))
     }
 
     @Test
@@ -123,8 +136,8 @@ class TimerRowNarrowTest {
         assertEquals("visible circle", dp(36), plus.width - 2 * inset)
         val gapL = value.left - (minus.right - inset)
         val gapR = (plus.left + inset) - value.right
-        assertTrue("gap minus->value ${gapL}px < 8dp", gapL >= dp(8))
-        assertTrue("gap value->plus ${gapR}px < 8dp", gapR >= dp(8))
+        assertTrue("gap minus->value ${gapL}px < 4dp", gapL >= dp(4))
+        assertTrue("gap value->plus ${gapR}px < 4dp", gapR >= dp(4))
         assertEquals("180 min", value.text.toString())
         assertEquals(1, value.layout.lineCount)
         assertEquals("value ellipsized", 0, value.layout.getEllipsisCount(0))
@@ -147,14 +160,14 @@ class TimerRowNarrowTest {
     fun `g deck card inset at w411dp`() {
         val row = row(48)
         val l1 = row.findViewById<ViewGroup>(R.id.timerLine1)
-        assertNoClipOrOverlap(row.findViewById(R.id.timerLines))
+        val wrap = row.findViewById<TimerWrapRow>(R.id.timerLines)
+        assertNoClipOrOverlap(wrap)
         val sw = row.findViewById<MaterialSwitch>(R.id.timerSwitch)
-        assertTrue("switch not at right edge", sw.right == l1.width - l1.paddingRight)
-        // idle case: elapsedChip GONE -> icon and switch both on line 1
-        row.findViewById<View>(R.id.elapsedChip).visibility = View.GONE
-        assertTrue("icon not on line 1", l1.indexOfChild(row.findViewById(R.id.timerIcon)) >= 0)
-        assertTrue("switch not on line 1", l1.indexOfChild(sw) >= 0)
-        assertEquals("switch not at right edge (idle)", sw.right, l1.width - l1.paddingRight)
+        assertSwitchAtRightEdge(row)
+        // row content at w411 with 48dp host sides is < 360dp -> label+switch wrap to line 2
+        assertTrue("deck inset row should wrap", !wrap.oneLine)
+        assertTrue("switch not on line 2", row.findViewById<ViewGroup>(R.id.timerLine2).indexOfChild(sw) >= 0)
+        assertTrue("line 1 lost the + button", l1.indexOfChild(row.findViewById(R.id.timerPlus)) >= 0)
     }
 
     // Hosts of include_timer_row (grep app/src/main/res):
@@ -178,7 +191,7 @@ class TimerRowNarrowTest {
         val chip = row.findViewById<TextView>(R.id.elapsedChip)
         val sw = row.findViewById<MaterialSwitch>(R.id.timerSwitch)
         if (drilling) {
-            chip.text = ElapsedChip.format(5_183_000L)
+            chip.text = ElapsedChip.short(5_183_000L)
             chip.visibility = View.VISIBLE
             row.findViewById<TextView>(R.id.timerValue).text = "180 min"
             sw.isChecked = true
@@ -190,11 +203,15 @@ class TimerRowNarrowTest {
 
     private fun verifyRow(row: ViewGroup) {
         val l1 = row.findViewById<ViewGroup>(R.id.timerLine1)
+        val wrap = row.findViewById<TimerWrapRow>(R.id.timerLines)
         val sw = row.findViewById<MaterialSwitch>(R.id.timerSwitch)
         ViewClipCheck.assertNoChildClipped(row)
-        assertTrue("switch not at right edge", sw.right == l1.width - l1.paddingRight)
+        assertSwitchAtRightEdge(row)
         assertTrue("icon not in line1", l1.indexOfChild(row.findViewById(R.id.timerIcon)) >= 0)
-        assertTrue("switch not in line1", l1.indexOfChild(sw) >= 0)
+        val l2 = row.findViewById<ViewGroup>(R.id.timerLine2)
+        assertTrue("switch not in line2 group", l2.indexOfChild(sw) >= 0)
+        if (wrap.oneLine) assertTrue("one line: switch group not beside line 1", l2.top < l1.bottom && l2.left >= l1.right)
+        else assertTrue("wrap: switch group not below line 1", l2.top >= l1.bottom)
     }
 
     private fun hostTest() {

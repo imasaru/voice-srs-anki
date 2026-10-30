@@ -130,14 +130,14 @@ class MainActivity : AppCompatActivity() {
         val chip = elapsedChip ?: return
         val state = DrillUi.state
         if (ElapsedChip.visible(state.drillRunning)) {
-            chip.text = ElapsedChip.format(
-                ElapsedChip.elapsed(
-                    state.elapsedStartMs,
-                    state.elapsedPausedTotalMs,
-                    state.elapsedPausedSinceMs,
-                    SystemClock.elapsedRealtime()
-                )
+            val ms = ElapsedChip.elapsed(
+                state.elapsedStartMs,
+                state.elapsedPausedTotalMs,
+                state.elapsedPausedSinceMs,
+                SystemClock.elapsedRealtime()
             )
+            chip.text = ElapsedChip.short(ms)
+            chip.contentDescription = ElapsedChip.format(ms)
             chip.visibility = View.VISIBLE
             elapsedHandler.postDelayed(elapsedRunnable, 1_000L)
         } else {

@@ -22,6 +22,9 @@ object ElapsedChip {
         return "$PREFIX$hours:${pad(minutes)}:${pad(seconds)}"
     }
 
+    /** h94c: visible chip text without the prefix ("1:26:23"); [format] stays the spoken description. */
+    fun short(ms: Long): String = format(ms).removePrefix(PREFIX)
+
     /** The chip is shown only while a drill session is running. */
     fun visible(drillRunning: Boolean): Boolean = drillRunning
 

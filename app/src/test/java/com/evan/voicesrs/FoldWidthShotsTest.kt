@@ -124,7 +124,7 @@ class FoldWidthShotsTest {
         root.findViewById<TextView>(R.id.deckName).text = "Databricks DEA"
         root.findViewById<TextView>(R.id.dueCount).text = app.getString(R.string.due_format, 189)
         root.findViewById<TextView>(R.id.elapsedChip).apply {
-            text = ElapsedChip.format(5_183_000L) // "Elapsed 1:26:23"
+            text = ElapsedChip.short(5_183_000L) // "1:26:23" (h94c)
             visibility = View.VISIBLE
         }
         root.findViewById<TextView>(R.id.timerValue).text = "180 min"
