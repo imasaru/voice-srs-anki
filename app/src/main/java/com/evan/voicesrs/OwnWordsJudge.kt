@@ -23,7 +23,14 @@ object OwnWordsJudge {
         companion object {
             fun of(raw: String?): Rating? {
                 val w = raw?.trim()?.lowercase() ?: return null
-                return values().firstOrNull { it.word == w }
+                values().firstOrNull { it.word == w }?.let { return it }
+                // h98: the small judge model sometimes answers off-rubric ("bad", "correct").
+                return when (w) {
+                    "bad", "wrong", "incorrect", "fail", "poor" -> AGAIN
+                    "partial", "partly", "partially correct", "close" -> HARD
+                    "correct", "right", "ok", "fine" -> GOOD
+                    else -> null
+                }
             }
         }
     }

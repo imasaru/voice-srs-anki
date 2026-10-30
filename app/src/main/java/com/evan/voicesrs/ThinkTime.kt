@@ -108,7 +108,9 @@ object ThinkTime {
      * buffered reveals it; otherwise restart the mic quietly.
      */
     fun nextStep(hear: Hear, bufferEmpty: Boolean, remainingMs: Long, settling: Boolean): Step {
-        if (remainingMs <= 0L) return Step.REVEAL
+        // h98: an own-words listen (letters off) runs to the think deadline, so its answer
+        // arrives with remainingMs <= 0. Settle it into the buffer instead of dropping it.
+        if (remainingMs <= 0L) return if (hear == Hear.ANSWER) Step.SETTLE else Step.REVEAL
         return when (hear) {
             Hear.REPEAT, Hear.SKIP, Hear.STOP_DRILL, Hear.SHOW_ANSWER -> Step.ACT
             Hear.ANSWER -> Step.SETTLE
