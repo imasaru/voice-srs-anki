@@ -25,11 +25,27 @@ class FocusPolicyTest {
     }
 
     @Test
-    fun b_can_duck_while_listening_aborts_the_listen() {
+    fun b_can_duck_while_listening_is_ignored() {
         val s = state()
         val a = FocusPolicy.onChange(FocusPolicy.LOSS_TRANSIENT_CAN_DUCK, Phase.LISTENING, s, 0)
-        assertEquals(Action.ABORT_LISTEN, a)
-        assertTrue(s.transientLoss)
+        assertEquals(Action.NONE, a)
+        assertFalse(s.transientLoss)
+    }
+
+    @Test
+    fun h97_recognizer_transient_focus_grab_does_not_abort_or_drop_listen() {
+        // Logcat 10-30 12:04:34: startListening -> onAudioFocusChange(-2) from speech service -> (1).
+        val s = state()
+        assertEquals(Action.NONE, FocusPolicy.onChange(FocusPolicy.LOSS_TRANSIENT, Phase.LISTENING, s, 100))
+        assertEquals(Action.NONE, FocusPolicy.onChange(FocusPolicy.GAIN, Phase.LISTENING, s, 220))
+        assertFalse(s.transientLoss)
+        assertEquals(0L, s.lostAt)
+        assertTrue(FocusPolicy.shouldGrade(s.lostAt, 500))
+    }
+
+    @Test
+    fun h97_permanent_loss_while_listening_still_aborts() {
+        assertEquals(Action.ABORT_LISTEN, FocusPolicy.onChange(FocusPolicy.LOSS, Phase.LISTENING, state(), 100))
     }
 
     @Test
@@ -42,11 +58,11 @@ class FocusPolicyTest {
     }
 
     @Test
-    fun c_gain_after_transient_loss_while_listening_resumes() {
+    fun c_gain_after_transient_loss_while_listening_is_a_noop() {
         val s = state()
         FocusPolicy.onChange(FocusPolicy.LOSS_TRANSIENT, Phase.LISTENING, s, 100)
         val a = FocusPolicy.onChange(FocusPolicy.GAIN, Phase.LISTENING, s, 200)
-        assertEquals(Action.RESUME, a)
+        assertEquals(Action.NONE, a)
     }
 
     @Test

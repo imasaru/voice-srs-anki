@@ -23,6 +23,10 @@ object FocusPolicy {
     fun onChange(change: Int, phase: Phase, state: State, now: Long): Action {
         when (change) {
             LOSS_TRANSIENT, LOSS_TRANSIENT_CAN_DUCK -> {
+                // h97 hotfix: the speech service (com.google.android.tts TNG_TRANSCRIPTION) takes
+                // transient focus itself right after startListening. Treating that as a loss
+                // aborted every listen and looped. Ignore transient losses while listening.
+                if (phase == Phase.LISTENING) return Action.NONE
                 state.transientLoss = true
                 state.lostForGood = false
                 state.lostAt = now
