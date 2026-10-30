@@ -291,7 +291,7 @@ class EdgeSpeaker(private val context: Context) {
                 if (System.nanoTime() > deadline) return false
                 try {
                     runCatching { onPosition(player.currentPosition.toLong(), player.duration.toLong()) }
-                    latch.await(200, TimeUnit.MILLISECONDS)
+                    latch.await(POSITION_POLL_MS, TimeUnit.MILLISECONDS)
                 } catch (_: InterruptedException) {
                     try { player.stop() } catch (_: Exception) {}
                     Thread.currentThread().interrupt()
@@ -320,6 +320,8 @@ class EdgeSpeaker(private val context: Context) {
     }
 
     companion object {
+        /** h99: position poll for the read-aloud highlight (was 200 ms, visible lag). */
+        const val POSITION_POLL_MS = 40L
         @Volatile
         var active: MediaPlayer? = null
 

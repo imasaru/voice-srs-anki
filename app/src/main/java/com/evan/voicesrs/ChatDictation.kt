@@ -76,7 +76,7 @@ class ChatDictation(private val context: Context) {
             override fun onEndOfSpeech() {}
             override fun onEvent(eventType: Int, params: Bundle) {}
         })
-        val silence = ListenWindow.DEFAULT_SILENCE_MS.toLong()
+        val silence = SpokenLetter.silenceExtra(ListenWindow.DEFAULT_SILENCE_MS.toLong())
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.US.toString())
@@ -84,7 +84,7 @@ class ChatDictation(private val context: Context) {
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, silence)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, silence)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, silence.toLong())
         }
         try {
             created.startListening(intent)

@@ -21,6 +21,9 @@ package com.evan.voicesrs
 object SpokenLetter {
     const val MAX_RESULTS = 5
     const val LANGUAGE = "en-US"
+    /** h99: COMPLETE_SILENCE_LENGTH extra as Int; Google's service logged "expected Integer but value
+     * was a java.lang.Long. The default value 0 was returned." on every listen. */
+    fun silenceExtra(ms: Long): Int = ms.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
     /** The offline model drops bare letters. Online recognition stays preferred. */
     const val PREFER_OFFLINE = false
     const val HEARD_PREFIX = "Heard:"

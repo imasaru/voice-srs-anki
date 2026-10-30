@@ -2625,12 +2625,12 @@ class DrillService : Service(), VoiceIo {
             AnkiText.stripHtml(questionHtml)
         }
         val judgeInput = OwnWordsJudge.judgeInput(transcript, lastFinals)
-        val body = OwnWordsJudge.requestBody(cfg.decisionModel, question, correctAnswer, judgeInput, strictness)
-        val attempt = OwnWordsJudge.judgeWithRetry({ stopRequested.get() || destroyed }) {
+        val attempt = OwnWordsJudge.judgeWithReminder({ stopRequested.get() || destroyed }) { previous ->
+            val body = OwnWordsJudge.requestBody(cfg.decisionModel, question, correctAnswer, judgeInput, strictness, previous)
             AiClient().postDecision(decisionBase, cfg.aiApiKey, body) { stopRequested.get() || destroyed }
         }
         val verdict = attempt.verdict
-        Log.i(TAG, "own-words judge tries=${attempt.tries} raw=${OwnWordsJudge.rawSnippet(attempt.raw)}")
+        Log.i(TAG, "own-words judge tries=${attempt.tries} content=${OwnWordsJudge.contentForLog(attempt.raw)}")
         when (verdict) {
             is OwnWordsJudge.Verdict.Graded -> {
                 val startedAfter = if (answerWindowStartMs > 0L && answerSpeechStartMs >= answerWindowStartMs) {
@@ -3559,7 +3559,9 @@ class DrillService : Service(), VoiceIo {
             return
         }
         val waitMs = listenWaitMs
-        val silenceMs = listenSilenceMs.toLong()
+        // h99: Google's recogniser reads this as Integer; a Long was ignored (default 0).
+        val silenceMs = SpokenLetter.silenceExtra(listenSilenceMs.toLong())
+        val possiblyMs = listenSilenceMs.toLong()
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, SpokenLetter.LANGUAGE)
@@ -3568,7 +3570,7 @@ class DrillService : Service(), VoiceIo {
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, SpokenLetter.MAX_RESULTS)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, silenceMs)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, silenceMs)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, possiblyMs)
         }
         if (!listenExtrasLogged) {
             listenExtrasLogged = true

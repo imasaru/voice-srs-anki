@@ -32,7 +32,7 @@ class OwnWordsJudgeTest {
         assertEquals(0, json.getInt("temperature"))
         assertEquals(160, json.getInt("max_tokens"))
         assertFalse(json.getJSONObject("chat_template_kwargs").getBoolean("enable_thinking"))
-        assertEquals("json_object", json.getJSONObject("response_format").getString("type"))
+        assertEquals("json_schema", json.getJSONObject("response_format").getString("type"))
 
         val messages = json.getJSONArray("messages")
         assertEquals(2, messages.length())

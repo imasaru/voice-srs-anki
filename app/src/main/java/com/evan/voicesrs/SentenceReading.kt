@@ -21,6 +21,26 @@ object SentenceReading {
         val words = sentence.split(Regex("\\s+")).filter { it.isNotEmpty() }
         if (words.isEmpty()) return null
         val pattern = Regex(words.joinToString("\\s+") { Regex.escape(it) })
-        return pattern.find(shown)?.range
+        pattern.find(shown)?.range?.let { return it }
+        return looseSpan(shown, words)
+    }
+
+    /** Spoken symbol words the display shows as a character (spark dot executor = spark.executor). */
+    private val SYMBOL = mapOf("dot" to ".", "slash" to "/", "underscore" to "_", "dash" to "-",
+        "hyphen" to "-", "colon" to ":", "equals" to "=", "plus" to "+", "star" to "*", "at" to "@")
+    private const val SEP = "[\\s.;,:()\\[\\]\"'/_=+*-]*"
+
+    /** h99 fallback: case-insensitive, punctuation-insensitive word match, symbol words optional.
+     * Q10: spoken "spark dot executor dot memory" vs shown `spark.executor.memory`; options read
+     * with ". " where the card shows "; ". */
+    private fun looseSpan(shown: String, words: List<String>): IntRange? {
+        val cores = words.map { it.trim { c -> !c.isLetterOrDigit() } }.filter { it.isNotEmpty() }
+        if (cores.isEmpty()) return null
+        val body = cores.joinToString(SEP) { w ->
+            val sym = SYMBOL[w.lowercase()]
+            if (sym != null) "(?:${Regex.escape(w)}|${Regex.escape(sym)})?" else Regex.escape(w)
+        }
+        val m = Regex("(?<![\\p{L}\\p{N}])$body(?![\\p{L}\\p{N}])", RegexOption.IGNORE_CASE).find(shown) ?: return null
+        return m.range
     }
 }

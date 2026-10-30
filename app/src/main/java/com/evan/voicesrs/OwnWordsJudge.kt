@@ -95,8 +95,35 @@ object OwnWordsJudge {
         "were heard clearly; if those words name a different choice, or name nothing in the question, rate it again. " +
         "Rate the answer as the correct choice because its words match it, not because it is the only choice that fits."
 
+    /** h99: json_object mode gave `{ }` or `{"again": ...}` on 11/12 real calls; spell out the shape. */
+    const val FORMAT_LINE =
+        "The rating must be exactly one of: again, hard, good, easy (lowercase). " +
+        "Never use other words such as bad, wrong, correct or partial. " +
+        "Example: correct answer 'Delta Lake time travel', learner said 'time travel in delta' -> " +
+        "{\"rating\": \"good\", \"reason\": \"Names time travel on Delta.\"} " +
+        "Example: correct answer 'Job cluster', learner said 'be nice' -> " +
+        "{\"rating\": \"again\", \"reason\": \"Unrelated to the question.\"}"
+
+    /** Second-try reminder after an unreadable reply. */
+    const val REMINDER =
+        "Your previous reply could not be read. Reply with only " +
+        "{\"rating\": \"again|hard|good|easy\", \"reason\": \"...\"} using one of those four words."
+
     fun systemPrompt(s: Strictness): String =
-        "$RUBRIC ${strictnessLine(s)} $SHORT_FORM_LINE $SOUND_ALIKE_LINE $SOUND_ALIKE_GUARD $ACRONYM_LINE $NBEST_LINE"
+        "$RUBRIC ${strictnessLine(s)} $SHORT_FORM_LINE $SOUND_ALIKE_LINE $SOUND_ALIKE_GUARD $ACRONYM_LINE $NBEST_LINE $FORMAT_LINE"
+
+    /** h99: strict json_schema with a rating enum (oMLX honours it: 12/12 vs 1/12 with json_object). */
+    fun responseFormat(): JSONObject {
+        val props = JSONObject()
+            .put(QUESTION_ID, JSONObject().put("type", "string")
+                .put("enum", JSONArray(Rating.values().map { it.word })))
+            .put(REASON_FIELD, JSONObject().put("type", "string"))
+        val schema = JSONObject().put("type", "object").put("properties", props)
+            .put("required", JSONArray(listOf(QUESTION_ID, REASON_FIELD)))
+            .put("additionalProperties", false)
+        return JSONObject().put("type", "json_schema").put("json_schema",
+            JSONObject().put("name", "judge").put("strict", true).put("schema", schema))
+    }
 
     sealed class Verdict {
         data class Graded(
@@ -147,7 +174,8 @@ object OwnWordsJudge {
         question: String,
         correctAnswer: String,
         userAnswer: String,
-        strictness: Strictness = Strictness.DEFAULT
+        strictness: Strictness = Strictness.DEFAULT,
+        previousReply: String? = null
     ): JSONObject {
         val user = buildString {
             appendLine("Question: $question")
@@ -162,12 +190,16 @@ object OwnWordsJudge {
         val messages = JSONArray()
             .put(JSONObject().put("role", "system").put("content", systemPrompt(strictness)))
             .put(JSONObject().put("role", "user").put("content", user))
+        if (previousReply != null) {
+            messages.put(JSONObject().put("role", "assistant").put("content", previousReply))
+                .put(JSONObject().put("role", "user").put("content", REMINDER))
+        }
         return JSONObject()
             .put("model", model)
             .put("temperature", 0)
             .put("max_tokens", MAX_TOKENS)
             .put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
-            .put("response_format", JSONObject().put("type", "json_object"))
+            .put("response_format", responseFormat())
             .put("messages", messages)
     }
 
@@ -192,8 +224,9 @@ object OwnWordsJudge {
         question: String,
         correctAnswer: String,
         userAnswer: String,
-        strictness: Strictness = Strictness.DEFAULT
-    ): String = requestJson(model, question, correctAnswer, userAnswer, strictness).toString()
+        strictness: Strictness = Strictness.DEFAULT,
+        previousReply: String? = null
+    ): String = requestJson(model, question, correctAnswer, userAnswer, strictness, previousReply).toString()
 
     /**
      * Parse an OpenAI chat completion. Reads `choices[0].message.content`, takes
@@ -203,9 +236,32 @@ object OwnWordsJudge {
      */
     fun parse(body: String): Verdict {
         val content = responseContent(body) ?: return Verdict.Fallback
-        val obj = jsonBlock(content) ?: return Verdict.Fallback
-        val rating = Rating.of(obj.optString(QUESTION_ID, "")) ?: return Verdict.Fallback
-        val reason = obj.optString(REASON_FIELD, "").trim().replace(Regex("\\s+"), " ").take(REASON_MAX)
+        return parseContent(content)
+    }
+
+    private val RATING_KEYS = listOf(QUESTION_ID, "grade", "score", "verdict")
+    private val RUBRIC_WORD = Regex("\\b(again|hard|good|easy)\\b", RegexOption.IGNORE_CASE)
+
+    /** h99 tolerant read of the model text: fences stripped, first {...}, case-insensitive
+     * rating/grade/score/verdict, a rubric word used as the key, then a rubric word in plain text. */
+    fun parseContent(content: String): Verdict {
+        val text = content.replace(Regex("```(?:json)?", RegexOption.IGNORE_CASE), "").trim()
+        val obj = jsonBlock(text)
+        var rating: Rating? = null
+        var reason = ""
+        if (obj != null) {
+            val lower = obj.keys().asSequence().associateBy { it.lowercase().trim() }
+            reason = lower[REASON_FIELD]?.let { obj.optString(it, "") }.orEmpty()
+            rating = RATING_KEYS.firstNotNullOfOrNull { k -> lower[k]?.let { Rating.of(obj.optString(it, "")) } }
+            if (rating == null && RATING_KEYS.none { it in lower }) {
+                // Seen live: {"again": "B. ...", "reason": ...}: the rubric word became the key.
+                rating = lower.keys.firstNotNullOfOrNull { k -> Rating.values().firstOrNull { it.word == k } }
+            }
+        } else {
+            rating = RUBRIC_WORD.find(text)?.let { Rating.of(it.value) }
+        }
+        rating ?: return Verdict.Fallback
+        reason = reason.trim().replace(Regex("\\s+"), " ").take(REASON_MAX)
         return Verdict.Graded(ease = rating.ease, rating = rating, reason = reason)
     }
 
@@ -232,7 +288,7 @@ object OwnWordsJudge {
         "strictness=${strictness.key} startedMs=${startedAfterMs ?: "unknown"} " +
         "easyLimitMs=${easyLimitMs(windowMs)} windowMs=$windowMs input=$input"
 
-    const val RAW_LOG_MAX = 120
+    const val RAW_LOG_MAX = 600
     private val SECRET = Regex("(?i)(bearer\\s+|sk-|api[_-]?key[\"=: ]+|token[\"=: ]+)[A-Za-z0-9._-]+")
 
     /** First [RAW_LOG_MAX] chars of a judge reply for the log, whitespace collapsed, keys redacted. */
@@ -250,14 +306,19 @@ object OwnWordsJudge {
         if (error != null) error is java.io.IOException && error !is AiHttpException else true
 
     /** At most two tries. Bad reply -> own_words_unreadable; any exception -> own_words_fallback. */
-    fun judgeWithRetry(stopped: () -> Boolean, post: () -> String): Attempt {
+    fun judgeWithRetry(stopped: () -> Boolean, post: () -> String): Attempt =
+        judgeWithReminder(stopped) { _ -> post() }
+
+    /** [post] gets the previous unreadable reply text on the second try (null on the first). */
+    fun judgeWithReminder(stopped: () -> Boolean, post: (previousReply: String?) -> String): Attempt {
         var raw: String? = null
         var error: Exception? = null
         var tries = 0
         while (tries < 2) {
             tries++
+            val previous = raw?.let { responseContent(it) ?: it }
             raw = null; error = null
-            try { raw = post() } catch (e: Exception) { error = e }
+            try { raw = post(previous) } catch (e: Exception) { error = e }
             val v = result(raw, error)
             if (v is Verdict.Graded) return Attempt(v, raw, null, null, tries)
             if (tries >= 2 || stopped() || !retryable(raw, error)) break
@@ -324,6 +385,9 @@ object OwnWordsJudge {
         }
         return source.trim()
     }
+
+    /** Model text for the log (falls back to the raw body). */
+    fun contentForLog(body: String?): String = rawSnippet(body?.let { responseContent(it) ?: it })
 
     /** `choices[0].message.content` from an OpenAI-style chat completion. */
     private fun responseContent(body: String): String? {

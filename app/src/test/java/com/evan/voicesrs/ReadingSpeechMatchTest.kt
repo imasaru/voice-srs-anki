@@ -25,10 +25,10 @@ class ReadingSpeechMatchTest {
     }
 
     @Test
-    fun `c gap - a collapsed symbol run does not match the shown text`() {
-        // KNOWN GAP (h80): "----" is spoken as a space, so the words around it no longer line up.
+    fun `c a collapsed symbol run now matches the shown text`() {
+        // h80 gap closed by h99's punctuation-tolerant fallback: "----" spoken as a space still lines up.
         val shown = "Step one----step two."
         val spoken = AnkiText.sanitizeForSpeech(shown)
-        assertNull(ReadingSpan.pick(listOf(shown), spoken))
+        assertEquals(0..19, ReadingSpan.pick(listOf(shown), spoken)?.range)
     }
 }
