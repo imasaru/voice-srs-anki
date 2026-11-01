@@ -3863,8 +3863,12 @@ class DrillService : Service(), VoiceIo {
             }
             if (raw.any { it.isNotBlank() }) listenSpeechDetected = true
             if (absorbAnswer(raw, allowUnmatched = true)) return
-            val text = raw.firstOrNull().orEmpty()
-            Log.i(TAG, "listen ok: RESULT")
+            val usedPartial = raw.none { it.isNotBlank() } && partials.any { it.isNotBlank() }
+            val text = ListenWindow.finalOrPartial(raw, partials)
+            if (usedPartial) {
+                lastFinals = partials.map { it.trim() }.filter { it.isNotEmpty() }
+                Log.i(TAG, "listen ok: EMPTY_FINAL kept partial")
+            } else Log.i(TAG, "listen ok: RESULT")
             Log.d(TAG, "heard: $text")
             try { recognizer?.setRecognitionListener(null) } catch (_: Exception) {}
             finishListen(text)
