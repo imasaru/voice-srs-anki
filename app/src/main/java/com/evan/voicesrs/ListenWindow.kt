@@ -34,6 +34,12 @@ object ListenWindow {
         if (error != ERROR_NO_MATCH || !spoke) return null
         return partials.firstOrNull { it.isNotBlank() }?.trim()
     }
+
+    /** First non-blank final; else first non-blank partial, trimmed; else "". */
+    fun finalOrPartial(finals: List<String>, partials: List<String>): String {
+        finals.firstOrNull { it.isNotBlank() }?.let { return it }
+        return partials.firstOrNull { it.isNotBlank() }?.trim() ?: ""
+    }
     const val SILENT_NOTICE = "Didn't hear a grade, switched to silent"
     const val ATTEMPTS_LABEL = "Listen attempts"
     const val ATTEMPTS_HELP = "How many times to listen before switching to silent."
