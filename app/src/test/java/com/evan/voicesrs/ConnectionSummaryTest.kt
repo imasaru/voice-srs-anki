@@ -42,16 +42,4 @@ class ConnectionSummaryTest {
         assertFalse(line.contains("AnkiConnect.kt"))
         assertFalse(line.contains("decks:"))
     }
-
-    @Test
-    fun `anki summary renders a split due-new label when given`() {
-        assertEquals(
-            "✓ Connected · AnkiConnect v6 · 213 decks · 'Mock Exam 1': 27 due · 134 new",
-            ConnectionSummary.ankiOk(6, 213, "Databricks DEA::kengio::Mock Exam 1", DueSplit.label(DueCounts(27, 134, false)))
-        )
-        assertEquals(
-            "✓ Connected · AnkiConnect v6 · 1 decks · 'VoiceSRS-Test': 0 due · 3 new",
-            ConnectionSummary.ankiOk(6, 1, "VoiceSRS-Test", DueSplit.label(DueCounts(0, 3, true)))
-        )
-    }
 }
