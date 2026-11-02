@@ -74,6 +74,13 @@ object ListenWindow {
 
     fun clampAttempts(n: Int): Int = n.coerceIn(MIN_ATTEMPTS, MAX_ATTEMPTS)
 
+    /** h105b: answer-listen silence floor. Answer listens wait longer (up to
+     *  [ANSWER_SILENCE_MS]) so a brief pause doesn't kill the mic mid-sentence; a
+     *  configured silence already longer than the floor is kept as-is. Non-answer
+     *  listens (rating/command) keep [configuredMs] unchanged. */
+    fun silenceFor(configuredMs: Long, answerListen: Boolean): Long =
+        if (answerListen) configuredMs.coerceAtLeast(ANSWER_SILENCE_MS) else configuredMs
+
     /**
      * The new int key wins. Otherwise the old "listen once more" switch maps
      * on to 2 and off to 1. Neither key means [DEFAULT_ATTEMPTS].
