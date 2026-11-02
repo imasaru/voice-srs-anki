@@ -35,6 +35,12 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) : Stu
     companion object {
         private const val TAG = "AnkiConnect"
         private const val VERSION = 6
+        /** Tag applied by "Flag card" (h121b) to mark a note for follow-up review. */
+        const val FLAG_TAG = "voice-srs-flag"
+
+        /** Payload for addTags: the note ids plus the [FLAG_TAG] tag. */
+        fun addTagsParams(notes: List<Long>): Map<String, Any?> =
+            mapOf("notes" to notes, "tags" to FLAG_TAG)
         private const val CONNECT_TIMEOUT_MS = 15_000
         private const val READ_TIMEOUT_MS = 30_000
 
@@ -396,6 +402,17 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) : Stu
             if (id != 0L) out += id
         }
         return out
+    }
+
+    /**
+     * Tag the note behind [cardId] with [FLAG_TAG] ("voice-srs-flag") so it shows in a
+     * follow-up review deck. No scheduling change. Returns true when Anki accepted it.
+     */
+    fun flagCard(cardId: Long): Boolean {
+        val notes = cardsToNotes(listOf(cardId))
+        if (notes.isEmpty()) return false
+        post("addTags", addTagsParams(notes))
+        return true
     }
 
     fun addNote(

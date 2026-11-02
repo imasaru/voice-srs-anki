@@ -52,7 +52,9 @@ class ChatPane(
                 list.context.getString(R.string.bookmark_saved),
                 android.widget.Toast.LENGTH_SHORT
             ).show()
-        }
+        },
+        onAskAbout = { text -> askAboutText(text) },
+        onFlag = { turn -> flagCard(turn) }
     )
     private val tracker = ReadReceiptTracker(now = { SystemClock.elapsedRealtime() })
     private val follow = ChatFollow()
@@ -186,6 +188,51 @@ class ChatPane(
         if (pos >= 0) adapter.notifyItemChanged(pos, ChatAdapter.PAYLOAD_READING)
         val live = adapter.currentList.indexOfLast { it is ChatRow.Live }
         if (live >= 0) adapter.notifyItemChanged(live, ChatAdapter.PAYLOAD_READING)
+    }
+
+    /** h121b: "Ask about this" — put the quote into the chat input and select it, never send. */
+    private fun askAboutText(text: String) {
+        val input = findChatInput() ?: run {
+            android.widget.Toast.makeText(
+                list.context,
+                list.context.getString(R.string.chat_ask_unavailable),
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+        input.setText(text)
+        input.setSelection(text.length)
+        input.requestFocus()
+    }
+
+    /** The chat input EditText, found via the host Activity or the list's root view. */
+    private fun findChatInput(): android.widget.EditText? {
+        (list.context as? android.app.Activity)?.let {
+            val v = it.findViewById<android.widget.EditText>(R.id.chatInput)
+            if (v != null) return v
+        }
+        return list.rootView.findViewById<android.widget.EditText>(R.id.chatInput)
+    }
+
+    /** h121b: "Flag card" — tag the note behind the card on the Anki server (off the main thread). */
+    private fun flagCard(turn: ReviewTurn) {
+        val app = list.context.applicationContext
+        Thread({
+            val ok = try {
+                val cfg = Prefs.load(app)
+                AnkiConnect(cfg.url, cfg.apiKey).flagCard(turn.cardId)
+            } catch (e: Exception) {
+                false
+            }
+            val msg = if (ok) R.string.chat_flagged else R.string.chat_flag_failed
+            handler.post {
+                android.widget.Toast.makeText(
+                    app,
+                    app.getString(msg),
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        }, "flag-card").start()
     }
 
     private fun render() {

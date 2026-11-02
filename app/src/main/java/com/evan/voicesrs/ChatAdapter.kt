@@ -24,7 +24,11 @@ class ChatAdapter(
     private val onRetry: (Long) -> Unit,
     private val onThread: (Long) -> Unit,
     private val onSpeakSection: (Long, Int, String) -> Unit = { _, _, _ -> },
-    private val onBookmark: (ReviewTurn) -> Unit = {}
+    private val onBookmark: (ReviewTurn) -> Unit = {},
+    /** h121b: "Ask about this" — the bubble's quoted text dropped into the chat input. */
+    private val onAskAbout: (String) -> Unit = {},
+    /** h121b: "Flag card" — tag the note behind this turn's card for follow-up review. */
+    private val onFlag: (ReviewTurn) -> Unit = {}
 ) : ListAdapter<ChatRow, RecyclerView.ViewHolder>(DIFF) {
 
     private val cardOpen = HashSet<Long>()
@@ -190,9 +194,11 @@ class ChatAdapter(
                 cardStem.ellipsize = if (expanded) null else TextUtils.TruncateAt.END
             }
             CardFaceBinder.bindPills(userAnswer, userPill, turn.transcript, turn.ease, onRegrade, userLabel)
-            BubbleMenu.attach(card)
-            BubbleMenu.attach(itemView.findViewById(R.id.userBubble), userAnswer)
-            BubbleMenu.attach(ai, body)
+            var onFlagHere: (() -> Unit)? = null
+            if (turn.cardId != 0L) onFlagHere = { onFlag(turn) }
+            BubbleMenu.attach(card, onAskAbout, onFlagHere)
+            BubbleMenu.attach(itemView.findViewById(R.id.userBubble), onAskAbout, onFlagHere, userAnswer)
+            BubbleMenu.attach(ai, onAskAbout, onFlagHere, body)
             val why = JudgeNote.shown(turn)
             userReason.text = if (why == null) "" else itemView.context.getString(R.string.own_words_reason, why)
             userReason.visibility = if (why == null) View.GONE else View.VISIBLE
