@@ -1627,25 +1627,19 @@ class DrillService : Service(), VoiceIo {
     private fun captureListen(timeoutMs: Long, answerListen: Boolean = false): String? {
         answerListenNow = answerListen
         // h105c: route answer/rating listens to a headset mic before the start cue.
-        val routeKind = if (grading) MicRouteTiming.Kind.RATING
-            else if (answerListen) MicRouteTiming.Kind.ANSWER
-            else MicRouteTiming.Kind.COMMAND
-        val inputInfos = runCatching {
+        val routeKind = if (grading) MicRouteTiming.Kind.RATING else if (answerListen) MicRouteTiming.Kind.ANSWER else MicRouteTiming.Kind.COMMAND
+        val raw = runCatching {
             val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
             am?.getDevices(AudioManager.GET_DEVICES_INPUTS) ?: emptyArray()
         }.getOrDefault(emptyArray())
-        val inputDevs = inputInfos.map {
-            MicRoute.AudioDev(it.id, MicRoute.typeOf(it.type), it.productName.toString())
-        }
+        val devs = raw.map { MicRoute.AudioDev(it.id, MicRoute.typeOf(it.type), it.productName.toString()) }
         val picked = AudioRouteDecision.listenInput(
             try { Prefs.load(this).useHeadsetMic } catch (_: Exception) { true },
-            inputDevs,
-            Prefs.READ_ALOUD_MEDIA
+            devs, Prefs.READ_ALOUD_MEDIA
         )
         if (picked != null && MicRouteTiming.shouldRoute(routeKind, picked)) {
-            val info = inputInfos.firstOrNull { MicRoute.typeOf(it.type) == picked.type }
             Log.i(TAG, MicRouteTiming.routeLog(picked, true, Prefs.READ_ALOUD_MEDIA))
-            info?.let { setCommDevice(it) }
+            raw.firstOrNull { MicRoute.typeOf(it.type) == picked.type }?.let { setCommDevice(it) }
         }
         var reopens = 0
         while (true) {
