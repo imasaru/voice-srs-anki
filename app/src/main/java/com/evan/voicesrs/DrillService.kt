@@ -437,6 +437,10 @@ class DrillService : Service(), VoiceIo {
     @Volatile private var listenSpeechDetected = false
     private var silenceRestarts = 0
     @Volatile private var ownListen: OwnWordsListen? = null
+    /** h105b: set by onResults() (main) while a deadline grace window is open, so
+     *  [deadlineResult] can tell a real result from an empty window. */
+    @Volatile private var graceResultsArrived = false
+    private val graceLock = Any()
     private var restartRecognizer = false
     private var restartBusyRetries = 0
     private var listenDeadlineMs = 0L
@@ -445,6 +449,9 @@ class DrillService : Service(), VoiceIo {
     private var listenExtrasLogged = false
     /** End-of-speech silence from the settings snapshot taken at session start. */
     @Volatile private var configuredSilenceMs = ListenWindow.DEFAULT_SILENCE_MS
+    /** h105b: the current listen is an answer listen (holds for the answer-listen
+     *  floor). Set by [captureListen]; read by [beginListenOnMain]. */
+    @Volatile private var answerListenNow = false
     private val errorGate = AtomicBoolean(false)
     private val injectLock = Any()
     /** elapsedRealtime deadline: do not open the mic before this. */
@@ -1427,7 +1434,7 @@ class DrillService : Service(), VoiceIo {
         while (completed < max) {
             if (!awaitChatResume()) return null
             if (sessionSilent || showAnswerEarly.get() || stopped()) return null
-            val heard = captureListen(timeoutMs)
+            val heard = captureListen(timeoutMs, answerListen = true)
             if (chatPaused.get()) continue
             consumeMicFault()
             if (stopped()) return null
@@ -1500,7 +1507,8 @@ class DrillService : Service(), VoiceIo {
         return true
     }
 
-    private fun captureListen(timeoutMs: Long): String? {
+    private fun captureListen(timeoutMs: Long, answerListen: Boolean = false): String? {
+        answerListenNow = answerListen
         var reopens = 0
         while (true) {
             if (focusPaused && !awaitFocusResume()) return null
@@ -2370,6 +2378,9 @@ class DrillService : Service(), VoiceIo {
         var restarts = 0
         val maxAttempts = ListenWindow.clampAttempts(listenAttempts)
         var letterAttempts = 0
+        /** h105b: the last listen's kept words (deadline grace). Revealed on think
+         *  expiry so the recognizer's final words reach the grader, not just the buffer. */
+        var lastHeard: String? = null
         armThinkTicker()
         beep()
         try {
@@ -2394,7 +2405,9 @@ class DrillService : Service(), VoiceIo {
                             return ThinkResult.Again
                         }
                     } else {
-                        thinkTranscript = buffer.text()
+                        thinkTranscript =
+                            if (lastHeard != null && lastHeard.isNotBlank()) lastHeard
+                            else buffer.text()
                     }
                     return ThinkResult.Reveal
                 }
@@ -2408,7 +2421,8 @@ class DrillService : Service(), VoiceIo {
                     }
                 }
                 if (slice <= 0L) return ThinkResult.Reveal
-                val heard = captureListen(slice)
+                val heard = captureListen(slice, answerListen = true)
+                lastHeard = heard
                 if (chatPaused.get()) continue
                 if (showAnswerEarly.getAndSet(false)) return ThinkResult.Reveal
                 if (sessionSilent) {
@@ -3409,17 +3423,17 @@ class DrillService : Service(), VoiceIo {
         val delay = (listenDeadlineMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
         listenEpoch = epoch
         handler.postDelayed({
-            if (token == listenToken) finishListen(cutoffResult())
+            if (token == listenToken) finishListen(deadlineResult())
         }, delay)
         mainHandler.post { beginListenOnMain(token, epoch) }
         try {
             if (!latch.await(delay + LISTEN_LATCH_SLACK_MS, TimeUnit.MILLISECONDS)) {
                 Log.w(TAG, "listen latch timed out")
-                finishListen(cutoffResult())
+                finishListen(deadlineResult())
             }
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
-            finishListen(cutoffResult())
+            finishListen(deadlineResult())
         }
         return listenResult.get()
     }
@@ -3431,6 +3445,36 @@ class DrillService : Service(), VoiceIo {
         if (own == null && text != null) {
             lastFinals = sessionPartials.map { it.trim() }.filter { it.isNotEmpty() }
             Log.i(TAG, "listen ok: CUTOFF kept partial")
+        }
+        return text
+    }
+
+    /** h105b: the listen/think deadline expired during an ACTIVE listen. Stop the
+     *  recognizer and give it up to [ListenWindow.STOP_GRACE_MS] to emit a final
+     *  result; use it if it arrives, otherwise keep the last final or the latest
+     *  partial. The kept text reaches the grader like [cutoffResult] (thinkTranscript
+     *  / listenResult). */
+    private fun deadlineResult(): String? {
+        Log.i(TAG, "listen deadline: stopListening grace")
+        synchronized(graceLock) { graceResultsArrived = false }
+        val deadline = SystemClock.elapsedRealtime() + ListenWindow.STOP_GRACE_MS
+        mainHandler.post {
+            try { recognizer?.stopListening() } catch (_: Exception) { }
+        }
+        var arrived = false
+        while (SystemClock.elapsedRealtime() <= deadline) {
+            synchronized(graceLock) { arrived = graceResultsArrived }
+            if (arrived) break
+            Thread.sleep(20L)
+        }
+        val text = if (arrived) {
+            val f = ListenWindow.finalOrPartial(lastFinals, sessionPartials)
+            Log.i(TAG, "listen deadline: got final \"$f\"")
+            f
+        } else {
+            val f = ListenWindow.deadlineText(lastFinals, sessionPartials)
+            Log.i(TAG, "listen deadline: kept partial \"$f\"")
+            f
         }
         return text
     }
@@ -3606,8 +3650,11 @@ class DrillService : Service(), VoiceIo {
             return
         }
         val waitMs = listenWaitMs
-        // h99: Google's recogniser reads this as Integer; a Long was ignored (default 0).
-        val silenceMs = SpokenLetter.silenceExtra(listenSilenceMs.toLong())
+        // h105b: answer listens hold for the answer-listen floor (ANSWER_SILENCE_MS);
+        // rating/command listens keep the configured silence.
+        val silenceMs = SpokenLetter.silenceExtra(
+            if (answerListenNow) ListenWindow.silenceFor(configuredSilenceMs.toLong(), true) else listenSilenceMs.toLong()
+        )
         val possiblyMs = listenSilenceMs.toLong()
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -3623,7 +3670,7 @@ class DrillService : Service(), VoiceIo {
             listenExtrasLogged = true
             Log.i(
                 TAG,
-                "listen extras wait=$waitMs silence=$silenceMs lang=${SpokenLetter.LANGUAGE} " +
+                "listen extras wait=$waitMs silence=$silenceMs answer=$answerListenNow lang=${SpokenLetter.LANGUAGE} " +
                     "max=${SpokenLetter.MAX_RESULTS} offline=${SpokenLetter.PREFER_OFFLINE}"
             )
         }
@@ -3887,6 +3934,8 @@ class DrillService : Service(), VoiceIo {
             if (closeIfSilent()) return
             if (!current()) return
             if (!errorGate.compareAndSet(false, true)) return
+            // h105b: mark that a real result arrived, so a deadline grace window can use it.
+            synchronized(graceLock) { graceResultsArrived = true }
             logNBest("final", results)
             val raw = hypotheses(results)
             lastFinals = raw.map { it.trim() }.filter { it.isNotEmpty() }
