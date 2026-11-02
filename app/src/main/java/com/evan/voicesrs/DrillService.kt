@@ -2480,6 +2480,9 @@ class DrillService : Service(), VoiceIo {
     /** All final hypotheses (n-best) of the latest listen, for the own-words judge. */
     @Volatile private var lastFinals: List<String> = emptyList()
 
+    /** h102: latest partials across the whole card listen, so a cutoff/destroy keeps them. */
+    @Volatile private var sessionPartials: List<String> = emptyList()
+
     /**
      * Speech for the question. A number printed on the card is not read again.
      * Unchanged cards keep [AnkiText.spokenText]. [ContentHash] does not use this.
@@ -3375,6 +3378,7 @@ class DrillService : Service(), VoiceIo {
             listenLatch = latch
             listenResult.set(null)
             lastFinals = emptyList()
+            sessionPartials = emptyList()
             listenActive = true
             inFlightClaimed = false
             clientRetryUsed = false
@@ -3398,19 +3402,30 @@ class DrillService : Service(), VoiceIo {
         val delay = (listenDeadlineMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
         listenEpoch = epoch
         handler.postDelayed({
-            if (token == listenToken) finishListen((ownListen?.onDeadline() as? OwnWordsListen.Step.Finish)?.text)
+            if (token == listenToken) finishListen(cutoffResult())
         }, delay)
         mainHandler.post { beginListenOnMain(token, epoch) }
         try {
             if (!latch.await(delay + LISTEN_LATCH_SLACK_MS, TimeUnit.MILLISECONDS)) {
                 Log.w(TAG, "listen latch timed out")
-                finishListen((ownListen?.onDeadline() as? OwnWordsListen.Step.Finish)?.text)
+                finishListen(cutoffResult())
             }
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
-            finishListen((ownListen?.onDeadline() as? OwnWordsListen.Step.Finish)?.text)
+            finishListen(cutoffResult())
         }
         return listenResult.get()
+    }
+
+    /** h102: deadline text wins; else the latest non-blank session partial; else null. */
+    private fun cutoffResult(): String? {
+        val own = (ownListen?.onDeadline() as? OwnWordsListen.Step.Finish)?.text
+        val text = ListenWindow.cutoffText(own, sessionPartials)
+        if (own == null && text != null) {
+            lastFinals = sessionPartials.map { it.trim() }.filter { it.isNotEmpty() }
+            Log.i(TAG, "listen ok: CUTOFF kept partial")
+        }
+        return text
     }
 
     /** Main thread. The listen token is still the one [beginListenOnMain] was given. */
@@ -3850,6 +3865,7 @@ class DrillService : Service(), VoiceIo {
             val raw = hypotheses(partialResults)
             if (raw.none { it.isNotBlank() }) return
             partials = raw
+            sessionPartials = raw
             if (spokenLetters() == null) return
             listenSpeechDetected = true
             speechBegan = true
