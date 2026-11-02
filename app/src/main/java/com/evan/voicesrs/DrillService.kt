@@ -465,6 +465,9 @@ class DrillService : Service(), VoiceIo {
     private var listenExtrasLogged = false
     /** End-of-speech silence from the settings snapshot taken at session start. */
     @Volatile private var configuredSilenceMs = ListenWindow.DEFAULT_SILENCE_MS
+    /** h105b: the current listen is an answer listen (holds for the answer-listen
+     *  floor). Set by [captureListen]; read by [beginListenOnMain]. */
+    @Volatile private var answerListenNow = false
     private val errorGate = AtomicBoolean(false)
     private val injectLock = Any()
     /** elapsedRealtime deadline: do not open the mic before this. */
@@ -1537,7 +1540,7 @@ class DrillService : Service(), VoiceIo {
         while (completed < max) {
             if (!awaitChatResume()) return null
             if (sessionSilent || showAnswerEarly.get() || stopped()) return null
-            val heard = captureListen(timeoutMs)
+            val heard = captureListen(timeoutMs, answerListen = true)
             if (chatPaused.get()) continue
             consumeMicFault()
             if (stopped()) return null
@@ -1610,7 +1613,8 @@ class DrillService : Service(), VoiceIo {
         return true
     }
 
-    private fun captureListen(timeoutMs: Long): String? {
+    private fun captureListen(timeoutMs: Long, answerListen: Boolean = false): String? {
+        answerListenNow = answerListen
         var reopens = 0
         while (true) {
             if (focusPaused && !awaitFocusResume()) return null
@@ -2483,6 +2487,9 @@ class DrillService : Service(), VoiceIo {
         var restarts = 0
         val maxAttempts = ListenWindow.clampAttempts(listenAttempts)
         var letterAttempts = 0
+        /** h105b: the last listen's kept words (deadline grace). Revealed on think
+         *  expiry so the recognizer's final words reach the grader, not just the buffer. */
+        var lastHeard: String? = null
         armThinkTicker()
         beep()
         try {
@@ -2507,7 +2514,9 @@ class DrillService : Service(), VoiceIo {
                             return ThinkResult.Again
                         }
                     } else {
-                        thinkTranscript = buffer.text()
+                        thinkTranscript =
+                            if (lastHeard != null && lastHeard.isNotBlank()) lastHeard
+                            else buffer.text()
                     }
                     return ThinkResult.Reveal
                 }
@@ -2521,7 +2530,8 @@ class DrillService : Service(), VoiceIo {
                     }
                 }
                 if (slice <= 0L) return ThinkResult.Reveal
-                val heard = captureListen(slice)
+                val heard = captureListen(slice, answerListen = true)
+                lastHeard = heard
                 if (chatPaused.get()) continue
                 if (showAnswerEarly.getAndSet(false)) return ThinkResult.Reveal
                 if (sessionSilent) {
@@ -3812,13 +3822,16 @@ class DrillService : Service(), VoiceIo {
             return
         }
         val waitMs = listenWaitMs
+        // h105b: answer listens hold for the answer-listen floor (ANSWER_SILENCE_MS);
+        // rating/command listens keep the configured silence.
+        val listenSilence = if (answerListenNow) ListenWindow.silenceFor(configuredSilenceMs.toLong(), true) else listenSilenceMs.toLong()
         // h99: Google's recogniser reads this as Integer; a Long was ignored (default 0).
-        val silenceMs = SpokenLetter.silenceExtra(listenSilenceMs.toLong())
+        val silenceMs = SpokenLetter.silenceExtra(listenSilence)
         if (activeKind == EngineKind.GOOGLE && !listenExtrasLogged) {
             listenExtrasLogged = true
             Log.i(
                 TAG,
-                "listen extras wait=$waitMs silence=$silenceMs lang=${SpokenLetter.LANGUAGE} " +
+                "listen extras wait=$waitMs silence=$silenceMs answer=$answerListenNow lang=${SpokenLetter.LANGUAGE} " +
                     "max=${SpokenLetter.MAX_RESULTS} offline=${SpokenLetter.PREFER_OFFLINE}"
             )
         }
@@ -3843,7 +3856,7 @@ class DrillService : Service(), VoiceIo {
         }
         val callbacks = SpeechListener(session, recognizerGen, epoch, started)
         try {
-            started.start(callbacks, listenWaitMs, listenSilenceMs.toLong())
+            started.start(callbacks, listenWaitMs, listenSilence)
             Log.i(TAG, "startListening")
             // startListening can pump the looper, so the Silent tap may already have run.
             if (!listenEpochOpen(epoch)) {
