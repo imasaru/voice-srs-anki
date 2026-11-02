@@ -11,7 +11,7 @@ object TtsEngines {
     const val DEVICE = "device"
     const val LABEL_NEURAL = "Neural"
     const val LABEL_DEVICE = "On-device"
-    const val CHOICE_NEURAL = "Neural (Edge, via example.local)"
+    const val CHOICE_NEURAL = "Neural (Edge server)"
     const val CHOICE_DEVICE = "On-device"
 
     fun preferred(stored: String?): EngineChoice {

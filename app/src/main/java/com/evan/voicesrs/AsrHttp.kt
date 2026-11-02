@@ -6,7 +6,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * ASR calls to the example.local server. Same connection shape as [EdgeSpeaker]:
+ * ASR calls to the configured speech server. Same connection shape as [EdgeSpeaker]:
  * HttpURLConnection, X-Token, no caches, no redirects.
  */
 object AsrHttp {

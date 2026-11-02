@@ -8,7 +8,7 @@ object RecognizerFactory {
             EngineKind.GOOGLE -> GoogleRecognizer(context)
             EngineKind.WHISPER -> RemoteWhisperRecognizer(
                 context,
-                SpeechEngine.asrBase(cfg.asrUrl, cfg.neuralUrl).orEmpty(),
+                SpeechEngine.asrBase(cfg.asrUrl).orEmpty(),
                 cfg.neuralToken
             )
             EngineKind.VOSK -> VoskRecognizer(context)

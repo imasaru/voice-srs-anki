@@ -1,7 +1,5 @@
 package com.evan.voicesrs
 
-import java.net.URI
-
 /**
  * Speech-engine preference. Named [SpeechChoice] because [EngineChoice] is the
  * TTS neural / on-device enum in [NeuralTts]. Stored as the enum name.
@@ -16,7 +14,6 @@ enum class EngineKind { WHISPER, VOSK, GOOGLE }
  */
 object SpeechEngine {
     const val PREF_KEY = "speech_engine"
-    const val ASR_PORT = 8791
 
     /** Unknown or null stored values are [SpeechChoice.AUTO]. */
     fun parse(stored: String?): SpeechChoice {
@@ -50,24 +47,10 @@ object SpeechEngine {
         return if (fellBackFrom == null) base else "$base fallbackFrom=$fellBackFrom"
     }
 
-    /**
-     * Base URL for the ASR server, with no trailing slash.
-     * A non-blank [asrUrl] wins. Otherwise the scheme and host of [neuralUrl]
-     * with port [ASR_PORT]. Both blank, or an unusable neural URL, is null.
-     */
-    fun asrBase(asrUrl: String, neuralUrl: String): String? {
-        val explicit = asrUrl.trim().trimEnd('/')
-        if (explicit.isNotEmpty()) return explicit
-        val neural = neuralUrl.trim()
-        if (neural.isEmpty()) return null
-        return try {
-            val uri = URI(neural)
-            val scheme = uri.scheme ?: return null
-            val host = uri.host ?: return null
-            if (scheme.isBlank() || host.isBlank()) return null
-            "$scheme://$host:$ASR_PORT"
-        } catch (_: Exception) {
-            null
-        }
-    }
+    /** Base URL for the ASR server, no trailing slash. Blank [asrUrl] = no server (null): there is no built-in default. */
+    fun asrBase(asrUrl: String): String? = asrUrl.trim().trimEnd('/').ifEmpty { null }
+
+    /** Vosk model download needs a configured server, a choice that uses Vosk, no model yet, and an unmetered network. */
+    fun shouldFetchVosk(base: String?, choice: SpeechChoice, voskReady: Boolean, unmetered: Boolean): Boolean =
+        base != null && !voskReady && unmetered && (choice == SpeechChoice.AUTO || choice == SpeechChoice.VOSK)
 }

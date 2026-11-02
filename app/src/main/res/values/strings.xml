@@ -44,7 +44,9 @@
     <string name="settings_engine_whisper">Whisper</string>
     <string name="settings_engine_vosk">Vosk</string>
     <string name="settings_engine_google">Google</string>
-    <string name="settings_speech_engine_help">Auto uses the Whisper server when reachable, then offline Vosk, then Google.</string>
+    <string name="settings_speech_engine_help">Auto uses the speech server when set and reachable, then offline Vosk, then Google.</string>
+    <string name="settings_asr_url">Speech server URL</string>
+    <string name="settings_asr_url_help">Whisper server for Auto and Whisper. Blank = none: Auto uses Vosk if its model is already downloaded, else Google. Uses the Neural token.</string>
     <string name="settings_listen_wait">Rating listen window</string>
     <string name="settings_listen_wait_help">How long the mic stays open for each listen (ratings, and answers when Think time is Off).</string>
     <string name="settings_end_silence">End-of-speech silence</string>

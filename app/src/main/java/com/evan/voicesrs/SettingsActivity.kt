@@ -96,6 +96,8 @@ class SettingsActivity : AppCompatActivity() {
         val neuralVoiceView: MaterialAutoCompleteTextView = findViewById(R.id.neuralVoiceInput)
         val neuralUrlView: TextInputEditText = findViewById(R.id.neuralUrlInput)
         val neuralTokenView: TextInputEditText = findViewById(R.id.neuralTokenInput)
+        val asrUrlView: TextInputEditText = findViewById(R.id.asrUrlInput)
+        val asrUrlLayout: TextInputLayout = findViewById(R.id.asrUrlLayout)
         val keyStatus: TextView = findViewById(R.id.keyStatus)
         val tokenStatus: TextView = findViewById(R.id.tokenStatus)
         val neuralStatus: TextView = findViewById(R.id.neuralStatus)
@@ -309,6 +311,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         showExam()
         neuralUrlView.setText(held.neuralUrl)
+        asrUrlView.setText(held.asrUrl)
         neuralTokenView.setText("")
         tokenStatus.text = getString(
             if (held.neuralToken.isNotBlank()) R.string.settings_token_saved else R.string.settings_token_missing
@@ -720,6 +723,15 @@ class SettingsActivity : AppCompatActivity() {
             if (!AutoSave.decide(held.neuralUrl, url).save) return
             persist { it.copy(neuralUrl = url) }
         }
+        fun commitAsrUrl() {
+            val raw = asrUrlView.text?.toString()?.trim().orEmpty()
+            if (raw.isNotEmpty() && !raw.startsWith("http://") && !raw.startsWith("https://")) {
+                asrUrlLayout.error = getString(R.string.settings_ai_url_error)
+                return
+            }
+            asrUrlLayout.error = null
+            persist { it.copy(asrUrl = raw) }
+        }
         fun commitNeuralToken() {
             val typed = neuralTokenView.text?.toString()?.trim().orEmpty()
             if (typed.isEmpty()) return
@@ -747,6 +759,7 @@ class SettingsActivity : AppCompatActivity() {
         track(batchSizeView) { commitBatch() }
         track(goalAmountView) { commitGoalAmount() }
         track(neuralUrlView) { commitNeuralUrl() }
+        track(asrUrlView) { commitAsrUrl() }
         track(neuralTokenView) { commitNeuralToken() }
         val aiEnabledSwitch: MaterialSwitch = findViewById(R.id.aiEnabledSwitch)
         val generatedDeckInput: TextInputEditText = findViewById(R.id.generatedDeckInput)

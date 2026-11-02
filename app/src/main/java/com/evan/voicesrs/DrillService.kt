@@ -3494,7 +3494,7 @@ class DrillService : Service(), VoiceIo {
 
     /** Off the main thread, once at drill start. Does not log the token. */
     private fun refreshAsr(cfg: AnkiConfig) {
-        val base = SpeechEngine.asrBase(cfg.asrUrl, cfg.neuralUrl)
+        val base = SpeechEngine.asrBase(cfg.asrUrl)
         val now = SystemClock.elapsedRealtime()
         if (base != null && AsrHttp.healthOk(base, cfg.neuralToken)) {
             whisperOkUntilMs = now + WHISPER_HEALTH_TTL_MS
@@ -3503,12 +3503,12 @@ class DrillService : Service(), VoiceIo {
             whisperOkUntilMs = 0L
         }
         voskReady = VoskModelStore.isReady(VoskModelStore.modelDir(filesDir))
-        val wantVosk = cfg.speechEngine == SpeechChoice.AUTO || cfg.speechEngine == SpeechChoice.VOSK
-        if (!voskReady && base != null && wantVosk && VoskModelFetcher.unmeteredOrWifi(this)) {
+        if (SpeechEngine.shouldFetchVosk(base, cfg.speechEngine, voskReady, VoskModelFetcher.unmeteredOrWifi(this))) {
             val token = cfg.neuralToken
+            val b = base ?: return
             voskFetch?.interrupt()
             voskFetch = Thread({
-                if (VoskModelFetcher.download(this, base, token)) voskReady = true
+                if (VoskModelFetcher.download(this, b, token)) voskReady = true
             }, "vosk-fetch").also { it.start() }
         }
     }

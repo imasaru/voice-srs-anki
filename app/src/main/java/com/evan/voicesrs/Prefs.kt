@@ -78,7 +78,7 @@ data class AnkiConfig(
     val useHeadsetMic: Boolean = true,
     /** AUTO, WHISPER, VOSK, or GOOGLE. Stored as [SpeechChoice.name]. */
     val speechEngine: SpeechChoice = SpeechChoice.AUTO,
-    /** ASR server base URL. Blank uses [SpeechEngine.asrBase] on the neural host. */
+    /** Speech (ASR) server base URL from Settings. Blank = no server (Whisper off, no Vosk download). */
     val asrUrl: String = ""
 )
 
