@@ -2,6 +2,9 @@ package com.evan.voicesrs
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import java.util.TimeZone
 
 /**
@@ -16,6 +19,10 @@ interface StudyAnki {
     fun noteTags(ids: List<Long>): Map<Long, List<String>>
     /** Deck, Domain, Stem and CorrectText per card for the daily report. */
     fun reportFields(ids: List<Long>): Map<Long, ReportFields> = emptyMap()
+    /** Every card matching [query] (type, queue, interval, lapses, deck, note tags). */
+    fun cardSnaps(query: String): List<CardSnap> = emptyList()
+    /** Reviews for [deck] and every subdeck as [RevRow] (keeps lastIvl), after [startMs]. */
+    fun revRows(deck: String, startMs: Long): List<RevRow> = emptyList()
 }
 
 /**
@@ -28,8 +35,10 @@ class StudyToolRunner(
     private val defaultDeck: String,
     private val tz: TimeZone = TimeZone.getDefault(),
     private val pending: () -> List<PendingGrade> = { emptyList() },
+    private val examDate: () -> LocalDate? = { null },
     private val timeLog: () -> List<AnswerTime> = { AnswerTimeLog.snapshot() }
 ) {
+    private val zone: ZoneId = ZoneId.of(tz.id)
     fun invoke(name: String, argsJson: String): String {
         val args = try {
             JSONObject(argsJson.ifBlank { "{}" })
@@ -40,6 +49,10 @@ class StudyToolRunner(
         val to = args.optString("to").ifBlank { from }
         val deck = args.optString("deck").ifBlank { defaultDeck }
         val limit = args.optInt("limit", StudyTools.DEFAULT_LIMIT)
+        // Exam readiness doesn't use a from/to range; it reads a rolling window.
+        if (name == StudyTools.GET_EXAM_READINESS) {
+            return examReadiness(args)
+        }
         return try {
             val (rows, cards) = load(from, to, deck)
             buildToolResponse(name, from, to, deck, limit, rows, cards)
@@ -173,5 +186,98 @@ class StudyToolRunner(
             if (id !in cards) cards[id] = StudyCard(id, emptyList(), "")
         }
         return rows to cards
+    }
+
+    /**
+     * get_exam_readiness: a rolling review window (no from/to). Reads card
+     * states, true retention, pace, weakest subdecks/tags and the projected
+     * ready date vs the exam date. All numbers are computed by
+     * [examReadinessJson]; the model only explains them.
+     */
+    private fun examReadiness(args: JSONObject): String {
+        val deck = args.optString("deck").ifBlank { defaultDeck }
+        val windowDays = args.optInt("window_days", StudyTools.EXAM_WINDOW_DEFAULT)
+            .coerceIn(StudyTools.EXAM_WINDOW_MIN, StudyTools.EXAM_WINDOW_MAX)
+        return try {
+            val today = AnkiDay.today(zone)
+            val exam = runCatching { examDate() }.getOrNull()
+            val query = deckQuery(deck)
+            val cards = anki.cardSnaps(query)
+            val rows = anki.revRows(deck, AnkiDay.startMs(today.minusDays(windowDays - 1L), zone))
+            val tags = cards.associate { it.cardId to it.tags }
+            examReadinessJson(today, exam, cards, rows, tags, windowDays, zone).toString()
+        } catch (e: Exception) {
+            JSONObject().put("error", e.javaClass.simpleName).toString()
+        }
+    }
+
+    private fun deckQuery(deck: String): String = "deck:\"$deck\""
+
+    /**
+     * Pure exam-readiness forecast over [cards] and review [rows] for a
+     * [windowDays]-day window ending at [today]. [exam] is the target date
+     * (nullable: everything still computes, with exam_date/days_left null).
+     */
+    internal fun examReadinessJson(
+        today: LocalDate,
+        exam: LocalDate?,
+        cards: List<CardSnap>,
+        rows: List<RevRow>,
+        tags: Map<Long, List<String>>,
+        windowDays: Int,
+        zone: ZoneId
+    ): JSONObject {
+        val start = AnkiDay.startMs(today.minusDays(windowDays - 1L), zone)
+        val end = AnkiDay.startMs(today.plusDays(1), zone)
+        val s = ReadinessStats.states(cards)
+        val ret = ReadinessStats.retention(rows, start, end)
+        val pace = ReadinessStats.pace(rows, start, end, windowDays)
+        val newRemaining = s.new
+        val proj = ReadinessStats.project(today, exam, newRemaining, pace.newPerDay)
+        return JSONObject()
+            .put("exam_date", exam?.toString())
+            .put("days_left", proj.daysLeft)
+            .put("states", JSONObject()
+                .put("new", s.new)
+                .put("learning", s.learning)
+                .put("young", s.young)
+                .put("mature", s.mature)
+                .put("suspended", s.suspended)
+                .put("total", s.total))
+            .put("retention", JSONObject()
+                .put("pct", ret.pct)
+                .put("young_pct", ret.youngPct)
+                .put("mature_pct", ret.maturePct)
+                .put("reviews", ret.total))
+            .put("pace", JSONObject()
+                .put("days", pace.days)
+                .put("new_per_day", pace.newPerDay)
+                .put("reviews_per_day", pace.reviewsPerDay))
+            .put("weakest_decks", topLapses(ReadinessStats.lapsesByDeck(rows), 5))
+            .put("weakest_tags", topLapses(ReadinessStats.lapsesByTag(rows, tags), 5))
+            .put("projection", JSONObject()
+                .put("days_to_introduce", proj.daysToIntroduce)
+                .put("ready_date", proj.readyDate?.toString())
+                .put("slack_days", proj.slackDays)
+                .put("on_track", proj.onTrack)
+                .put("required_new_per_day", proj.requiredNewPerDay))
+            .put("assumptions", JSONArray(listOf(
+                "90% of new cards introduced",
+                "mature = interval >= 21 days",
+                "32 days from first learn to mature",
+                "Anki day rolls over at 4:00"
+            )))
+    }
+
+    private fun topLapses(rows: List<LapseRow>, n: Int): JSONArray {
+        val arr = JSONArray()
+        for (r in rows.take(n)) {
+            arr.put(JSONObject()
+                .put("name", r.name)
+                .put("lapses", r.lapses)
+                .put("reviews", r.reviews)
+                .put("pct", r.pct))
+        }
+        return arr
     }
 }

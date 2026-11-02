@@ -37,6 +37,10 @@ object StudyTools {
     const val GET_STUDY_SUMMARY = "get_study_summary"
     const val GET_CATEGORY_STATS = "get_category_stats"
     const val GET_MISSED_CARDS = "get_missed_cards"
+    const val GET_EXAM_READINESS = "get_exam_readiness"
+    const val EXAM_WINDOW_DEFAULT = 14
+    const val EXAM_WINDOW_MIN = 3
+    const val EXAM_WINDOW_MAX = 60
 
     private val SKIP_TAGS = setOf("marked", "leech")
 
@@ -56,10 +60,48 @@ object StudyTools {
                 )
             )
         )
+        arr.put(
+            JSONObject()
+                .put("type", "function")
+                .put(
+                    "function",
+                    JSONObject()
+                        .put("name", GET_EXAM_READINESS)
+                        .put(
+                            "description",
+                            "Exam readiness forecast for the current deck: card states, true retention, pace, weakest subdecks/tags, projected ready date vs exam date. Numbers are computed by the app; do not recompute them."
+                        )
+                        .put(
+                            "parameters",
+                            JSONObject()
+                                .put("type", "object")
+                                .put(
+                                    "properties",
+                                    JSONObject()
+                                        .put(
+                                            "window_days",
+                                            JSONObject()
+                                                .put("type", "integer")
+                                                .put(
+                                                    "description",
+                                                    "Rolling review window in days (default 14, clamped 3..60)."
+                                                )
+                                                .put("default", EXAM_WINDOW_DEFAULT)
+                                        )
+                                )
+                                .put("required", JSONArray())
+                        )
+                )
+        )
         return arr
     }
 
-    fun names(): Set<String> = setOf(GET_STUDY_SUMMARY, GET_CATEGORY_STATS, GET_MISSED_CARDS)
+    fun names(): Set<String> = setOf(
+        GET_STUDY_SUMMARY,
+        GET_CATEGORY_STATS,
+        GET_MISSED_CARDS,
+        GET_EXAM_READINESS
+    )
 
     fun today(tz: TimeZone = TimeZone.getDefault(), nowMs: Long = System.currentTimeMillis()): String {
         val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
@@ -87,6 +129,22 @@ object StudyTools {
             val cid = row.optLong(1, 0L)
             if (at == 0L || cid == 0L) continue
             out += StudyReview(at, cid, row.optInt(3, 0), row.optLong(7, 0L), row.optInt(8, -1))
+        }
+        return out
+    }
+
+    /**
+     * AnkiConnect `cardReviews` rows: id, cid, usn, ease, ivl, lastIvl, factor, time, type.
+     * Mirrors [parseCardReviews] but keeps lastIvl (index 5) for retention math.
+     */
+    fun parseRevRows(arr: JSONArray): List<RevRow> {
+        val out = ArrayList<RevRow>(arr.length())
+        for (i in 0 until arr.length()) {
+            val row = arr.optJSONArray(i) ?: continue
+            val at = row.optLong(0, 0L)
+            val cid = row.optLong(1, 0L)
+            if (at == 0L || cid == 0L) continue
+            out += RevRow(at, cid, row.optInt(3, 0), row.optInt(8, -1), row.optInt(5, 0))
         }
         return out
     }

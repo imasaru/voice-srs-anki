@@ -277,6 +277,65 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) : Stu
     }
 
     /**
+     * A snapshot of every card matching [query]: type, queue, interval, lapses,
+     * deck and note tags. Read-only (findCards + cardsInfo).
+     */
+    override fun cardSnaps(query: String): List<CardSnap> {
+        val ids = findCardIds(query)
+        if (ids.isEmpty()) return emptyList()
+        val r = try {
+            post("cardsInfo", mapOf("cards" to ids)) as? JSONArray
+        } catch (_: Exception) {
+            return emptyList()
+        } ?: return emptyList()
+        val noteOf = HashMap<Long, Long>()
+        val snaps = ArrayList<CardSnap>(r.length())
+        for (i in 0 until r.length()) {
+            val o = r.optJSONObject(i) ?: continue
+            val id = o.optLong("cardId", 0L)
+            if (id == 0L) continue
+            val noteId = noteIdOf(o)
+            if (noteId != null) noteOf[id] = noteId
+            snaps += CardSnap(
+                cardId = id,
+                deck = o.optString("deckName", ""),
+                type = o.optInt("type", 0),
+                queue = o.optInt("queue", 0),
+                ivl = o.optInt("ivl", 0),
+                lapses = o.optInt("lapses", 0)
+            )
+        }
+        val tags = try {
+            if (noteOf.isEmpty()) emptyMap() else noteTags(noteOf.values.distinct())
+        } catch (_: Exception) {
+            emptyMap()
+        }
+        // noteTags is keyed by note id, so map each card through its note.
+        return snaps.map { it.copy(tags = noteOf[it.cardId]?.let { n -> tags[n] }.orEmpty()) }
+    }
+
+    /**
+     * Reviews for [deck] and every subdeck as [RevRow] (keeps lastIvl), after
+     * [startMs] (exclusive). Mirrors [cardReviewsTree] but returns the richer
+     * row so retention math can use lastIvl.
+     */
+    override fun revRows(deck: String, startMs: Long): List<RevRow> {
+        val names = deckNames()
+        val out = ArrayList<RevRow>()
+        for (name in names) {
+            if (!StudyTools.deckMatches(name, deck)) continue
+            out.addAll(cardReviewsRev(name, startMs).map { it.copy(deck = name) })
+        }
+        return out.sortedBy { it.atMs }
+    }
+
+    fun cardReviewsRev(deck: String, startId: Long): List<RevRow> {
+        val r = post("cardReviews", mapOf("deck" to deck, "startID" to startId)) as? JSONArray
+            ?: return emptyList()
+        return StudyTools.parseRevRows(r)
+    }
+
+    /**
      * @return one boolean per grade, true when Anki accepted it.
      * Each answer may include [AnswerCardsRequest] `time` (ms). Stock
      * AnkiConnect ignores extra fields and starts the card timer immediately
