@@ -47,7 +47,6 @@ object BubbleMenu {
         for (v in listOf(bubble) + also) {
             v.isLongClickable = true
             v.setOnLongClickListener {
-                BubbleCopy.copy(bubble.context, visibleText(bubble)) // long-press copies the bubble
                 val popup = PopupMenu(bubble.context, bubble)
                 popup.menu.add(R.string.chat_menu_copy)
                 popup.setOnMenuItemClickListener {

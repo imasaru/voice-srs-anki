@@ -120,7 +120,11 @@ class BubbleMenuTest {
         toWindow(activity, bubble)
         BubbleMenu.attach(bubble, ans) // ans is an "also" view
 
-        ans.performLongClick()
+        assertTrue(ans.performLongClick())
+        assertEquals("long-press alone must not copy", null, clipboardText())
+        val popup = ShadowPopupMenu.getLatestPopupMenu()
+        assertNotNull(popup)
+        popup.menu.performIdentifierAction(popup.menu.getItem(0).itemId, 0)
         assertEquals("also view copies the BUBBLE's text, not its own", "Q?\nA", clipboardText())
     }
 
