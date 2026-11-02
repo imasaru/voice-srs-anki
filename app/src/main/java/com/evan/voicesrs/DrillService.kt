@@ -2109,10 +2109,12 @@ class DrillService : Service(), VoiceIo {
             }
             if (transcript.isBlank()) chosenLetter?.let { transcript = it }
         }
+        var questionCut = false
         while (!screenCard && !stopRequested.get()) {
             if (!awaitChatResume()) return CardStep.Paused
             if (showAnswerEarly.getAndSet(false)) {
                 if (transcript.isBlank()) chosenLetter?.let { transcript = it }
+                if (questionCut && !sessionSilent) { Log.i(TAG, "show answer: announce"); speak(TtsFallback.SHOWING_ANSWER) }
                 break
             }
             when (AudioGate.resume(sessionSilent, cardUp = true, answerShown = false)) {
@@ -2128,6 +2130,8 @@ class DrillService : Service(), VoiceIo {
                         presentedAt = SystemClock.elapsedRealtime()
                         questionRead = true
                     }
+                    val after = TtsFallback.afterQuestion(showAnswerEarly.get(), speechInterrupted, sessionSilent, ThinkTime.armed(thinkTimeSec, sessionSilent))
+                    if (after == TtsFallback.AfterQuestion.ANNOUNCE_THEN_ANSWER) questionCut = true
                     if (stopRequested.get()) return CardStep.Paused
                     if (chatPaused.get()) continue
                     if (showAnswerEarly.get() || sessionSilent) continue
