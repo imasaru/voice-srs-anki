@@ -472,13 +472,11 @@ class DrillService : Service(), VoiceIo {
     /** h105b: the current listen is an answer listen (holds for the answer-listen
      *  floor). Set by [captureListen]; read by [beginListenOnMain]. */
     @Volatile private var answerListenNow = false
-    /** h105c: true while an answer/rating listen has the comm device set to a headset mic. */
+    // h105c: comm-device route state for answer/rating listens.
     @Volatile private var commRouteActive = false
-    /** Guards the active-callback wait state for [prepareCommRoute]. */
     private val commLock = Any()
     private var commActiveLatch: CountDownLatch? = null
     @Volatile private var commActiveStartedAt = 0L
-    /** h105c: the OnCommunicationDeviceChangedListener is registered once. */
     @Volatile private var commListenerRegistered = false
     private val errorGate = AtomicBoolean(false)
     private val injectLock = Any()
@@ -1335,7 +1333,6 @@ class DrillService : Service(), VoiceIo {
         val spoken = AnkiText.sanitizeForSpeech(text)
         if (spoken.isBlank()) return
         if (!AudioGate.outputAllowed(sessionSilent)) return
-        // h105c: release any headset-mic comm route before TTS read-aloud starts.
         clearCommRoute()
         var reSpeaks = 0
         speechInterrupted = false
@@ -1785,8 +1782,6 @@ class DrillService : Service(), VoiceIo {
         if (commListenerRegistered || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
         val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         try {
-            // Deliver the callback on the main looper so the setCommunicationDevice
-            // posted just after is observed synchronously before we return.
             val mainExecutor = Executor { r -> mainHandler.post(r) }
             am.addOnCommunicationDeviceChangedListener(
                 mainExecutor,
@@ -1811,7 +1806,6 @@ class DrillService : Service(), VoiceIo {
         }
     }
 
-    /** h105c: set the comm device to [info] and wait until it is active (<= TIMEOUT_MS). */
     private fun setCommDevice(info: AudioDeviceInfo) {
         ensureCommListener()
         synchronized(commLock) {
@@ -1832,7 +1826,6 @@ class DrillService : Service(), VoiceIo {
         commRouteActive = true
     }
 
-    /** h105c: clear the comm device set for this listen (no-op unless active). */
     private fun clearCommRoute() {
         if (!commRouteActive) return
         commRouteActive = false
@@ -3861,7 +3854,6 @@ class DrillService : Service(), VoiceIo {
         latch?.countDown()
         if (tone && !dictating) toneListenEnd()
         runCatching { DrillUi.update { it.copy(ratingMicOpen = false) } }
-        // h105c: release the headset-mic comm route when this listen ends.
         clearCommRoute()
     }
 
