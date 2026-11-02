@@ -1232,7 +1232,7 @@ class DrillService : Service(), VoiceIo {
                 readingIndex = i
                 DrillUi.update(SentenceReading.at(i, part))
                 if (neuralCard) {
-                    if (speakOnDevice(part)) Log.i(TAG, "TTS engine=neural card fail; fallback on-device ok")
+                    if (speakOnDevice(part) == TtsFallback.Spoke.DONE) Log.i(TAG, "TTS engine=neural card fail; fallback on-device ok")
                 } else {
                     speakOne(part)
                 }
@@ -1291,7 +1291,7 @@ class DrillService : Service(), VoiceIo {
             Prefs.load(this)
         } catch (e: Exception) {
             Log.w(TAG, "prefs load failed during speak", e)
-            if (speakOnDevice(spoken)) {
+            if (speakOnDevice(spoken) == TtsFallback.Spoke.DONE) {
                 Log.i(TAG, "TTS engine=on-device ok")
             }
             return
@@ -1317,14 +1317,14 @@ class DrillService : Service(), VoiceIo {
             }
             // A tap or Stop already ended this utterance. Do not replay it on-device.
             if (stopRequested.get() || speechInterrupted) return
-            if (speakOnDevice(spoken)) {
+            if (speakOnDevice(spoken) == TtsFallback.Spoke.DONE) {
                 Log.i(TAG, "TTS engine=neural fail; fallback on-device ok")
             } else {
                 Log.w(TAG, "TTS engine=neural fail; fallback on-device failed")
             }
             return
         }
-        if (speakOnDevice(spoken)) {
+        if (speakOnDevice(spoken) == TtsFallback.Spoke.DONE) {
             Log.i(TAG, "TTS engine=on-device ok")
         } else {
             Log.w(TAG, "TTS engine=on-device failed")
@@ -1335,8 +1335,8 @@ class DrillService : Service(), VoiceIo {
      * On-device utterance. Blocks until THIS utterance finishes, the same way
      * neural playback blocks, so both engines enter the listen that follows.
      */
-    private fun speakOnDevice(text: String): Boolean {
-        val t = tts ?: return false
+    private fun speakOnDevice(text: String): TtsFallback.Spoke {
+        val t = tts ?: return TtsFallback.Spoke.FAILED
         try {
             t.setSpeechRate(TtsRate.clamp(Prefs.load(this).ttsRate))
         } catch (_: Exception) {
@@ -1348,7 +1348,7 @@ class DrillService : Service(), VoiceIo {
         try {
             if (t.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId) != TextToSpeech.SUCCESS) {
                 Log.w(TAG, "TTS speak rejected")
-                return false
+                return TtsFallback.Spoke.FAILED
             }
             // Close the gap where the tap landed after the flag reset and before playback.
             if (speechInterrupted || stopRequested.get()) {
@@ -1357,10 +1357,12 @@ class DrillService : Service(), VoiceIo {
             if (!latch.await(SPEAK_CAP_MS, TimeUnit.MILLISECONDS)) {
                 Log.w(TAG, "on-device speak still running at cap")
             }
-            return true
+            val r = TtsFallback.spokeResult(true, speechInterrupted || stopRequested.get())
+            if (r == TtsFallback.Spoke.STOPPED && showAnswerEarly.get()) Log.i(TAG, "show answer during question read")
+            return r
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
-            return false
+            return TtsFallback.Spoke.FAILED
         } finally {
             if (speakLatch === latch) speakLatch = null
             if (speakUtterance == utteranceId) speakUtterance = null
