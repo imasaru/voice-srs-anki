@@ -12,17 +12,26 @@ object ChipContext {
         ChipSource.TODAY_REVIEWS -> "today_reviews"
         ChipSource.CURRENT_CARD -> "current_card"
         ChipSource.CARD_CHATS -> "card_chats"
+        ChipSource.EXAM_READINESS -> "exam_readiness"
     }
 
     /** Removes every study_data open/close marker (any case) so the data can't end the fence early. */
     fun stripFences(data: String): String = data.replace(FENCE, "")
 
-    /** Picks the blob for [source], strips fence markers, trims; empty -> NO_DATA. */
-    fun build(source: ChipSource, reviewsBlob: String, cardBlob: String, chatsBlob: String): String {
+    /** Picks the blob for [source], strips fence markers, trims; empty -> NO_DATA.
+     *  [readinessBlob] is only used for [ChipSource.EXAM_READINESS]; a default keeps callers compiling. */
+    fun build(
+        source: ChipSource,
+        reviewsBlob: String,
+        cardBlob: String,
+        chatsBlob: String,
+        readinessBlob: String = ""
+    ): String {
         val raw = when (source) {
             ChipSource.TODAY_REVIEWS -> reviewsBlob
             ChipSource.CURRENT_CARD -> cardBlob
             ChipSource.CARD_CHATS -> chatsBlob
+            ChipSource.EXAM_READINESS -> readinessBlob
         }
         val data = stripFences(raw).trim().ifEmpty { NO_DATA }
         return "$DATA_NOTE\n<study_data source=\"${tag(source)}\">\n$data\n</study_data>"

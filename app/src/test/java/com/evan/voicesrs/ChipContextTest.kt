@@ -58,5 +58,6 @@ class ChipContextTest {
         assertEquals("today_reviews", ChipContext.tag(ChipSource.TODAY_REVIEWS))
         assertEquals("current_card", ChipContext.tag(ChipSource.CURRENT_CARD))
         assertEquals("card_chats", ChipContext.tag(ChipSource.CARD_CHATS))
+        assertEquals("exam_readiness", ChipContext.tag(ChipSource.EXAM_READINESS))
     }
 }

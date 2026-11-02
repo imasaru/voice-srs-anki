@@ -79,6 +79,14 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/prompt_src_chats" />
+
+                <Button
+                    android:id="@+id/promptEditSrcExam"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/prompt_src_exam" />
             </com.google.android.material.button.MaterialButtonToggleGroup>
 
             <com.google.android.material.textfield.TextInputLayout

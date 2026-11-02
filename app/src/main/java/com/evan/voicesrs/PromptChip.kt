@@ -4,7 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /** Data sent with a one-tap prompt chip. Always attached as fenced data, never as instructions. */
-enum class ChipSource { TODAY_REVIEWS, CURRENT_CARD, CARD_CHATS }
+enum class ChipSource { TODAY_REVIEWS, CURRENT_CARD, CARD_CHATS, EXAM_READINESS }
 
 data class PromptChip(
     val id: String,

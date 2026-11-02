@@ -73,11 +73,13 @@ class PromptChipEditActivity : AppCompatActivity() {
         ChipSource.TODAY_REVIEWS -> R.id.promptEditSrcReviews
         ChipSource.CURRENT_CARD -> R.id.promptEditSrcCard
         ChipSource.CARD_CHATS -> R.id.promptEditSrcChats
+        ChipSource.EXAM_READINESS -> R.id.promptEditSrcExam
     }
 
     private fun sourceOf(buttonId: Int): ChipSource = when (buttonId) {
         R.id.promptEditSrcCard -> ChipSource.CURRENT_CARD
         R.id.promptEditSrcChats -> ChipSource.CARD_CHATS
+        R.id.promptEditSrcExam -> ChipSource.EXAM_READINESS
         else -> ChipSource.TODAY_REVIEWS
     }
 }

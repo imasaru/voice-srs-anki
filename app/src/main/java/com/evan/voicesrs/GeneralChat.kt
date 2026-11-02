@@ -172,7 +172,18 @@ object GeneralChat {
                     } else {
                         ""
                     }
-                    contextBlob = if (chip != null) ChipContext.build(chip.source, reviews, cardBlob, chatsBlob) else reviews
+                    val readiness = if (cached != null) {
+                        cached
+                    } else if (chip?.source == ChipSource.EXAM_READINESS) {
+                        readinessBlob(app, cfg)
+                    } else {
+                        ""
+                    }
+                    contextBlob = if (chip != null) {
+                        ChipContext.build(chip.source, reviews, cardBlob, chatsBlob, readiness)
+                    } else {
+                        reviews
+                    }
                     blobChars = contextBlob.length
                 } else {
                     contextBlob = ""
@@ -306,6 +317,19 @@ object GeneralChat {
     } catch (e: Exception) {
         Log.w(TAG, "today report failed: ${AiDiag.error(e)}")
         "Error: could not build today's report (${e.javaClass.simpleName})."
+    }
+
+    /** Exam-readiness forecast JSON, same source as the get_exam_readiness tool. Never throws. */
+    private fun readinessBlob(app: Context, cfg: AnkiConfig): String = try {
+        val anki = AnkiConnect(cfg.url, cfg.apiKey)
+        StudyToolRunner(
+            anki, cfg.deck,
+            pending = { LocalQueueStore(app.filesDir).readGrades() },
+            examDate = { Prefs.loadExam(app, cfg.deck).date }
+        ).readinessJson()
+    } catch (e: Exception) {
+        Log.w(TAG, "exam readiness failed: ${AiDiag.error(e)}")
+        "Error: could not build exam readiness (${e.javaClass.simpleName})."
     }
 
     /** The builder title carries date + issue time; add [ReportHeader] only if the model dropped it. */

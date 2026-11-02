@@ -18,6 +18,7 @@ class PromptChipsActivity : AppCompatActivity() {
             ChipSource.TODAY_REVIEWS -> R.string.prompt_src_reviews
             ChipSource.CURRENT_CARD -> R.string.prompt_src_card
             ChipSource.CARD_CHATS -> R.string.prompt_src_chats
+            ChipSource.EXAM_READINESS -> R.string.prompt_src_exam
         }
     }
 
