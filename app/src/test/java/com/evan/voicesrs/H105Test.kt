@@ -99,7 +99,7 @@ class H105Test {
 
     @Test
     fun `use headset mic defaults on`() {
-        assertTrue(AnkiConfig().useHeadsetMic)
+        assertTrue(AnkiConfig(url = "", apiKey = "", deck = "").useHeadsetMic)
     }
 
     @Test

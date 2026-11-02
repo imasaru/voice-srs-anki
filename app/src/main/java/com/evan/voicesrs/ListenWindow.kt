@@ -22,6 +22,14 @@ object ListenWindow {
     val SILENCE_MS_CHOICES = intArrayOf(1000, 1500, 2000, 3000)
     const val DEFAULT_WAIT_SEC = 15
     const val DEFAULT_SILENCE_MS = 1500
+    /** h105: after the deadline fires mid-listen, wait this long for onResults
+     * before falling back to the last partial. Kept short so a dropped final
+     * doesn't stall the card reveal. */
+    const val STOP_GRACE_MS = 1000L
+    /** h105: listens inside the answer window get at least this long of silence
+     * before giving up (longer than the default, which suits the short
+     * end-of-card listens). Rating and command listens keep the default. */
+    const val ANSWER_SILENCE_MS = 4000L
 
     const val MIN_ATTEMPTS = 1
     const val MAX_ATTEMPTS = 5
@@ -44,6 +52,16 @@ object ListenWindow {
     /** h102: window cut off / recognizer destroyed with no final. Own-words deadline text wins; else the latest non-blank partial; else null. */
     fun cutoffText(ownWords: String?, sessionPartials: List<String>): String? =
         ownWords ?: finalOrPartial(emptyList(), sessionPartials).ifBlank { null }
+
+    /** h105: the deadline fired mid-listen and the recognizer was destroyed before
+     * onResults. The last non-blank partial is the most complete capture, so it
+     * wins over earlier fragments; a non-blank final still wins over everything.
+     * All blank returns null (nothing was heard). */
+    fun deadlineText(finals: List<String>, partials: List<String>): String? {
+        finals.firstOrNull { it.isNotBlank() }?.let { return it }
+        return partials.lastOrNull { it.isNotBlank() }?.trim()?.ifBlank { null }
+    }
+
     const val SILENT_NOTICE = "Didn't hear a grade, switched to silent"
     const val ATTEMPTS_LABEL = "Listen attempts"
     const val ATTEMPTS_HELP = "How many times to listen before switching to silent."
@@ -138,4 +156,26 @@ object ListenWindow {
         }
         return digits.toString().toIntOrNull()
     }
+}
+
+/**
+ * h105: pure gate for the listen cue tones. Kept out of the service so the
+ * "should this tone play?" decision is unit-tested and never depends on the
+ * Android AudioTrack.
+ */
+object ListenCue {
+    /** h105: tone length; short so it never clips the start of speech. */
+    const val TONE_MS = 250L
+
+    /**
+     * Play the start tone? Play it on the first listen of a card, and on a
+     * restart only when it is not a quiet restart. A quiet restart must stay
+     * silent so it does not cover the user's speech.
+     */
+    fun playStartTone(firstListen: Boolean, restartQuiet: Boolean): Boolean =
+        firstListen && !restartQuiet
+
+    /** The end tone always plays; it signals the listen is over and must not be
+     * suppressed by a quietListen flag left over from a restart. */
+    fun playEndTone(): Boolean = true
 }

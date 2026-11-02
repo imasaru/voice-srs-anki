@@ -73,7 +73,9 @@ data class AnkiConfig(
     val detectCode: Boolean = true,
     /** Deck for AI-generated Basic notes. */
     val generatedDeck: String = MakeCard.DEFAULT_DECK,
-    val keepScreenOn: Boolean = KeepScreenOn.SETTING_DEFAULT
+    val keepScreenOn: Boolean = KeepScreenOn.SETTING_DEFAULT,
+    /** Route answer/rating listens to a Bluetooth headset mic when one is connected. */
+    val useHeadsetMic: Boolean = true
 )
 
 /** SharedPreferences-backed settings. The API key and neural token live in encrypted prefs. */
@@ -126,6 +128,7 @@ object Prefs {
     private const val KEY_DETECT_CODE = "detect_code"
     private const val KEY_GENERATED_DECK = "generated_deck"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
+    private const val KEY_USE_HEADSET_MIC = "use_headset_mic"
     private const val KEY_PROMPT_CHIPS = "prompt_chips"
 
     val DEFAULT_URL: String get() = BuildConfig.DEFAULT_ANKI_URL
@@ -239,6 +242,7 @@ object Prefs {
             .putBoolean(KEY_DETECT_CODE, cfg.detectCode)
             .putString(KEY_GENERATED_DECK, cfg.generatedDeck.ifBlank { MakeCard.DEFAULT_DECK })
             .putBoolean(KEY_KEEP_SCREEN_ON, cfg.keepScreenOn)
+            .putBoolean(KEY_USE_HEADSET_MIC, cfg.useHeadsetMic)
             .remove(KEY_AUTO_EXPLAIN)
             .remove(KEY_API_KEY)
             .remove(KEY_NEURAL_TOKEN)
@@ -452,7 +456,8 @@ object Prefs {
             detectCode = p.getBoolean(KEY_DETECT_CODE, CodeDetect.SETTING_DEFAULT),
             generatedDeck = p.getString(KEY_GENERATED_DECK, MakeCard.DEFAULT_DECK).orEmpty()
                 .ifBlank { MakeCard.DEFAULT_DECK },
-            keepScreenOn = p.getBoolean(KEY_KEEP_SCREEN_ON, KeepScreenOn.SETTING_DEFAULT)
+            keepScreenOn = p.getBoolean(KEY_KEEP_SCREEN_ON, KeepScreenOn.SETTING_DEFAULT),
+            useHeadsetMic = p.getBoolean(KEY_USE_HEADSET_MIC, true)
         )
     }
 

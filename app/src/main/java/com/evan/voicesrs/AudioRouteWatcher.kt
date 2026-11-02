@@ -84,6 +84,25 @@ object AudioRouteDecision {
     }
 
     /**
+     * h105: the headset-mic device for a listen, or null. When [useHeadsetMic]
+     * is on, this returns the first Bluetooth SCO / BLE headset input regardless
+     * of the read-aloud [channel], so setCommunicationDevice can grab it. When
+     * off (today's behaviour — MEDIA never selects SCO), or when no headset input
+     * is present, it returns null and the caller uses the normal [decide] route.
+     */
+    fun listenInput(
+        useHeadsetMic: Boolean,
+        inputs: List<MicRoute.AudioDev>,
+        channel: String = Prefs.READ_ALOUD_MEDIA,
+    ): MicRoute.AudioDev? {
+        if (!useHeadsetMic) return null
+        return inputs.firstOrNull {
+            it.type == MicRoute.AudioDevType.BLUETOOTH_SCO ||
+                it.type == MicRoute.AudioDevType.BLE_HEADSET
+        }
+    }
+
+    /**
      * Whether an output of this type may carry a communication device for [channel].
      * In [Prefs.READ_ALOUD_MEDIA] classic Bluetooth (A2DP and SCO) is never a
      * communication output; [Prefs.READ_ALOUD_CALL] keeps today's set.

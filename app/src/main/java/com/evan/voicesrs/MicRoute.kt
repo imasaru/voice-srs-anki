@@ -135,3 +135,18 @@ object MicRoute {
     /** Map an android.media.AudioDeviceInfo TYPE_* int to [AudioDevType]. */
     fun typeOf(androidType: Int): AudioDevType = DeviceTypes.typeOf(androidType)
 }
+
+/**
+ * h105: pure timing for the communication-device route. The service times how
+ * long setCommunicationDevice takes to take effect; this keeps the arithmetic
+ * (and its clamp) unit-tested and free of Android.
+ */
+object MicRouteTiming {
+    /** Cap for waiting on the active-device callback before giving up. */
+    const val TIMEOUT_MS = 1500L
+
+    /** Milliseconds from the setCommunicationDevice request to the route
+     * actually changing. Never negative: a late/missing callback counts as zero. */
+    fun delayMs(requestedAt: Long, activeAt: Long): Long =
+        (activeAt - requestedAt).coerceAtLeast(0L)
+}

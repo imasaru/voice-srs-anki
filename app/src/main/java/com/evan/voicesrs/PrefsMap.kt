@@ -46,7 +46,8 @@ object PrefsMap {
         "decision_model" to "",
         "detect_code" to false,
         "generated_deck" to "",
-        "keep_screen_on" to false
+        "keep_screen_on" to false,
+        "use_headset_mic" to true
     )
 
     fun snapshot(plain: Map<String, *>, secrets: Map<String, *>): Map<String, Any?> {
