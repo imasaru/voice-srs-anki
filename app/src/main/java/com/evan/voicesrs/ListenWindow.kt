@@ -40,6 +40,10 @@ object ListenWindow {
         finals.firstOrNull { it.isNotBlank() }?.let { return it }
         return partials.firstOrNull { it.isNotBlank() }?.trim() ?: ""
     }
+
+    /** h102: window cut off / recognizer destroyed with no final. Own-words deadline text wins; else the latest non-blank partial; else null. */
+    fun cutoffText(ownWords: String?, sessionPartials: List<String>): String? =
+        ownWords ?: finalOrPartial(emptyList(), sessionPartials).ifBlank { null }
     const val SILENT_NOTICE = "Didn't hear a grade, switched to silent"
     const val ATTEMPTS_LABEL = "Listen attempts"
     const val ATTEMPTS_HELP = "How many times to listen before switching to silent."
