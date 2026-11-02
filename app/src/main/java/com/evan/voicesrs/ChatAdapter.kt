@@ -190,6 +190,8 @@ class ChatAdapter(
                 cardStem.ellipsize = if (expanded) null else TextUtils.TruncateAt.END
             }
             CardFaceBinder.bindPills(userAnswer, userPill, turn.transcript, turn.ease, onRegrade, userLabel)
+            BubbleCopy.selectable(userAnswer, true)
+            BubbleCopy.selectable(body, true)
             val why = JudgeNote.shown(turn)
             userReason.text = if (why == null) "" else itemView.context.getString(R.string.own_words_reason, why)
             userReason.visibility = if (why == null) View.GONE else View.VISIBLE
@@ -303,6 +305,10 @@ class ChatAdapter(
         private val question: TextView = view.findViewById(R.id.askQuestion)
         private val reply: TextView = view.findViewById(R.id.askReply)
 
+        init {
+            BubbleCopy.addCopyAll(reply)
+        }
+
         fun bind(row: ChatRow.Ask) {
             question.text = row.question
             val text = when (val state = row.state) {
@@ -324,6 +330,8 @@ class ChatAdapter(
                 }
             }
             val retryable = row.state is ExplState.Error && (row.state as ExplState.Error).retryable
+            BubbleCopy.selectable(question, true)
+            BubbleCopy.selectable(reply, !retryable)
             if (retryable) {
                 reply.setOnClickListener { GeneralChat.retry(it.context, row.id) }
             } else {
@@ -529,6 +537,7 @@ class ChatAdapter(
         private fun followText(text: String, user: Boolean, density: Float): TextView {
             val view = TextView(follows.context)
             if (user) view.text = text else CardFaceBinder.applySections(view, text)
+            BubbleCopy.selectable(view, true)
             view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             view.setTextColor(follows.context.getColor(if (user) R.color.bubble_user_on else R.color.bubble_ai_on))
             view.setBackgroundResource(if (user) R.drawable.bg_bubble_user else R.drawable.bg_bubble_ai)
