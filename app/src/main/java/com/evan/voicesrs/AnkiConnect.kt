@@ -366,10 +366,23 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) : Stu
         post("updateNoteFields", mapOf("note" to note))
     }
 
-    /** Number of cards due now in the named deck. */
-    fun dueCount(deckName: String): Int {
-        val r = post("findCards", mapOf("query" to "deck:\"$deckName\" (is:due OR is:new)"))
-        return (r as? JSONArray)?.length() ?: 0
+    /**
+     * Deck counts for the header: [DueCounts.due] = is:due reviews available
+     * now, [DueCounts.new] = new cards available today, capped at the deck's
+     * new-per-day limit once [DueCounts.newCapped] is set. Read-only.
+     * [introducedToday] and [perDay] are null when the backing query or deck
+     * config cannot be read, in which case new is reported uncapped.
+     */
+    fun dueCounts(deckName: String): DueCounts {
+        val due = (post("findCards", mapOf("query" to "deck:\"$deckName\" is:due")) as? JSONArray)?.length() ?: 0
+        val unseen = (post("findCards", mapOf("query" to "deck:\"$deckName\" is:new")) as? JSONArray)?.length() ?: 0
+        val introducedToday = runCatching {
+            (post("findCards", mapOf("query" to "deck:\"$deckName\" introduced:1")) as? JSONArray)?.length()
+        }.getOrNull()
+        val perDay = runCatching {
+            getDeckConfig(deckName).optJSONObject("new")?.optInt("perDay")
+        }.getOrNull()
+        return DueSplit.counts(due, unseen, perDay, introducedToday)
     }
 
     /** The full preset object for [deck], or throw on an unexpected result. */

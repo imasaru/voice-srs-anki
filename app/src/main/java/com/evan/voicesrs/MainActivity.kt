@@ -644,9 +644,9 @@ class MainActivity : AppCompatActivity() {
                 null
             }
             val text = try {
-                val due = anki?.dueCount(cfg.deck)
+                val counts = anki?.dueCounts(cfg.deck)
                     ?: throw IllegalStateException("AnkiConnect unavailable")
-                getString(R.string.due_format, due)
+                getString(R.string.due_split_format, counts.due, counts.new)
             } catch (e: Exception) {
                 "Anki unreachable: ${e.message}"
             }

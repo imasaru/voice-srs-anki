@@ -1870,7 +1870,7 @@ class DrillService : Service(), VoiceIo {
         anki.sync()
         anki.guiDeckReview(cfg.deck)
         val due = try {
-            anki.dueCount(cfg.deck)
+            DueSplit.sessionTotal(anki.dueCounts(cfg.deck))
         } catch (_: Exception) {
             0
         }

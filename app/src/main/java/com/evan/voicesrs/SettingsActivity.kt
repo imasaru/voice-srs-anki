@@ -1296,8 +1296,8 @@ class SettingsActivity : AppCompatActivity() {
                 val anki = AnkiConnect(url, key)
                 val version = anki.version()
                 val decks = anki.deckNames()
-                val due = anki.dueCount(deck)
-                ConnectionSummary.ankiOk(version, decks.size, deck, due)
+                val counts = anki.dueCounts(deck)
+                ConnectionSummary.ankiOk(version, decks.size, deck, DueSplit.label(counts))
             } catch (e: Exception) {
                 ConnectionSummary.failure(e)
             }

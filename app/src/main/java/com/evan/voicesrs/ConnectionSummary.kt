@@ -8,9 +8,9 @@ import java.util.Locale
  * Never includes a deck list or a stack trace.
  */
 object ConnectionSummary {
-    fun ankiOk(version: Int, deckCount: Int, deck: String, due: Int): String {
+    fun ankiOk(version: Int, deckCount: Int, deck: String, label: String): String {
         val leaf = DeckName.split(deck).second.ifBlank { deck.trim() }
-        return "✓ Connected · AnkiConnect v$version · $deckCount decks · '$leaf': $due due"
+        return "✓ Connected · AnkiConnect v$version · $deckCount decks · '$leaf': $label"
     }
 
     fun aiOk(model: String, elapsedMs: Long, reply: String): String {

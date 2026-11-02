@@ -9,12 +9,12 @@ class ConnectionSummaryTest {
     @Test
     fun `anki summary is one line with the deck leaf`() {
         assertEquals(
-            "✓ Connected · AnkiConnect v6 · 213 decks · 'Mock Exam 1': 45 due",
-            ConnectionSummary.ankiOk(6, 213, "Databricks DEA::kengio::Mock Exam 1", 45)
+            "✓ Connected · AnkiConnect v6 · 213 decks · 'Mock Exam 1': 45 due · 0 new",
+            ConnectionSummary.ankiOk(6, 213, "Databricks DEA::kengio::Mock Exam 1", DueSplit.label(DueCounts(45, 0, false)))
         )
         assertEquals(
-            "✓ Connected · AnkiConnect v6 · 1 decks · 'VoiceSRS-Test': 0 due",
-            ConnectionSummary.ankiOk(6, 1, "VoiceSRS-Test", 0)
+            "✓ Connected · AnkiConnect v6 · 1 decks · 'VoiceSRS-Test': 0 due · 0 new",
+            ConnectionSummary.ankiOk(6, 1, "VoiceSRS-Test", DueSplit.label(DueCounts(0, 0, false)))
         )
     }
 

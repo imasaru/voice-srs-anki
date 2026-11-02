@@ -12,6 +12,7 @@
     <string name="error_title">Can\'t start the drill</string>
     <string name="error_retry">Retry</string>
     <string name="due_format">Due now: %1$d cards</string>
+    <string name="due_split_format">%1$d due · %2$d new</string>
     <string name="notif_title">Voice SRS drill running</string>
     <string name="notif_text">Tap Stop to end the drill.</string>
     <string name="notif_stop">Stop</string>
