@@ -8,6 +8,10 @@ import java.util.Locale
  * Never includes a deck list or a stack trace.
  */
 object ConnectionSummary {
+    /** Back-compat overload: format a raw due count as "<n> due" and route through the label form. */
+    fun ankiOk(version: Int, deckCount: Int, deck: String, due: Int): String =
+        ankiOk(version, deckCount, deck, "$due due")
+
     fun ankiOk(version: Int, deckCount: Int, deck: String, label: String): String {
         val leaf = DeckName.split(deck).second.ifBlank { deck.trim() }
         return "✓ Connected · AnkiConnect v$version · $deckCount decks · '$leaf': $label"
