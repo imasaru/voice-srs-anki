@@ -350,6 +350,7 @@ class ChatAdapter(
         private val heard: TextView = view.findViewById(R.id.liveHeard)
         private val follows: LinearLayout = view.findViewById(R.id.liveFollows)
         private val showAnswer: Button = view.findViewById(R.id.chatShowAnswer)
+        private val guideLabel: TextView = view.findViewById(R.id.chatGradeGuide)
         private val chips: View = view.findViewById(R.id.chatGradeChips)
         private val again: Chip = view.findViewById(R.id.chatChipAgain)
         private val hard: Chip = view.findViewById(R.id.chatChipHard)
@@ -452,6 +453,8 @@ class ChatAdapter(
                 heard.text = heardLine
             }
             showAnswer.visibility = if (row.showAnswer) View.VISIBLE else View.GONE
+            guideLabel.setText(when (row.guide) { 1 -> R.string.grade_guide; 2 -> R.string.grade_guide_tap; else -> R.string.answer_guide })
+            guideLabel.visibility = if (row.guide == 0) View.GONE else View.VISIBLE
             showAnswer.setOnClickListener { DrillService.submitShowAnswer() }
             chips.visibility = if (row.rating) View.VISIBLE else View.GONE
             RatingSuggest.apply(again, 1, row.selectedEase, row.suggestedEase)

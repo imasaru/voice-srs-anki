@@ -37,7 +37,8 @@ sealed class ChatRow {
         val memoFront: String = "",
         val memoBack: String = "",
         val memoAvailable: Boolean = false,
-        val memoHint: Boolean = false
+        val memoHint: Boolean = false,
+        val guide: Int = 0 // SkipQueue.guide(true, showBack, silent) when embedded; 0 when narrow
     ) : ChatRow() {
         override val key: String = "live"
     }
@@ -106,6 +107,7 @@ object ChatFeed {
             showBack = state.showBack && state.backHtml.isNotBlank(),
             heard = state.heard,
             showAnswer = buttons && controls.showAnswer,
+            guide = if (buttons) SkipQueue.guide(true, state.showBack, state.silentSession) else 0,
             rating = buttons && controls.rating,
             selectedEase = if (buttons && controls.rating) state.selectedEase else null,
             questionOrdinal = state.questionOrdinal,
