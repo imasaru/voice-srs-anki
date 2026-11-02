@@ -149,4 +149,26 @@ object MicRouteTiming {
      * actually changing. Never negative: a late/missing callback counts as zero. */
     fun delayMs(requestedAt: Long, activeAt: Long): Long =
         (activeAt - requestedAt).coerceAtLeast(0L)
+
+    /** Which listen this is. Only ANSWER and RATING route the communication
+     * device; COMMAND and READ_ALOUD leave audio routing untouched. */
+    enum class Kind { ANSWER, RATING, COMMAND, READ_ALOUD }
+
+    /**
+     * True when this listen should switch to a communication device. Only
+     * [Kind.ANSWER] and [Kind.RATING] do, and only when a suitable device
+     * ([dev]) was actually found — [dev] null means "no headset connected" and
+     * there is nothing to switch to.
+     */
+    fun shouldRoute(listenKind: Kind, dev: MicRoute.AudioDev?): Boolean =
+        (listenKind == Kind.ANSWER || listenKind == Kind.RATING) && dev != null
+
+    /**
+     * Human-readable route line for the start-of-listen log. "default" when no
+     * device was found (built-in mic); otherwise names the picked device and
+     * the setting/channel so the SCO switch is visible in logcat.
+     */
+    fun routeLog(dev: MicRoute.AudioDev?, setting: Boolean, channel: String): String =
+        if (dev == null) "mic route: default"
+        else "mic route: ${dev.type.name} ${dev.name} (setting=${if (setting) "on" else "off"} channel=$channel)"
 }
