@@ -95,6 +95,10 @@ object ThinkTime {
         return remainingMs
     }
 
+    /** h118: per-engine think slice. Whisper listens to the full [timeoutMs] (ends on silence); others keep [capMs]. capMs <= 0 means no cap. */
+    fun engineSliceMs(kind: EngineKind, timeoutMs: Long, capMs: Long): Long =
+        if (capMs <= 0L || kind == EngineKind.WHISPER) timeoutMs else minOf(timeoutMs, capMs)
+
     /** Settling grace before a quiet reveal: at least 1.5 s of no new speech. */
     fun settleMs(listenSilenceMs: Long): Long = maxOf(1_500L, listenSilenceMs)
 

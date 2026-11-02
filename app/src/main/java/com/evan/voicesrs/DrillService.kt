@@ -302,6 +302,8 @@ class DrillService : Service(), VoiceIo {
     /** Bumped on every destroy so late callbacks from the old instance are ignored. */
     private var recognizerGen = 0
     private var activeKind: EngineKind = EngineKind.GOOGLE
+    /** h118: think-time cap for non-Whisper engines; 0 = none. */
+    @Volatile private var thinkSliceCapMs = 0L
     private var fellBackFrom: EngineKind? = null
     @Volatile private var engineFallback = false
     @Volatile private var audioEndedAtMs = 0L
@@ -1625,7 +1627,7 @@ class DrillService : Service(), VoiceIo {
             val result = if (scripted != null && scripted.enabled()) {
                 // Poll in short slices so a chip tap (queued grade) is honoured during a scripted listen,
                 // the same way the real recognizer path accepts it.
-                val deadline = SystemClock.elapsedRealtime() + timeoutMs
+                val deadline = SystemClock.elapsedRealtime() + ThinkTime.engineSliceMs(EngineKind.GOOGLE, timeoutMs, thinkSliceCapMs)
                 var text: String? = null
                 while (text == null) {
                     if (showAnswerEarly.get() || sessionSilent || chatPaused.get()) break
@@ -2524,13 +2526,18 @@ class DrillService : Service(), VoiceIo {
                     ThinkTime.settleMs(listenSilenceMs.toLong()).coerceAtMost(thinkDeadlineMs - now)
                 } else {
                     if (lettersHeard()) {
-                        minOf(ThinkTime.listenSliceMs(thinkDeadlineMs - now, listenWaitMs), ThinkTime.MIC_SLICE_MS)
+                        ThinkTime.listenSliceMs(thinkDeadlineMs - now, listenWaitMs)
                     } else {
                         thinkDeadlineMs - now
                     }
                 }
+                if (!settling && lettersHeard()) {
+                    thinkSliceCapMs = ThinkTime.MIC_SLICE_MS
+                } else {
+                    thinkSliceCapMs = 0L
+                }
                 if (slice <= 0L) return ThinkResult.Reveal
-                val heard = captureListen(slice, answerListen = true)
+                val heard = try { captureListen(slice, answerListen = true) } finally { thinkSliceCapMs = 0L }
                 lastHeard = heard
                 if (chatPaused.get()) continue
                 if (showAnswerEarly.getAndSet(false)) return ThinkResult.Reveal
@@ -3554,7 +3561,7 @@ class DrillService : Service(), VoiceIo {
             consumeQueuedGrade()?.let { return it }
             activeKind = kind
             fellBackFrom = fellBack
-            val attempt = listenOnce(timeoutMs, epoch)
+            val attempt = listenOnce(ThinkTime.engineSliceMs(kind, timeoutMs, thinkSliceCapMs), epoch)
             if (attempt.fallback) {
                 fellBack = kind
                 continue
