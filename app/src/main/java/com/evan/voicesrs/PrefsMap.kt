@@ -47,7 +47,9 @@ object PrefsMap {
         "detect_code" to false,
         "generated_deck" to "",
         "keep_screen_on" to false,
-        "use_headset_mic" to true
+        "use_headset_mic" to true,
+        "speech_engine" to "AUTO",
+        "asr_url" to ""
     )
 
     fun snapshot(plain: Map<String, *>, secrets: Map<String, *>): Map<String, Any?> {

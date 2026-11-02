@@ -361,6 +361,24 @@ class SettingsActivity : AppCompatActivity() {
         ) { label ->
             persist { it.copy(thinkTimeSec = ThinkTime.fromLabel(label)) }
         }
+        val speechEngineGroup: MaterialButtonToggleGroup = findViewById(R.id.speechEngineGroup)
+        fun speechEngineId(choice: SpeechChoice): Int = when (choice) {
+            SpeechChoice.WHISPER -> R.id.speechEngineWhisper
+            SpeechChoice.VOSK -> R.id.speechEngineVosk
+            SpeechChoice.GOOGLE -> R.id.speechEngineGoogle
+            SpeechChoice.AUTO -> R.id.speechEngineAuto
+        }
+        speechEngineGroup.check(speechEngineId(held.speechEngine))
+        speechEngineGroup.addOnButtonCheckedListener { _, id, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            val choice = when (id) {
+                R.id.speechEngineWhisper -> SpeechChoice.WHISPER
+                R.id.speechEngineVosk -> SpeechChoice.VOSK
+                R.id.speechEngineGoogle -> SpeechChoice.GOOGLE
+                else -> SpeechChoice.AUTO
+            }
+            persist { it.copy(speechEngine = choice) }
+        }
         offlineSwitch.isChecked = held.offlineBatch
         batchSizeView.setText(held.offlineBatchSize.toString())
         val goalLabels = listOf(
