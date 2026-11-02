@@ -680,6 +680,15 @@
                         android:text="@string/settings_highlight_sentence"
                         android:textAppearance="?attr/textAppearanceBodyLarge" />
 
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/useHeadsetMicSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="48dp"
+                        android:text="@string/settings_use_headset_mic"
+                        android:summary="@string/settings_use_headset_mic_summary"
+                        android:textAppearance="?attr/textAppearanceBodyLarge" />
+
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
