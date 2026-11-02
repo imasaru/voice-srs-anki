@@ -4043,3 +4043,18 @@ class DrillService : Service(), VoiceIo {
         }
     }
 }
+
+/** h103: confirmation for a judge auto-grade. Pure, no Android. */
+internal object GradeConfirm {
+    /** How long the lit chip stays visible before the card moves on. */
+    const val CHIP_HOLD_MS = 1200L
+
+    fun label(ease: Int): String = when (ease) {
+        1 -> "Again"; 2 -> "Hard"; 3 -> "Good"; 4 -> "Easy"; else -> "Good"
+    }
+
+    fun ratedStatus(ease: Int): String =
+        if (ease >= 3) "Correct, rated ${label(ease)}" else "Rated ${label(ease)}"
+
+    fun queuedStatus(pending: Int): String = "Queued, $pending pending sync"
+}
