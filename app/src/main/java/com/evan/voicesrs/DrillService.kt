@@ -1221,18 +1221,29 @@ class DrillService : Service(), VoiceIo {
             RatingGuides.LONG, RatingGuides.SHORT -> Log.i(TAG, "rating prompt spoken")
             RatingGuides.REPROMPT -> Log.i(TAG, "rating reprompt")
         }
-        val parts = SentenceReading.parts(spoken)
+        val parts = TtsFallback.onDeviceParts(spoken)
         try {
             val cfg = try { Prefs.load(this) } catch (_: Exception) { null }
             val neuralCard = cfg != null && useNeuralNow(cfg) && spoken.length <= NeuralTts.MAX_TEXT
-            if (neuralCard && speakNeuralCard(cfg!!, spoken)) return
+            if (neuralCard) {
+                if (speakNeuralCard(cfg!!, spoken)) return
+                val stoppedNow = stopRequested.get() || speechInterrupted || speechSkipped
+                val was = neuralBlocked
+                neuralBlocked = TtsFallback.blockedAfter(neuralBlocked, ok = false, stopped = stoppedNow)
+                if (neuralBlocked && !was) {
+                    lastNeuralHealthAt = SystemClock.elapsedRealtime()
+                    Log.i(TAG, "neural blocked after card fail; on-device until health ok")
+                }
+            }
             if (stopRequested.get() || speechInterrupted || speechSkipped || sessionSilent) return
             for ((i, part) in parts.withIndex()) {
                 if (stopRequested.get() || speechInterrupted || speechSkipped || sessionSilent) break
                 readingIndex = i
                 DrillUi.update(SentenceReading.at(i, part))
                 if (neuralCard) {
-                    if (speakOnDevice(part) == TtsFallback.Spoke.DONE) Log.i(TAG, "TTS engine=neural card fail; fallback on-device ok")
+                    val spoke = speakOnDevice(part)
+                    if (spoke == TtsFallback.Spoke.DONE) Log.i(TAG, "TTS engine=neural card fail; fallback on-device ok")
+                    if (spoke == TtsFallback.Spoke.STOPPED) break
                 } else {
                     speakOne(part)
                 }
