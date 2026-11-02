@@ -244,6 +244,10 @@
     <string name="settings_ai_clear_failed">Could not clear the AI cache.</string>
     <string name="section_exam">Exam date</string>
     <string name="settings_exam_help">Per deck. Voice SRS clones this deck\'s preset, raises retention as the exam nears, and pulls unreviewed cards into the last week.</string>
+    <string name="settings_exam_apply">Apply exam schedule to Anki deck</string>
+    <string name="settings_exam_help_readonly">Shown on the main screen and in reports. Your Anki deck is not changed.</string>
+    <string name="settings_exam_save_failed">Couldn\'t save exam date: %1$s</string>
+    <string name="settings_exam_countdown_readonly">Exam in %1$d days · %2$d%% covered</string>
     <string name="settings_exam_date">Set exam date</string>
     <string name="settings_exam_date_set">Exam: %1$s</string>
     <string name="settings_exam_clear">Clear</string>

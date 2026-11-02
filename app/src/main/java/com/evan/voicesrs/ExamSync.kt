@@ -13,6 +13,17 @@ object ExamSync {
     private const val TAG = "ExamSync"
 
     /**
+     * Read-only-by-default policy for the exam date. Returns true only when the caller has
+     * opted in via [AnkiConfig.examApplyToAnki] AND an exam date is set. When false, [run]
+     * returns before touching AnkiConnect: no clone, no assign, no saveDeckConfig,
+     * no findCardIds, no setDueDate. The date still drives display + reports.
+     */
+    fun shouldApply(cfg: AnkiConfig, state: ExamStore.State): Boolean {
+        if (state.date == null) return false
+        return cfg.examApplyToAnki
+    }
+
+    /**
      * Outcome of an exam apply. [error] is set only when the apply could not
      * complete, so the caller can surface a user-visible failure.
      */
@@ -28,6 +39,16 @@ object ExamSync {
             return Result(spoken = "")
         }
         val exam = state.date ?: return Result(spoken = "")
+        val cfg = try {
+            Prefs.load(ctx)
+        } catch (_: Exception) {
+            AnkiConfig(url = "", apiKey = "", deck = "")
+        }
+        if (!shouldApply(cfg, state)) {
+            // Read-only by default: the exam date still drives display + reports, but no Anki
+            // writes happen. A previously-modified deck can still be reverted via ExamRevert.
+            return Result(spoken = "")
+        }
         val days = ExamPlan.daysLeft(today, exam)
         if (days < 0) {
             restoreIfNeeded(ctx, anki, deck, state, today)

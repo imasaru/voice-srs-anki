@@ -701,11 +701,16 @@ class MainActivity : AppCompatActivity() {
             view.text = ""
             return
         }
-        val line = ExamApply.countdownLine(
-            days,
-            ExamApply.retentionOf(days, state.target),
-            coverage ?: state.coverage ?: 0
-        )
+        val coveragePercent = coverage ?: state.coverage ?: 0
+        val line = if (cfg.examApplyToAnki) {
+            ExamApply.countdownLine(
+                days,
+                ExamApply.retentionOf(days, state.target),
+                coveragePercent
+            )
+        } else {
+            getString(R.string.settings_exam_countdown_readonly, days, coveragePercent)
+        }
         if (line.isBlank()) {
             view.visibility = View.GONE
             view.text = ""

@@ -140,6 +140,8 @@ class SettingsActivity : AppCompatActivity() {
         val examClearButton: Button = findViewById(R.id.examClearButton)
         val examRevertButton: Button = findViewById(R.id.examRevertButton)
         val examStatusText: TextView = findViewById(R.id.examStatusText)
+        val examApplySwitch: MaterialSwitch = findViewById(R.id.examApplySwitch)
+        val examHelpText: TextView = findViewById(R.id.examHelpText)
         fun setExamStatus(text: String) {
             examStatusText.text = text
             examStatusText.visibility = if (text.isBlank()) View.GONE else View.VISIBLE
@@ -147,8 +149,21 @@ class SettingsActivity : AppCompatActivity() {
         val examTargetLayout: TextInputLayout = findViewById(R.id.examTargetLayout)
         val examTargetInput: TextInputEditText = findViewById(R.id.examTargetInput)
         val examDateFmt = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US)
-        fun examDeckName(): String =
-            deckView.text?.toString()?.trim().orEmpty().ifBlank { held.deck }
+        fun examDeckName(): String = examDeckFor(
+            deckView.text?.toString().orEmpty(),
+            try { Prefs.load(this).deck } catch (_: Exception) { held.deck }
+        )
+        fun bindExamHelp() {
+            // OFF (default): read-only. ON: the original behavior.
+            examHelpText.text = if (held.examApplyToAnki) {
+                getString(R.string.settings_exam_help)
+            } else {
+                getString(R.string.settings_exam_help_readonly)
+            }
+            // Target retention field is editable only when the schedule is applied to Anki.
+            examTargetLayout.isEnabled = held.examApplyToAnki
+            examTargetLayout.alpha = if (held.examApplyToAnki) 1f else 0.5f
+        }
         fun showExam() {
             val state = try {
                 Prefs.loadExam(this, examDeckName())
@@ -165,20 +180,26 @@ class SettingsActivity : AppCompatActivity() {
             val shown = ExamStore.formatTarget(state.target).orEmpty()
             if (examTargetInput.text?.toString() != shown) examTargetInput.setText(shown)
             examRevertButton.visibility = if (ExamStore.hasSnapshot(state)) View.VISIBLE else View.GONE
+            examApplySwitch.isChecked = held.examApplyToAnki
+            bindExamHelp()
         }
         fun persistExam(transform: (ExamStore.State) -> ExamStore.State) {
             if (destroyed) return
             val deck = examDeckName()
             val before = try {
                 Prefs.loadExam(this, deck)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.w("VoiceSRS", "loadExam failed for $deck", e)
+                setExamStatus(getString(R.string.settings_exam_save_failed, e.message ?: e.javaClass.simpleName))
                 return
             }
             val next = transform(before)
             if (next == before) return
             try {
                 Prefs.saveExam(this, deck, next)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.w("VoiceSRS", "saveExam failed for $deck", e)
+                setExamStatus(getString(R.string.settings_exam_save_failed, e.message ?: e.javaClass.simpleName))
                 return
             }
             armSaved()
@@ -467,6 +488,10 @@ class SettingsActivity : AppCompatActivity() {
         }
         keepScreenOnSwitch.setOnCheckedChangeListener { _, checked ->
             persist { it.copy(keepScreenOn = checked) }
+        }
+        examApplySwitch.setOnCheckedChangeListener { _, checked ->
+            persist { it.copy(examApplyToAnki = checked) }
+            showExam()
         }
         highlightSentenceSwitch.setOnCheckedChangeListener { _, checked ->
             persist { it.copy(highlightSentence = checked) }
@@ -1507,3 +1532,9 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 }
+
+/**
+ * Bug 1 fix: which deck an exam note belongs to is ALWAYS the saved deck. [fieldText] is the
+ * (possibly unsaved, half-typed) value in the deck field and is deliberately ignored.
+ */
+internal fun examDeckFor(fieldText: String, savedDeck: String): String = savedDeck
