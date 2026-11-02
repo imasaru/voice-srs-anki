@@ -83,9 +83,8 @@ class SpeechEngineTest {
     }
 
     @Test
-    fun `asr base prefers asr url then neural host on port 8791`() {
-        assertEquals("http://a:9", SpeechEngine.asrBase("http://a:9/", ""))
-        assertEquals("http://h:8791", SpeechEngine.asrBase("", "http://h:8765/tts"))
-        assertNull(SpeechEngine.asrBase("", ""))
+    fun `asr base is the asr url only`() {
+        assertEquals("http://a:9", SpeechEngine.asrBase("http://a:9/"))
+        assertNull(SpeechEngine.asrBase(""))
     }
 }
