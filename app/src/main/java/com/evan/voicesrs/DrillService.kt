@@ -2014,6 +2014,7 @@ class DrillService : Service(), VoiceIo {
                     progress.recordGrade(step.ease, step.elapsedMs)
                     publish(progress, store)
                     Log.i(TAG, "queued ease=${step.ease}")
+                    showStatus(GradeConfirm.queuedStatus(store.readGrades().size))
                     runCatching { explainSession?.prefetchOffline(queue, index) }
                     afterGradePause(cfg)
                 }
@@ -2259,8 +2260,14 @@ class DrillService : Service(), VoiceIo {
                     }
                     val auto = judgedEase
                     if (auto != null && !screenCard) {
+                        val mapped = GradeMapper.toAvailableEase(auto, gradeButtons)
+                        runCatching { DrillUi.update { it.copy(selectedEase = mapped) } }
+                        Log.i(TAG, "grade chip highlighted ease=$mapped")
+                        showStatus(GradeConfirm.ratedStatus(mapped))
+                        val holdUntil = SystemClock.elapsedRealtime() + GradeConfirm.CHIP_HOLD_MS
+                        while (!stopRequested.get() && SystemClock.elapsedRealtime() < holdUntil) SystemClock.sleep(100)
                         return CardStep.Graded(
-                            GradeMapper.toAvailableEase(auto, gradeButtons),
+                            mapped,
                             ThinkTime.answerDurationMs(presentedAt, SystemClock.elapsedRealtime()),
                             transcript,
                             answerHtml,
