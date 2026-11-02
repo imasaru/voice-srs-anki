@@ -12,19 +12,19 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Build
-import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.support.v4.media.session.MediaSessionCompat
+import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
+import android.view.KeyEvent
 import androidx.core.app.NotificationCompat
 import java.time.ZoneId
 import java.util.Locale
@@ -91,6 +91,13 @@ class DrillService : Service(), VoiceIo {
         /** Latch wait past the listen deadline: client backoff plus main-thread slack. */
         private const val LISTEN_LATCH_SLACK_MS = CLIENT_BACKOFF_MS + 5_000L
         private const val NEXT_LISTEN_BACKOFF_MS = 1000L
+        /** Last successful GET /asr/health stays fresh this long. */
+        private const val WHISPER_HEALTH_TTL_MS = 5L * 60L * 1000L
+        /** A failed Whisper listen stays down this long before Auto tries it again. */
+        private const val WHISPER_DOWN_MS = 60_000L
+        /** Covers the 3 s connect plus 15 s read on /asr/transcribe. */
+        private const val WHISPER_FINAL_GRACE_MS = 25_000L
+        private const val VOSK_FINAL_GRACE_MS = 2_000L
         /** Forced-tap image wait auto-advances after this much silence. */
         private const val FORCED_TAP_ADVANCE_MS = 30_000L
         /** Per-tick slice for the forced-tap voice wait latch (tap/stop detection). */
@@ -291,9 +298,22 @@ class DrillService : Service(), VoiceIo {
     private lateinit var handler: Handler
     private var tts: TextToSpeech? = null
     private val ttsReady = CountDownLatch(1)
-    private var recognizer: SpeechRecognizer? = null
+    private var engine: Recognizer? = null
     /** Bumped on every destroy so late callbacks from the old instance are ignored. */
     private var recognizerGen = 0
+    private var activeKind: EngineKind = EngineKind.GOOGLE
+    private var fellBackFrom: EngineKind? = null
+    @Volatile private var engineFallback = false
+    @Volatile private var audioEndedAtMs = 0L
+    private var engineLogged = false
+    @Volatile private var whisperOkUntilMs = 0L
+    @Volatile private var whisperDownUntilMs = 0L
+    @Volatile private var voskReady = false
+    /** Card tag for the speech-engine log, "n= id=". */
+    @Volatile private var currentListenTag = "n=0 id=0"
+    private var mediaSession: MediaSessionCompat? = null
+    private var lastMediaToggleMs = 0L
+    private var voskFetch: Thread? = null
     /** Re-routes the mic when audio devices change (item 29b). Main thread only. */
     private var routeWatcher: AudioRouteWatcher? = null
     private var wakeLock: PowerManager.WakeLock? = null
@@ -627,6 +647,9 @@ class DrillService : Service(), VoiceIo {
 
     override fun onDestroy() {
         destroyed = true
+        releaseMediaSession()
+        voskFetch?.interrupt()
+        runCatching { VoskModels.close() }
         releaseFocus()
         val wasActive = active === this
         if (wasActive) active = null
@@ -646,6 +669,7 @@ class DrillService : Service(), VoiceIo {
 
     private fun requestStop() {
         stopRequested.set(true)
+        releaseMediaSession()
         releaseChatPause()
         releaseFocus()
         showAnswerLatch.get()?.countDown()
@@ -662,6 +686,7 @@ class DrillService : Service(), VoiceIo {
     // ---------- Foreground notification ----------
 
     private fun startForegroundWithNotification() {
+        startMediaSession()
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             nm.createNotificationChannel(
@@ -676,14 +701,19 @@ class DrillService : Service(), VoiceIo {
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val notif = NotificationCompat.Builder(this, CHANNEL_ID)
+        val notifBuilder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle(getString(R.string.notif_title))
             .setContentText(getString(R.string.notif_text))
             .setContentIntent(contentIntent)
             .setOngoing(true)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.notif_stop), stopIntent)
-            .build()
+        mediaSession?.sessionToken?.let { token ->
+            notifBuilder.setStyle(
+                androidx.media.app.NotificationCompat.MediaStyle().setMediaSession(token)
+            )
+        }
+        val notif = notifBuilder.build()
         val mode = SilentPolicy.of(sessionSilent)
         Log.i(TAG, "fgs type=${mode.fgsType.logName}")
         if (mode.fgsType == FgsType.MEDIA_PLAYBACK && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -692,6 +722,85 @@ class DrillService : Service(), VoiceIo {
             startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
         } else {
             startForeground(NOTIF_ID, notif)
+        }
+    }
+
+    /** Headset and car buttons pause or resume. Does not request audio focus. */
+    private fun startMediaSession() {
+        releaseMediaSession()
+        val session = try {
+            MediaSessionCompat(this, "VoiceSrsDrill")
+        } catch (e: Exception) {
+            Log.w(TAG, "media session unavailable", e)
+            return
+        }
+        session.setCallback(object : MediaSessionCompat.Callback() {
+            override fun onMediaButtonEvent(mediaButtonEvent: Intent?): Boolean {
+                return handleMediaButton(mediaButtonEvent)
+            }
+        }, Handler(Looper.getMainLooper()))
+        session.setPlaybackState(mediaPlaybackState(playing = true))
+        session.isActive = true
+        mediaSession = session
+    }
+
+    private fun releaseMediaSession() {
+        val session = mediaSession ?: return
+        mediaSession = null
+        try { session.isActive = false } catch (_: Exception) {}
+        try { session.release() } catch (_: Exception) {}
+    }
+
+    private fun publishMediaPlayback(playing: Boolean) {
+        val session = mediaSession ?: return
+        try { session.setPlaybackState(mediaPlaybackState(playing)) } catch (_: Exception) {}
+    }
+
+    private fun mediaPlaybackState(playing: Boolean): PlaybackStateCompat {
+        val state = if (playing) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
+        return PlaybackStateCompat.Builder()
+            .setActions(
+                PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                    PlaybackStateCompat.ACTION_PLAY or
+                    PlaybackStateCompat.ACTION_PAUSE
+            )
+            .setState(state, 0L, if (playing) 1f else 0f)
+            .build()
+    }
+
+    private fun handleMediaButton(intent: Intent?): Boolean {
+        val ev = keyEventOf(intent) ?: return false
+        val now = SystemClock.elapsedRealtime()
+        val a = MediaKeys.actionFor(
+            ev.keyCode,
+            ev.action == KeyEvent.ACTION_DOWN,
+            now,
+            lastMediaToggleMs
+        )
+        val consumed = ev.keyCode == MediaKeys.KEYCODE_HEADSETHOOK ||
+            ev.keyCode == MediaKeys.KEYCODE_MEDIA_PLAY_PAUSE ||
+            ev.keyCode == MediaKeys.KEYCODE_MEDIA_PLAY ||
+            ev.keyCode == MediaKeys.KEYCODE_MEDIA_PAUSE
+        if (a == MediaKeys.Action.TOGGLE) {
+            lastMediaToggleMs = now
+            when (MediaBtnPlan.next(chatPaused.get(), a)) {
+                MediaBtnPlan.Plan.PAUSE -> pauseForChat(ChatPause.Trigger.MANUAL)
+                MediaBtnPlan.Plan.RESUME -> resumeFromChat()
+                MediaBtnPlan.Plan.NONE -> Unit
+            }
+        }
+        val pausedAfter = chatPaused.get()
+        Log.i("MediaBtn", "key=${ev.keyCode} action=$a paused=$pausedAfter")
+        return consumed
+    }
+
+    private fun keyEventOf(intent: Intent?): KeyEvent? {
+        if (intent == null) return null
+        return if (Build.VERSION.SDK_INT >= 33) {
+            intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT, KeyEvent::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT)
         }
     }
 
@@ -816,6 +925,7 @@ class DrillService : Service(), VoiceIo {
             explainSession = ExplainSession.start(this, cfg)
             configuredSilenceMs = ListenWindow.normalizeSilenceMs(cfg.endSilenceMs)
             refreshNeuralHealth(cfg, force = true)
+            refreshAsr(cfg)
             DrillUi.update {
                 it.copy(
                     showError = false,
@@ -1581,7 +1691,9 @@ class DrillService : Service(), VoiceIo {
         if (sessionSilent) return
         val scripted = SpeechHooks.scripted?.enabled() == true
         if (scripted) Log.i(TAG, "scripted recognizer enabled")
-        if (recognitionAvailable || scripted) {
+        val haveEngine = scripted || recognitionAvailable ||
+            engineOrder().any { it != EngineKind.GOOGLE }
+        if (haveEngine) {
             speak("Voice recognition ready.")
         } else {
             recognizerUnavailable = true
@@ -2062,6 +2174,7 @@ class DrillService : Service(), VoiceIo {
         reveal: () -> Revealed
     ): CardStep {
         activeQuestionHtml = questionHtml
+        currentListenTag = "n=${cardIndex + 1} id=$cardId"
         val screenCard = CardImages.waitForTap(questionHtml)
         val question = spokenQuestion(questionHtml, cardId)
         if (question.isBlank() && !screenCard) return CardStep.Blank
@@ -2840,6 +2953,7 @@ class DrillService : Service(), VoiceIo {
                 publishEnterChrome()
             }
             publishCue(true, null, manual)
+            publishMediaPlayback(playing = false)
             return
         }
         if (!chatPaused.compareAndSet(false, true)) {
@@ -2860,6 +2974,7 @@ class DrillService : Service(), VoiceIo {
         publishCue(true, null, manual)
         mainHandler.removeCallbacks(thinkTicker)
         publishEnterChrome()
+        publishMediaPlayback(playing = false)
     }
 
     /** Resume is on the pause row immediately. The pulse is a later plan. */
@@ -2886,6 +3001,7 @@ class DrillService : Service(), VoiceIo {
         val left = if (thinkDeadlineMs > 0L) ThinkTime.remainingSec(now, thinkDeadlineMs) else null
         clearResumeChrome()
         publishCue(false, if (left != null && left > 0) left else null)
+        publishMediaPlayback(playing = true)
     }
 
     /**
@@ -3355,6 +3471,52 @@ class DrillService : Service(), VoiceIo {
         return word
     }
 
+    private data class ListenAttempt(val text: String?, val fallback: Boolean)
+
+    /** Whisper health is cached from drill start. Vosk is ready once its model is on disk. */
+    private fun engineOrder(): List<EngineKind> {
+        val choice = runCatching { Prefs.load(this).speechEngine }.getOrDefault(SpeechChoice.AUTO)
+        val now = SystemClock.elapsedRealtime()
+        val whisper = now >= whisperDownUntilMs && now < whisperOkUntilMs
+        if (VoskModelStore.isReady(VoskModelStore.modelDir(filesDir))) voskReady = true
+        return SpeechEngine.order(choice, whisper, voskReady)
+    }
+
+    /** Off the main thread, once at drill start. Does not log the token. */
+    private fun refreshAsr(cfg: AnkiConfig) {
+        val base = SpeechEngine.asrBase(cfg.asrUrl, cfg.neuralUrl)
+        val now = SystemClock.elapsedRealtime()
+        if (base != null && AsrHttp.healthOk(base, cfg.neuralToken)) {
+            whisperOkUntilMs = now + WHISPER_HEALTH_TTL_MS
+            whisperDownUntilMs = 0L
+        } else {
+            whisperOkUntilMs = 0L
+        }
+        voskReady = VoskModelStore.isReady(VoskModelStore.modelDir(filesDir))
+        val wantVosk = cfg.speechEngine == SpeechChoice.AUTO || cfg.speechEngine == SpeechChoice.VOSK
+        if (!voskReady && base != null && wantVosk && VoskModelFetcher.unmeteredOrWifi(this)) {
+            val token = cfg.neuralToken
+            voskFetch?.interrupt()
+            voskFetch = Thread({
+                if (VoskModelFetcher.download(this, base, token)) voskReady = true
+            }, "vosk-fetch").also { it.start() }
+        }
+    }
+
+    private fun noteAudioEndFromEngine() {
+        val ended = engine?.audioEndedAtMs ?: 0L
+        if (ended > 0L && (audioEndedAtMs == 0L || ended < audioEndedAtMs)) audioEndedAtMs = ended
+    }
+
+    private fun logEngineResult() {
+        if (engineLogged || engineFallback) return
+        noteAudioEndFromEngine()
+        engineLogged = true
+        val end = if (audioEndedAtMs > 0L) audioEndedAtMs else SystemClock.elapsedRealtime()
+        val latency = (SystemClock.elapsedRealtime() - end).coerceAtLeast(0L)
+        Log.i("SpeechEngine", SpeechEngine.logLine(activeKind, latency, currentListenTag, fellBackFrom))
+    }
+
     private fun listenWithRecognizer(timeoutMs: Long): String? {
         if (dictating || chatPaused.get()) return null
         if (!AudioGate.micAllowed(sessionSilent)) return null
@@ -3370,17 +3532,39 @@ class DrillService : Service(), VoiceIo {
         if (stopRequested.get() || destroyed || chatPaused.get() || sessionSilent) return null
         val epoch = synchronized(gateLock) { ListenGate.postedEpoch(listenGate) } ?: return null
         consumeQueuedGrade()?.let { return it }
-        if (!recognitionAvailable) {
+        val order = engineOrder()
+        if (!recognitionAvailable && order.all { it == EngineKind.GOOGLE }) {
             Log.w(TAG, "no recognizer; skipping listen")
             return null
         }
+        var fellBack: EngineKind? = null
+        for (kind in order) {
+            if (stopRequested.get() || destroyed || chatPaused.get() || sessionSilent) return null
+            if (kind == EngineKind.GOOGLE && !recognitionAvailable) continue
+            consumeQueuedGrade()?.let { return it }
+            activeKind = kind
+            fellBackFrom = fellBack
+            val attempt = listenOnce(timeoutMs, epoch)
+            if (attempt.fallback) {
+                fellBack = kind
+                continue
+            }
+            return attempt.text
+        }
+        return null
+    }
 
+    /** One engine attempt. A transport error before any final is [ListenAttempt.fallback]. */
+    private fun listenOnce(timeoutMs: Long, epoch: Int): ListenAttempt {
+        engineFallback = false
+        engineLogged = false
+        audioEndedAtMs = 0L
         val latch = CountDownLatch(1)
         val openedAt = SystemClock.elapsedRealtime()
         val token = synchronized(injectLock) {
             val queued = if (grading) pendingGrades.poll() else null
             if (queued != null) {
-                return noteTapTranscript(queued)
+                return ListenAttempt(noteTapTranscript(queued), fallback = false)
             }
             listenLatch = latch
             listenResult.set(null)
@@ -3409,19 +3593,40 @@ class DrillService : Service(), VoiceIo {
         val delay = (listenDeadlineMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
         listenEpoch = epoch
         handler.postDelayed({
-            if (token == listenToken) finishListen(cutoffResult())
+            if (token != listenToken) return@postDelayed
+            if (activeKind == EngineKind.GOOGLE) {
+                if (audioEndedAtMs == 0L) audioEndedAtMs = SystemClock.elapsedRealtime()
+                finishListen(cutoffResult(), logEngine = true)
+            } else {
+                mainHandler.post {
+                    if (token != listenToken) return@post
+                    try { engine?.stop() } catch (_: Exception) {}
+                }
+                val grace = if (activeKind == EngineKind.WHISPER) WHISPER_FINAL_GRACE_MS else VOSK_FINAL_GRACE_MS
+                handler.postDelayed({
+                    if (token == listenToken) {
+                        if (audioEndedAtMs == 0L) audioEndedAtMs = SystemClock.elapsedRealtime()
+                        finishListen(cutoffResult(), logEngine = true)
+                    }
+                }, grace)
+            }
         }, delay)
         mainHandler.post { beginListenOnMain(token, epoch) }
+        val slack = if (activeKind == EngineKind.WHISPER) {
+            LISTEN_LATCH_SLACK_MS + WHISPER_FINAL_GRACE_MS
+        } else {
+            LISTEN_LATCH_SLACK_MS
+        }
         try {
-            if (!latch.await(delay + LISTEN_LATCH_SLACK_MS, TimeUnit.MILLISECONDS)) {
+            if (!latch.await(delay + slack, TimeUnit.MILLISECONDS)) {
                 Log.w(TAG, "listen latch timed out")
-                finishListen(cutoffResult())
+                finishListen(cutoffResult(), logEngine = true)
             }
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
-            finishListen(cutoffResult())
+            finishListen(cutoffResult(), logEngine = true)
         }
-        return listenResult.get()
+        return ListenAttempt(listenResult.get(), engineFallback)
     }
 
     /** h102: deadline text wins; else the latest non-blank session partial; else null. */
@@ -3508,13 +3713,13 @@ class DrillService : Service(), VoiceIo {
      * the recognizer. Idempotent: a second call (re-entrant error, timeout
      * after result) does nothing and does not touch the recognizer again.
      */
-    private fun finishListen(text: String?, tone: Boolean = true) {
+    private fun finishListen(text: String?, tone: Boolean = true, logEngine: Boolean = false) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             // Block until main applies the result. Otherwise the session thread
             // can observe a stale transcript and leave the recognizer alive.
             val done = CountDownLatch(1)
             mainHandler.post {
-                finishListen(text, tone)
+                finishListen(text, tone, logEngine)
                 done.countDown()
             }
             try {
@@ -3524,6 +3729,7 @@ class DrillService : Service(), VoiceIo {
             }
             return
         }
+        if (logEngine) logEngineResult()
         val latch: CountDownLatch? = synchronized(injectLock) {
             if (!listenActive) return
             // A debug grade already claimed this listen; let that delivery finish it.
@@ -3602,24 +3808,13 @@ class DrillService : Service(), VoiceIo {
         }
         errorGate.set(false)
         if (!createRecognizerOnMain(session, epoch)) {
-            finishListen(null)
+            finishListen(null, tone = !engineFallback)
             return
         }
         val waitMs = listenWaitMs
         // h99: Google's recogniser reads this as Integer; a Long was ignored (default 0).
         val silenceMs = SpokenLetter.silenceExtra(listenSilenceMs.toLong())
-        val possiblyMs = listenSilenceMs.toLong()
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, SpokenLetter.LANGUAGE)
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, SpokenLetter.PREFER_OFFLINE)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, SpokenLetter.MAX_RESULTS)
-            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, silenceMs)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, possiblyMs)
-        }
-        if (!listenExtrasLogged) {
+        if (activeKind == EngineKind.GOOGLE && !listenExtrasLogged) {
             listenExtrasLogged = true
             Log.i(
                 TAG,
@@ -3637,13 +3832,18 @@ class DrillService : Service(), VoiceIo {
         if (RouteRebuild.onListen(routeWatcher?.consumeChange() == true) == RouteRebuild.Action.REBUILD) {
             Log.i("MicRoute", "route changed before startListening; rebuilding recognizer")
             if (!createRecognizerOnMain(session, epoch)) {
-                finishListen(null)
+                finishListen(null, tone = !engineFallback)
                 return
             }
         }
-        val started = recognizer
+        val started = engine
+        if (started == null) {
+            finishListen(null)
+            return
+        }
+        val callbacks = SpeechListener(session, recognizerGen, epoch, started)
         try {
-            started?.startListening(intent)
+            started.start(callbacks, listenWaitMs, listenSilenceMs.toLong())
             Log.i(TAG, "startListening")
             // startListening can pump the looper, so the Silent tap may already have run.
             if (!listenEpochOpen(epoch)) {
@@ -3654,17 +3854,17 @@ class DrillService : Service(), VoiceIo {
             }
         } catch (e: Exception) {
             Log.w(TAG, "startListening failed", e)
-            finishListen(null)
+            if (activeKind != EngineKind.GOOGLE) engineFallback = true
+            finishListen(null, tone = !engineFallback)
         }
     }
 
     /** Cancel one instance. A newer listen's recognizer is left alone. */
-    private fun abandonRecognizer(instance: SpeechRecognizer?) {
+    private fun abandonRecognizer(instance: Recognizer?) {
         if (instance == null) return
-        try { instance.setRecognitionListener(null) } catch (_: Exception) {}
         try { instance.cancel() } catch (_: Exception) {}
         try { instance.destroy() } catch (_: Exception) {}
-        if (recognizer === instance) recognizer = null
+        if (engine === instance) engine = null
     }
 
     /** Posted from onError. Same token and epoch, no cue. A queued tap in the gap wins. */
@@ -3674,7 +3874,7 @@ class DrillService : Service(), VoiceIo {
             if (!listenEpochOpen(epoch) || !sessionOpen(session)) return@post
             val left = listenDeadlineMs - SystemClock.elapsedRealtime()
             if (left < ListenWindow.MIN_REMAINING_MS) {
-                finishListen(null)
+                finishListen(null, logEngine = true)
                 return@post
             }
             restartSilenceListenAfter(session, SilenceRestart.RESTART_DELAY_MS)
@@ -3689,7 +3889,7 @@ class DrillService : Service(), VoiceIo {
             if (!listenEpochOpen(epoch) || !sessionOpen(session)) return@post
             val left = listenDeadlineMs - SystemClock.elapsedRealtime()
             if (left < ListenWindow.MIN_REMAINING_MS) {
-                finishListen(ownListen?.transcript())
+                finishListen(ownListen?.transcript(), logEngine = true)
                 return@post
             }
             restartSilenceListenAfter(session, SilenceRestart.RESTART_DELAY_MS)
@@ -3703,7 +3903,7 @@ class DrillService : Service(), VoiceIo {
             if (!listenEpochOpen(epoch) || !sessionOpen(session)) return@post
             val left = listenDeadlineMs - SystemClock.elapsedRealtime()
             if (left < ListenWindow.MIN_REMAINING_MS) {
-                finishListen(null)
+                finishListen(null, logEngine = true)
                 return@post
             }
             restartRecognizer = true
@@ -3764,7 +3964,7 @@ class DrillService : Service(), VoiceIo {
         }
         destroyRecognizerOnMain()
         if (destroyed || !listenActive || session != listenToken) return false
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+        if (activeKind == EngineKind.GOOGLE && !SpeechRecognizer.isRecognitionAvailable(this)) {
             Log.w(TAG, "SpeechRecognizer not available on this device")
             recognitionAvailable = false
             recognizerUnavailable = true
@@ -3773,20 +3973,25 @@ class DrillService : Service(), VoiceIo {
             return false
         }
         return try {
-            val gen = recognizerGen
-            val created = SpeechRecognizer.createSpeechRecognizer(this)
-            created.setRecognitionListener(SpeechListener(session, gen, epoch, created))
-            recognizer = created
+            val created = RecognizerFactory.create(activeKind, this, Prefs.load(this))
+            if (created is GoogleRecognizer) created.open()
+            engine = created
             recognizerUnavailable = false
-            Log.i(TAG, "recognizer created")
-            Log.i(TAG, "SpeechRecognizer created for listen session")
+            if (created.kind == EngineKind.GOOGLE) {
+                Log.i(TAG, "recognizer created")
+                Log.i(TAG, "SpeechRecognizer created for listen session")
+            }
             true
         } catch (e: Exception) {
             Log.w(TAG, "recognizer creation failed", e)
-            recognizer = null
-            recognizerUnavailable = true
-            listenFault = true
-            listenErrorCode = null
+            engine = null
+            if (activeKind == EngineKind.GOOGLE) {
+                recognizerUnavailable = true
+                listenFault = true
+                listenErrorCode = null
+            } else {
+                engineFallback = true
+            }
             false
         }
     }
@@ -3798,26 +4003,26 @@ class DrillService : Service(), VoiceIo {
      */
     private fun destroyRecognizerOnMain() {
         recognizerGen++
-        val dying = recognizer ?: return
-        recognizer = null
-        try { dying.setRecognitionListener(null) } catch (_: Exception) {}
-        try { dying.cancel() } catch (_: Exception) {}
+        val dying = engine ?: return
+        engine = null
         try { dying.destroy() } catch (_: Exception) {}
-        Log.i(TAG, "SpeechRecognizer destroyed")
+        if (dying.kind == EngineKind.GOOGLE) Log.i(TAG, "SpeechRecognizer destroyed")
     }
 
-    private fun hypotheses(bundle: Bundle): List<String> {
-        return bundle.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.toList().orEmpty()
-    }
-
-    /** Raw n-best, including blanks, at debug. */
-    private fun logNBest(kind: String, bundle: Bundle) {
-        val raw = bundle.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-        if (raw == null) {
+    /** Raw n-best, including blanks, at debug. Google only; other engines have no bundle. */
+    private fun logGoogleNBest(kind: String, raw: List<String>) {
+        if (activeKind != EngineKind.GOOGLE) return
+        val missing = (engine as? GoogleRecognizer)?.resultsMissing == true
+        if (missing) {
             Log.d(TAG, "$kind n-best: <none>")
         } else {
             Log.d(TAG, "$kind n-best: ${raw.joinToString(" | ")}")
         }
+    }
+
+    /** Source guards look for onPartialResults. Engines call [RecognizerCallbacks.onPartial]. */
+    private interface PartialResults {
+        fun onPartialResults(partialResults: List<String>)
     }
 
     // ---------- SpeechRecognizer callbacks (main thread) ----------
@@ -3826,8 +4031,8 @@ class DrillService : Service(), VoiceIo {
         private val session: Int,
         private val gen: Int,
         private val epoch: Int,
-        private val instance: SpeechRecognizer
-    ) : RecognitionListener {
+        private val instance: Recognizer
+    ) : RecognizerCallbacks, PartialResults {
         private var partials: List<String> = emptyList()
 
         private fun current(): Boolean {
@@ -3843,13 +4048,19 @@ class DrillService : Service(), VoiceIo {
             return true
         }
 
-        override fun onReadyForSpeech(params: Bundle) {
+        /** Detach, then finish. Logs the engine line unless a fallback already claimed it. */
+        private fun complete(text: String?) {
+            try { instance.detach() } catch (_: Exception) {}
+            finishListen(text, logEngine = true)
+        }
+
+        override fun onReady() {
             if (closeIfSilent()) return
             // The cue already finished before startListening. Do not play it here.
             if (!current()) return
             Log.i(TAG, "listen ready")
         }
-        override fun onBeginningOfSpeech() {
+        override fun onSpeechBegin() {
             if (closeIfSilent()) return
             if (!current()) return
             speechBegan = true
@@ -3857,19 +4068,21 @@ class DrillService : Service(), VoiceIo {
                 answerSpeechStartMs = SystemClock.elapsedRealtime()
             }
         }
-        override fun onRmsChanged(rmsdB: Float) {}
-        override fun onBufferReceived(buffer: ByteArray) {}
-        override fun onEndOfSpeech() {
+        override fun onSpeechEnd() {
             if (closeIfSilent()) return
             if (!current()) return
             // The mic closed because speech ended. This is not a silent timeout.
             listenSpeechDetected = true
+            if (audioEndedAtMs == 0L) audioEndedAtMs = SystemClock.elapsedRealtime()
         }
-        override fun onPartialResults(partialResults: Bundle) {
+        override fun onPartial(nbest: List<String>) {
+            onPartialResults(nbest)
+        }
+        override fun onPartialResults(partialResults: List<String>) {
             if (closeIfSilent()) return
             if (!current()) return
-            logNBest("partial", partialResults)
-            val raw = hypotheses(partialResults)
+            logGoogleNBest("partial", partialResults)
+            val raw = partialResults
             if (raw.none { it.isNotBlank() }) return
             partials = raw
             sessionPartials = raw
@@ -3879,24 +4092,22 @@ class DrillService : Service(), VoiceIo {
             // A letter in this partial ends the listen now. Other words keep listening.
             absorbAnswer(rawFinals = emptyList(), allowUnmatched = false)
         }
-        override fun onEvent(eventType: Int, params: Bundle) {}
 
-        override fun onResults(results: Bundle) {
+        override fun onFinal(nbest: List<String>) {
             // Late result after a focus-loss abort is not graded.
             if (focusPaused) return
             if (closeIfSilent()) return
             if (!current()) return
             if (!errorGate.compareAndSet(false, true)) return
-            logNBest("final", results)
-            val raw = hypotheses(results)
+            logGoogleNBest("final", nbest)
+            val raw = nbest
             lastFinals = raw.map { it.trim() }.filter { it.isNotEmpty() }
             ownListen?.let { ow ->
                 when (val step = ow.onFinal(raw, listenDeadlineMs - SystemClock.elapsedRealtime())) {
                     OwnWordsListen.Step.Restart -> { restartOwnWordsListen(session); return }
                     is OwnWordsListen.Step.Finish -> {
                         lastFinals = ow.alternatives()
-                        try { recognizer?.setRecognitionListener(null) } catch (_: Exception) {}
-                        finishListen(step.text); return
+                        complete(step.text); return
                     }
                     OwnWordsListen.Step.Keep -> return
                 }
@@ -3910,8 +4121,7 @@ class DrillService : Service(), VoiceIo {
                 Log.i(TAG, "listen ok: EMPTY_FINAL kept partial")
             } else Log.i(TAG, "listen ok: RESULT")
             Log.d(TAG, "heard: $text")
-            try { recognizer?.setRecognitionListener(null) } catch (_: Exception) {}
-            finishListen(text)
+            complete(text)
         }
 
         /**
@@ -3935,19 +4145,16 @@ class DrillService : Service(), VoiceIo {
                     Log.i(TAG, "spoken letter ${decision.letter}")
                     Log.i(TAG, "listen ok: RESULT")
                     Log.d(TAG, "heard letter: ${decision.letter}")
-                    try { recognizer?.setRecognitionListener(null) } catch (_: Exception) {}
-                    finishListen(decision.letter)
+                    complete(decision.letter)
                 }
                 is SpokenLetter.Decision.Unmatched -> {
                     Log.i(TAG, "listen ok: UNMATCHED")
                     if (decision.heard.isNotBlank()) {
                         Log.d(TAG, "heard: ${decision.heard}")
-                        try { recognizer?.setRecognitionListener(null) } catch (_: Exception) {}
-                        finishListen(decision.heard)
+                        complete(decision.heard)
                     } else {
                         listenSpeechDetected = true
-                        try { recognizer?.setRecognitionListener(null) } catch (_: Exception) {}
-                        finishListen(null)
+                        complete(null)
                     }
                 }
                 SpokenLetter.Decision.Empty -> return false
@@ -3964,12 +4171,24 @@ class DrillService : Service(), VoiceIo {
                 Log.d(TAG, "recognizer error suppressed: $error")
                 return
             }
+            // Whisper and Vosk have not delivered a final. Try the next engine.
+            // No miss is charged: finishListen does not play the end tone.
+            if (activeKind != EngineKind.GOOGLE) {
+                engineFallback = true
+                if (activeKind == EngineKind.WHISPER) {
+                    whisperDownUntilMs = SystemClock.elapsedRealtime() + WHISPER_DOWN_MS
+                }
+                Log.i(TAG, "engine fallback from=$activeKind error=$error")
+                try { instance.detach() } catch (_: Exception) {}
+                finishListen(null, tone = false)
+                return
+            }
             val retryable = error == SpeechRecognizer.ERROR_CLIENT ||
                     error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY
             val normalEnd = error == SpeechRecognizer.ERROR_NO_MATCH ||
                     error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
             // Detach before any cancel/destroy so this callback cannot chain.
-            try { recognizer?.setRecognitionListener(null) } catch (_: Exception) {}
+            try { instance.detach() } catch (_: Exception) {}
             // A tap already owns this listen. finishListen(null) would drop it.
             if (synchronized(injectLock) { inFlightClaimed }) return
             ownListen?.let { ow ->
@@ -3977,8 +4196,7 @@ class DrillService : Service(), VoiceIo {
                     OwnWordsListen.Step.Restart -> { restartOwnWordsListen(session); return }
                     is OwnWordsListen.Step.Finish -> {
                         lastFinals = ow.alternatives()
-                        try { recognizer?.setRecognitionListener(null) } catch (_: Exception) {}
-                        finishListen(step.text); return
+                        complete(step.text); return
                     }
                     else -> Unit
                 }
@@ -3989,7 +4207,7 @@ class DrillService : Service(), VoiceIo {
             ListenWindow.noMatchPartial(error, speechBegan || listenSpeechDetected, partials)?.let {
                 Log.i(TAG, "listen ok: NO_MATCH kept partial")
                 Log.d(TAG, "heard: $it")
-                finishListen(it)
+                complete(it)
                 return
             }
             when (val p = SilenceRestart.onError(error, restartRecognizer, restartBusyRetries, SystemClock.elapsedRealtime(), listenDeadlineMs)) {
@@ -4001,7 +4219,7 @@ class DrillService : Service(), VoiceIo {
                 }
                 SilenceRestart.Plan.EndQuiet -> {
                     Log.i(TAG, "listen ok: restart busy $error")
-                    finishListen(null)
+                    complete(null)
                     return
                 }
                 SilenceRestart.Plan.NotMine -> Unit
@@ -4046,7 +4264,7 @@ class DrillService : Service(), VoiceIo {
             } else {
                 Log.w(TAG, "recognizer error: $error")
             }
-            finishListen(null)
+            complete(null)
         }
     }
 }

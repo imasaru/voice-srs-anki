@@ -131,6 +131,16 @@ class PrefsMapTest {
     }
 
     @Test
+    fun `speech_engine round trip keeps the stored choice`() {
+        val plain = linkedMapOf("speech_engine" to "VOSK")
+        val snap = PrefsMap.snapshot(plain, emptyMap<String, Any?>())
+        val json = SettingsJson.export(snap)
+        val known = PrefsMap.knownForParse(PrefsMap.typedDefaults(), json)
+        val parsed = SettingsJson.parse(json, known) as SettingsJson.ImportResult.Ok
+        assertEquals("VOSK", parsed.prefs["speech_engine"])
+    }
+
+    @Test
     fun `importing tts_rate as a whole double stores a Float`() {
         val editor = RecordingEditor()
         // A whole-number Double (e.g. tts_rate=1.0 from an import) must be

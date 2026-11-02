@@ -110,6 +110,15 @@ class SettingsJsonTest {
     }
 
     @Test
+    fun `speech_engine round trip`() {
+        val prefs = linkedMapOf("speech_engine" to "WHISPER")
+        val json = SettingsJson.export(prefs)
+        val known = linkedMapOf("speech_engine" to "")
+        val ok = SettingsJson.parse(json, known) as SettingsJson.ImportResult.Ok
+        assertEquals("WHISPER", ok.prefs["speech_engine"])
+    }
+
+    @Test
     fun `export JSON keys are sorted and stable`() {
         val prefs = linkedMapOf("zeta" to "1", "alpha" to "2", "mid" to true)
         val j1 = SettingsJson.export(prefs)

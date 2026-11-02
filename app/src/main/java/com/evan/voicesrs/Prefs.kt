@@ -75,7 +75,11 @@ data class AnkiConfig(
     val generatedDeck: String = MakeCard.DEFAULT_DECK,
     val keepScreenOn: Boolean = KeepScreenOn.SETTING_DEFAULT,
     /** Route answer/rating listens to a Bluetooth headset mic when one is connected. */
-    val useHeadsetMic: Boolean = true
+    val useHeadsetMic: Boolean = true,
+    /** AUTO, WHISPER, VOSK, or GOOGLE. Stored as [SpeechChoice.name]. */
+    val speechEngine: SpeechChoice = SpeechChoice.AUTO,
+    /** ASR server base URL. Blank uses [SpeechEngine.asrBase] on the neural host. */
+    val asrUrl: String = ""
 )
 
 /** SharedPreferences-backed settings. The API key and neural token live in encrypted prefs. */
@@ -129,6 +133,8 @@ object Prefs {
     private const val KEY_GENERATED_DECK = "generated_deck"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
     private const val KEY_USE_HEADSET_MIC = "use_headset_mic"
+    private const val KEY_SPEECH_ENGINE = SpeechEngine.PREF_KEY
+    private const val KEY_ASR_URL = "asr_url"
     private const val KEY_PROMPT_CHIPS = "prompt_chips"
 
     val DEFAULT_URL: String get() = BuildConfig.DEFAULT_ANKI_URL
@@ -243,6 +249,8 @@ object Prefs {
             .putString(KEY_GENERATED_DECK, cfg.generatedDeck.ifBlank { MakeCard.DEFAULT_DECK })
             .putBoolean(KEY_KEEP_SCREEN_ON, cfg.keepScreenOn)
             .putBoolean(KEY_USE_HEADSET_MIC, cfg.useHeadsetMic)
+            .putString(KEY_SPEECH_ENGINE, cfg.speechEngine.name)
+            .putString(KEY_ASR_URL, cfg.asrUrl.trim())
             .remove(KEY_AUTO_EXPLAIN)
             .remove(KEY_API_KEY)
             .remove(KEY_NEURAL_TOKEN)
@@ -457,7 +465,9 @@ object Prefs {
             generatedDeck = p.getString(KEY_GENERATED_DECK, MakeCard.DEFAULT_DECK).orEmpty()
                 .ifBlank { MakeCard.DEFAULT_DECK },
             keepScreenOn = p.getBoolean(KEY_KEEP_SCREEN_ON, KeepScreenOn.SETTING_DEFAULT),
-            useHeadsetMic = p.getBoolean(KEY_USE_HEADSET_MIC, true)
+            useHeadsetMic = p.getBoolean(KEY_USE_HEADSET_MIC, true),
+            speechEngine = SpeechEngine.parse(p.getString(KEY_SPEECH_ENGINE, null)),
+            asrUrl = p.getString(KEY_ASR_URL, "").orEmpty().trim()
         )
     }
 

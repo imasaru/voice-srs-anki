@@ -89,6 +89,9 @@ dependencies {
     implementation("androidx.room:room-runtime:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+    implementation("androidx.media:media:1.7.0")
+    implementation("com.alphacephei:vosk-android:0.3.47")
+    implementation("net.java.dev.jna:jna:5.13.0@aar")
     // org.json is bundled with Android; HttpURLConnection for AnkiConnect.
     testImplementation("junit:junit:4.13.2")
     // org.json on the JVM for unit tests:
