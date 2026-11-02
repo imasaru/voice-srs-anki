@@ -169,6 +169,7 @@
     <string name="chat_ask_hint">Ask the AI about this card…</string>
     <string name="chat_hint_general">Ask the AI a general question…</string>
     <string name="chat_copy_all">Copy all</string>
+    <string name="chat_menu_copy">Copy</string>
     <string name="chat_copied">Copied to clipboard</string>
     <string name="today_report">Today\'s report</string>
     <string name="today_report_prompt">Write today\'s study report from the study data.</string>

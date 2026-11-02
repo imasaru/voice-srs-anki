@@ -190,8 +190,9 @@ class ChatAdapter(
                 cardStem.ellipsize = if (expanded) null else TextUtils.TruncateAt.END
             }
             CardFaceBinder.bindPills(userAnswer, userPill, turn.transcript, turn.ease, onRegrade, userLabel)
-            BubbleCopy.selectable(userAnswer, true)
-            BubbleCopy.selectable(body, true)
+            BubbleMenu.attach(card)
+            BubbleMenu.attach(itemView.findViewById(R.id.userBubble), userAnswer)
+            BubbleMenu.attach(ai, body)
             val why = JudgeNote.shown(turn)
             userReason.text = if (why == null) "" else itemView.context.getString(R.string.own_words_reason, why)
             userReason.visibility = if (why == null) View.GONE else View.VISIBLE
