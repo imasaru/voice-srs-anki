@@ -22,4 +22,7 @@ object AsrServers {
 
     /** True when [position] is the "+ Add server…" row of [menuItems]. */
     fun isAddRow(position: Int, saved: List<String>): Boolean = position == saved.size
+
+    /** h119c: a blank field right after "+ Add server…" means never mind: keep the previous URL, save nothing. */
+    fun keepPrevious(raw: String, addingNew: Boolean): Boolean = addingNew && raw.isBlank()
 }

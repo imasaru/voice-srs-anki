@@ -767,6 +767,7 @@ class SettingsActivity : AppCompatActivity() {
             if (!AutoSave.decide(held.neuralUrl, url).save) return
             persist { it.copy(neuralUrl = url) }
         }
+        var asrAddingNew = false
         fun bindAsrMenu() {
             asrUrlView.setAdapter(
                 StableAdapter(this, AsrServers.menuItems(held.asrServers, getString(R.string.settings_asr_add_server)))
@@ -774,10 +775,16 @@ class SettingsActivity : AppCompatActivity() {
         }
         fun commitAsrUrl() {
             val raw = asrUrlView.text?.toString()?.trim().orEmpty()
+            if (AsrServers.keepPrevious(raw, asrAddingNew)) {
+                asrAddingNew = false
+                asrUrlView.setText(held.asrUrl, false)
+                return
+            }
             if (raw.isNotEmpty() && !raw.startsWith("http://") && !raw.startsWith("https://")) {
                 asrUrlLayout.error = getString(R.string.settings_ai_url_error)
                 return
             }
+            asrAddingNew = false
             asrUrlLayout.error = null
             if (!AutoSave.decide(held.asrUrl, raw).save) return
             persist { it.copy(asrUrl = raw, asrServers = AsrServers.remember(it.asrServers, raw)) }
@@ -814,6 +821,7 @@ class SettingsActivity : AppCompatActivity() {
         bindAsrMenu()
         asrUrlView.setOnItemClickListener { _, _, position, _ ->
             if (AsrServers.isAddRow(position, held.asrServers)) {
+                asrAddingNew = true
                 asrUrlView.setText("", false)
                 asrUrlView.requestFocus()
                 getSystemService(InputMethodManager::class.java)?.showSoftInput(asrUrlView, 0)
