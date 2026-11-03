@@ -4192,11 +4192,13 @@ class DrillService : Service(), VoiceIo {
             if (raw.none { it.isNotBlank() }) return
             partials = raw
             sessionPartials = raw
-            if (spokenLetters() == null) return
+            val letters = spokenLetters() ?: return
             listenSpeechDetected = true
             speechBegan = true
-            // A letter in this partial ends the listen now. Other words keep listening.
-            absorbAnswer(rawFinals = emptyList(), allowUnmatched = false)
+            // Only a prefixed letter ("option b") in a partial ends the listen now. A bare letter waits for the final.
+            if (SpokenLetter.partialEnds(raw, letters) != null) {
+                absorbAnswer(rawFinals = emptyList(), allowUnmatched = false)
+            }
         }
 
         override fun onFinal(nbest: List<String>) {

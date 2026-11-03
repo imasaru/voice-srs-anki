@@ -94,6 +94,26 @@ object SpokenLetter {
     }
 
     /**
+     * h107a: a bare letter partial never ends the listen. Only a prefixed letter
+     * form ("option b", "answer is c", "letter d") ends the listen early; a bare
+     * "a", a homophone, or "the" waits for the final result.
+     */
+    fun partialEnds(partials: List<String?>, letters: Set<String>): String? {
+        for (raw in partials) {
+            val text = raw?.trim().orEmpty()
+                .replace(Regex("[.!?,]+$"), "")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+                .lowercase()
+            if (text.isEmpty()) continue
+            val group = prefixed.matchEntire(text)?.groupValues?.get(1) ?: continue
+            val letter = words[group] ?: continue
+            if (letter in letters) return letter
+        }
+        return null
+    }
+
+    /**
      * First letter on the card in [finals] (best first), then in [partials].
      * Blank hypotheses are skipped. A later line can match when the top one cannot.
      */
