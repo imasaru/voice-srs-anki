@@ -2479,16 +2479,26 @@ class DrillService : Service(), VoiceIo {
                         showStatus(GradeConfirm.ratedStatus(mapped))
                         val holdUntil = SystemClock.elapsedRealtime() + GradeConfirm.AUTO_ACCEPT_MS
                         var shownLeft = -1
+                        var shownStep = -1
                         while (!stopRequested.get() && SystemClock.elapsedRealtime() < holdUntil) {
                             val tapped = claimedEase()
-                            if (tapped != null) return gradedByTap(tapped, gradeButtons, presentedAt, transcript, answerHtml, questionForGrade)
+                            if (tapped != null) {
+                                runCatching { DrillUi.update { it.copy(autoAcceptStep = null) } }
+                                return gradedByTap(tapped, gradeButtons, presentedAt, transcript, answerHtml, questionForGrade)
+                            }
                             val left = GradeConfirm.secondsLeft(holdUntil - SystemClock.elapsedRealtime())
                             if (left != shownLeft) {
                                 shownLeft = left
                                 showStatus(GradeConfirm.countdownStatus(mapped, left))
                             }
+                            val step = GradeConfirm.ringStep(holdUntil - SystemClock.elapsedRealtime())
+                            if (step != shownStep) {
+                                shownStep = step
+                                runCatching { DrillUi.update { it.copy(autoAcceptStep = step) } }
+                            }
                             SystemClock.sleep(100)
                         }
+                        runCatching { DrillUi.update { it.copy(autoAcceptStep = null) } }
                         return CardStep.Graded(
                             mapped,
                             ThinkTime.answerDurationMs(presentedAt, SystemClock.elapsedRealtime()),
@@ -4418,6 +4428,11 @@ internal object GradeConfirm {
     const val AUTO_ACCEPT_MS = 2000L
     fun secondsLeft(remainingMs: Long): Int = if (remainingMs <= 0L) 0 else ((remainingMs + 999L) / 1000L).toInt()
     fun countdownStatus(ease: Int, secondsLeft: Int): String = "${ratedStatus(ease)} · moving on in ${secondsLeft}s"
+
+    const val RING_STEPS = 8
+    fun ringStep(remainingMs: Long): Int =
+        if (remainingMs <= 0L) 0 else ((remainingMs * RING_STEPS + AUTO_ACCEPT_MS - 1) / AUTO_ACCEPT_MS).toInt().coerceAtMost(RING_STEPS)
+    fun ringFraction(step: Int): Float = step.coerceIn(0, RING_STEPS).toFloat() / RING_STEPS
 
     fun label(ease: Int): String = when (ease) {
         1 -> "Again"; 2 -> "Hard"; 3 -> "Good"; 4 -> "Easy"; else -> "Good"

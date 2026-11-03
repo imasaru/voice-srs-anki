@@ -35,6 +35,7 @@ data class DrillUiState(
     val awaitingShowAnswer: Boolean = false,
     /** Ease (1-4) of the grade chosen for the current card by tap or voice; null clears the chips. */
     val selectedEase: Int? = null,
+    val autoAcceptStep: Int? = null,
     /** Whole seconds left on the think timer. Null hides the countdown. */
     val thinkSecondsLeft: Int? = null,
     /** Chat input, a thread, or a chat question has frozen this card. */
