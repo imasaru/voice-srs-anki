@@ -315,6 +315,7 @@ class DrillService : Service(), VoiceIo {
     @Volatile private var voskReady = false
     /** Card tag for the speech-engine log, "n= id=". */
     @Volatile private var currentListenTag = "n=0 id=0"
+    @Volatile private var sessionDeck = ""
     private var mediaSession: MediaSessionCompat? = null
     private var lastMediaToggleMs = 0L
     private var voskFetch: Thread? = null
@@ -962,6 +963,7 @@ class DrillService : Service(), VoiceIo {
                 return
             }
             val anki = AnkiConnect(cfg.url, cfg.apiKey)
+            sessionDeck = cfg.deck
             CardMedia.bind(anki)
             val report = anki.preflight(cfg.deck)
             if (!report.ok) {
@@ -1660,9 +1662,9 @@ class DrillService : Service(), VoiceIo {
                     val left = deadline - SystemClock.elapsedRealtime()
                     if (left <= 0) break
                     text = scripted.poll(minOf(left, 250L))
-                    if (text != null) Log.i(TAG, "listen ok: SCRIPT")
+                    if (text != null) Log.i(TAG, "listen ok: SCRIPT $currentListenTag")
                 }
-                if (text == null) Log.i(TAG, "listen ok: SCRIPT_EMPTY")
+                if (text == null) Log.i(TAG, "listen ok: SCRIPT_EMPTY $currentListenTag")
                 text
             } else {
                 consumeQueuedGrade() ?: listenWithRecognizer(timeoutMs)
@@ -1695,7 +1697,7 @@ class DrillService : Service(), VoiceIo {
                     return result
                 }
                 runCatching { DrillUi.update { it.copy(selectedEase = used) } }
-                Log.i(TAG, "grade chip highlighted ease=$used")
+                Log.i(TAG, "grade chip highlighted ease=$used $currentListenTag")
                 if (used != action.ease) {
                     Log.i(TAG, "voice grade ease=${action.ease} ignored; tapped ease=$used wins")
                     pendingGrades.clear()
@@ -1714,7 +1716,7 @@ class DrillService : Service(), VoiceIo {
             VoiceAction.Pause -> "pause"
             VoiceAction.None -> "none"
         }
-        Log.i(TAG, "voice action: $name")
+        Log.i(TAG, "voice action: $name $currentListenTag")
     }
 
     private fun announceRecognition() {
@@ -2090,7 +2092,7 @@ class DrillService : Service(), VoiceIo {
                         progress.recordGrade(step.ease, step.elapsedMs)
                         returnDueSkips(anki, store, progress.done)
                         publish(progress, store)
-                        Log.i(TAG, "graded ease=${step.ease}")
+                        Log.i(TAG, "graded ease=${step.ease} $currentListenTag")
                         runCatching { explainSession?.prefetchOnline(anki) }
                         afterGradePause(cfg)
                     }
@@ -2216,7 +2218,7 @@ class DrillService : Service(), VoiceIo {
                     )
                     progress.recordGrade(step.ease, step.elapsedMs)
                     publish(progress, store)
-                    Log.i(TAG, "queued ease=${step.ease}")
+                    Log.i(TAG, "queued ease=${step.ease} $currentListenTag")
                     showStatus(GradeConfirm.queuedStatus(store.readGrades().size))
                     runCatching { explainSession?.prefetchOffline(queue, index) }
                     afterGradePause(cfg)
@@ -2265,7 +2267,8 @@ class DrillService : Service(), VoiceIo {
         reveal: () -> Revealed
     ): CardStep {
         activeQuestionHtml = questionHtml
-        currentListenTag = "n=${cardIndex + 1} id=$cardId"
+        currentListenTag = DrillLog.tag(cardIndex + 1, cardId)
+        Log.i(TAG, DrillLog.card(cardIndex + 1, cardId, noteId ?: 0L, sessionDeck))
         val screenCard = CardImages.waitForTap(questionHtml)
         val question = spokenQuestion(questionHtml, cardId)
         if (question.isBlank() && !screenCard) return CardStep.Blank
@@ -2466,7 +2469,7 @@ class DrillService : Service(), VoiceIo {
                     if (auto != null && !screenCard) {
                         val mapped = GradeMapper.toAvailableEase(auto, gradeButtons)
                         runCatching { DrillUi.update { it.copy(selectedEase = mapped) } }
-                        Log.i(TAG, "grade chip highlighted ease=$mapped")
+                        Log.i(TAG, "grade chip highlighted ease=$mapped $currentListenTag")
                         showStatus(GradeConfirm.ratedStatus(mapped))
                         val holdUntil = SystemClock.elapsedRealtime() + GradeConfirm.CHIP_HOLD_MS
                         while (!stopRequested.get() && SystemClock.elapsedRealtime() < holdUntil) SystemClock.sleep(100)
@@ -2890,7 +2893,7 @@ class DrillService : Service(), VoiceIo {
                 judgedEase = rating.ease
                 JudgeNote.put(cardId, GradeMapper.toAvailableEase(rating.ease, buttons), verdict.reason)
                 Log.i(TAG, OwnWordsJudge.verdictLog(verdict.rating, rating, verdict.reason, strictness,
-                    startedAfter, answerWindowMs, judgeInput))
+                    startedAfter, answerWindowMs, judgeInput) + " $currentListenTag")
                 val line = getString(OwnWordsJudge.spokenLine(rating))
                 showStatus(line)
                 speak(line)
@@ -2898,7 +2901,7 @@ class DrillService : Service(), VoiceIo {
             OwnWordsJudge.Verdict.Fallback -> {
                 val reason = attempt.reason
                 if (reason != null) Log.w(TAG, "own-words judge fallback: $reason")
-                Log.i(TAG, "own-words judge rating=fallback strictness=${strictness.key} input=$judgeInput")
+                Log.i(TAG, "own-words judge rating=fallback strictness=${strictness.key} input=$judgeInput $currentListenTag")
                 val line = getString(attempt.failLine ?: R.string.own_words_fallback)
                 showStatus(line)
                 speak(line)
@@ -3569,7 +3572,7 @@ class DrillService : Service(), VoiceIo {
     /** Mark [word] as a tap so [listen] does not hear it back or touch the dead-mic streak. */
     private fun noteTapTranscript(word: String): String {
         tapTranscript = true
-        Log.i(TAG, "listen ok: TEST_GRADE")
+        Log.i(TAG, "listen ok: TEST_GRADE $currentListenTag")
         return word
     }
 
@@ -3737,7 +3740,7 @@ class DrillService : Service(), VoiceIo {
         val text = ListenWindow.cutoffText(own, sessionPartials)
         if (own == null && text != null) {
             lastFinals = sessionPartials.map { it.trim() }.filter { it.isNotEmpty() }
-            Log.i(TAG, "listen ok: CUTOFF kept partial")
+            Log.i(TAG, "listen ok: CUTOFF kept partial $currentListenTag")
         }
         return text
     }
@@ -4226,8 +4229,8 @@ class DrillService : Service(), VoiceIo {
             val text = ListenWindow.finalOrPartial(raw, partials)
             if (usedPartial) {
                 lastFinals = partials.map { it.trim() }.filter { it.isNotEmpty() }
-                Log.i(TAG, "listen ok: EMPTY_FINAL kept partial")
-            } else Log.i(TAG, "listen ok: RESULT")
+                Log.i(TAG, "listen ok: EMPTY_FINAL kept partial $currentListenTag")
+            } else Log.i(TAG, "listen ok: RESULT $currentListenTag")
             Log.d(TAG, "heard: $text")
             complete(text)
         }
@@ -4251,12 +4254,12 @@ class DrillService : Service(), VoiceIo {
             when (decision) {
                 is SpokenLetter.Decision.Match -> {
                     Log.i(TAG, "spoken letter ${decision.letter}")
-                    Log.i(TAG, "listen ok: RESULT")
+                    Log.i(TAG, "listen ok: RESULT $currentListenTag")
                     Log.d(TAG, "heard letter: ${decision.letter}")
                     complete(decision.letter)
                 }
                 is SpokenLetter.Decision.Unmatched -> {
-                    Log.i(TAG, "listen ok: UNMATCHED")
+                    Log.i(TAG, "listen ok: UNMATCHED $currentListenTag")
                     if (decision.heard.isNotBlank()) {
                         Log.d(TAG, "heard: ${decision.heard}")
                         complete(decision.heard)
@@ -4313,7 +4316,7 @@ class DrillService : Service(), VoiceIo {
             // that used to look like silence and reopen the mic in a loop.
             if (absorbAnswer(emptyList(), allowUnmatched = normalEnd)) return
             ListenWindow.noMatchPartial(error, speechBegan || listenSpeechDetected, partials)?.let {
-                Log.i(TAG, "listen ok: NO_MATCH kept partial")
+                Log.i(TAG, "listen ok: NO_MATCH kept partial $currentListenTag")
                 Log.d(TAG, "heard: $it")
                 complete(it)
                 return
@@ -4326,7 +4329,7 @@ class DrillService : Service(), VoiceIo {
                     return
                 }
                 SilenceRestart.Plan.EndQuiet -> {
-                    Log.i(TAG, "listen ok: restart busy $error")
+                    Log.i(TAG, "listen ok: restart busy $error $currentListenTag")
                     complete(null)
                     return
                 }
@@ -4368,7 +4371,7 @@ class DrillService : Service(), VoiceIo {
                 Log.w(TAG, "recognizer error: $error")
             } else if (normalEnd) {
                 val name = if (error == SpeechRecognizer.ERROR_NO_MATCH) "NO_MATCH" else "SPEECH_TIMEOUT"
-                Log.i(TAG, "listen ok: $name")
+                Log.i(TAG, "listen ok: $name $currentListenTag")
             } else {
                 Log.w(TAG, "recognizer error: $error")
             }
@@ -4390,4 +4393,10 @@ internal object GradeConfirm {
         if (ease >= 3) "Correct, rated ${label(ease)}" else "Rated ${label(ease)}"
 
     fun queuedStatus(pending: Int): String = "Queued, $pending pending sync"
+}
+
+/** h107c: card tags for drill log lines. */
+internal object DrillLog {
+    fun tag(n: Int, id: Long): String = "n=$n id=$id"
+    fun card(n: Int, id: Long, note: Long, deck: String): String = "card start ${tag(n, id)} note=$note deck=$deck"
 }
