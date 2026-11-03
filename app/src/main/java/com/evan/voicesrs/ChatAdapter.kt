@@ -175,9 +175,9 @@ class ChatAdapter(
             cardBookmarkIcon.setOnClickListener(onBookmarkTap)
             userBookmarkIcon.setOnClickListener(onBookmarkTap)
             aiBookmarkIcon.setOnClickListener(onBookmarkTap)
-            cardPlayIcon.setOnClickListener { onSpeakSection(turn.turnId, -1, BubbleMenu.visibleText(card)) }
-            userPlayIcon.setOnClickListener { onSpeakSection(turn.turnId, -2, BubbleMenu.visibleText(itemView.findViewById(R.id.userBubble))) }
-            aiPlayIcon.setOnClickListener { onSpeakSection(turn.turnId, -3, BubbleMenu.visibleText(ai)) }
+            cardPlayIcon.setOnClickListener { onSpeakSection(turn.turnId, SpeakSection.CARD, BubbleMenu.visibleText(card)) }
+            userPlayIcon.setOnClickListener { onSpeakSection(turn.turnId, SpeakSection.USER, BubbleMenu.visibleText(itemView.findViewById(R.id.userBubble))) }
+            aiPlayIcon.setOnClickListener { onSpeakSection(turn.turnId, SpeakSection.AI, BubbleMenu.visibleText(ai)) }
             aiNoteIcon.setOnClickListener { MakeCardFlow.start(itemView.context, turn) }
             aiNoteIcon.visibility = if (turn.explanation is ExplState.Ready) View.VISIBLE else View.GONE
             val session = DrillUi.state.sessionStartedMs
@@ -355,8 +355,8 @@ class ChatAdapter(
 
         init {
             BubbleCopy.addCopyAll(reply)
-            askQuestionPlayIcon.setOnClickListener { onSpeak(askId, -4, question.text.toString()) }
-            askReplyPlayIcon.setOnClickListener { onSpeak(askId, -5, BubbleCopy.plain(reply)) }
+            askQuestionPlayIcon.setOnClickListener { onSpeak(askId, SpeakSection.ASK_QUESTION, question.text.toString()) }
+            askReplyPlayIcon.setOnClickListener { onSpeak(askId, SpeakSection.ASK_REPLY, BubbleCopy.plain(reply)) }
         }
 
         fun bind(row: ChatRow.Ask) {
