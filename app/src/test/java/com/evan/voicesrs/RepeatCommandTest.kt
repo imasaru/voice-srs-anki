@@ -33,8 +33,8 @@ class RepeatCommandTest {
     fun `ThinkTime classifies say again as Repeat`() {
         assertEquals(ThinkTime.Hear.REPEAT, ThinkTime.classify("say again"))
         assertEquals(ThinkTime.Hear.REPEAT, ThinkTime.classify("say it again"))
-        // Grade phrases still classify as ANSWER, not REPEAT.
-        assertEquals(ThinkTime.Hear.ANSWER, ThinkTime.classify("again"))
+        // h107b1: bare "again" = Repeat in the answer listen; other grade phrases still classify as ANSWER.
+        assertEquals(ThinkTime.Hear.REPEAT, ThinkTime.classify("again"))
         assertEquals(ThinkTime.Hear.ANSWER, ThinkTime.classify("say that again"))
     }
 }

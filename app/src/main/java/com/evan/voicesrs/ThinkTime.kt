@@ -142,6 +142,7 @@ object ThinkTime {
         if (raw.isNullOrBlank()) return Hear.EMPTY
         val text = raw.trim().lowercase().replace(Regex("\\s+"), " ")
         if (isShowAnswer(text)) return Hear.SHOW_ANSWER
+        if (isBareAgain(text)) return Hear.REPEAT
         return when (GradeMapper.parse(text)) {
             VoiceAction.Repeat -> Hear.REPEAT
             VoiceAction.Skip -> Hear.SKIP
@@ -155,5 +156,13 @@ object ThinkTime {
             .replace(Regex("[.!?]+$"), "")
             .replace(Regex("\\s+"), " ")
         return t == "show answer" || t == "show the answer"
+    }
+
+    /** h107b1: in the answer listen a bare "again" asks to hear the card again (not a grade, not an answer). */
+    private val BARE_AGAIN = setOf("again", "again please", "please again", "again again")
+
+    fun isBareAgain(text: String?): Boolean {
+        val t = text?.trim()?.lowercase()?.replace(Regex("[.!?,]+"), "")?.replace(Regex("\\s+"), " ") ?: return false
+        return t in BARE_AGAIN
     }
 }
