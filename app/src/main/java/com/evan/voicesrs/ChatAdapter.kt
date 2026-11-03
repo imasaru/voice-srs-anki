@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
@@ -30,7 +31,9 @@ class ChatAdapter(
     /** h121b: "Flag card" — tag the note behind this turn's card for follow-up review. */
     private val onFlag: (ReviewTurn) -> Unit = {},
     /** h121c: "Open in Anki" — open this turn's card in the AnkiDroid browser. */
-    private val onOpenAnki: (ReviewTurn) -> Unit = {}
+    private val onOpenAnki: (ReviewTurn) -> Unit = {},
+    /** h121d2: true when this turn already has a bookmark (corner icon shows filled). */
+    private val isBookmarked: (ReviewTurn) -> Boolean = { false }
 ) : ListAdapter<ChatRow, RecyclerView.ViewHolder>(DIFF) {
 
     private val cardOpen = HashSet<Long>()
@@ -123,8 +126,13 @@ class ChatAdapter(
         private val retry: Button = view.findViewById(R.id.explRetry)
         private val explain: Button = view.findViewById(R.id.explAsk)
         private val thread: TextView = view.findViewById(R.id.threadLink)
-        private val bookmark: TextView = view.findViewById(R.id.bookmarkLink)
-        private val makeCard: Chip = view.findViewById(R.id.makeCardChip)
+        private val cardBookmarkIcon: ImageButton = view.findViewById(R.id.cardBookmarkIcon)
+        private val cardPlayIcon: ImageButton = view.findViewById(R.id.cardPlayIcon)
+        private val userBookmarkIcon: ImageButton = view.findViewById(R.id.userBookmarkIcon)
+        private val userPlayIcon: ImageButton = view.findViewById(R.id.userPlayIcon)
+        private val aiNoteIcon: ImageButton = view.findViewById(R.id.aiNoteIcon)
+        private val aiBookmarkIcon: ImageButton = view.findViewById(R.id.aiBookmarkIcon)
+        private val aiPlayIcon: ImageButton = view.findViewById(R.id.aiPlayIcon)
 
         /** PAYLOAD_READING: repaint only the reading span on the already-built blocks (no rebind). */
         fun paintReading(turn: ReviewTurn) {
@@ -147,9 +155,26 @@ class ChatAdapter(
             ai.setOnClickListener { toggleExpl(turn.turnId) }
             retry.setOnClickListener { onRetry(turn.turnId) }
             thread.setOnClickListener { onThread(turn.turnId) }
-            bookmark.setOnClickListener { onBookmark(turn) }
-            makeCard.setOnClickListener { MakeCardFlow.start(itemView.context, turn) }
-            makeCard.visibility = if (turn.explanation is ExplState.Ready) View.VISIBLE else View.GONE
+            val bookmarkFilled = R.drawable.ic_bookmark_filled
+            val bookmarkOutline = R.drawable.ic_bookmark
+            val bookmarkRes = if (isBookmarked(turn)) bookmarkFilled else bookmarkOutline
+            cardBookmarkIcon.setImageResource(bookmarkRes)
+            userBookmarkIcon.setImageResource(bookmarkRes)
+            aiBookmarkIcon.setImageResource(bookmarkRes)
+            val onBookmarkTap: View.() -> Unit = {
+                onBookmark(turn)
+                cardBookmarkIcon.setImageResource(bookmarkFilled)
+                userBookmarkIcon.setImageResource(bookmarkFilled)
+                aiBookmarkIcon.setImageResource(bookmarkFilled)
+            }
+            cardBookmarkIcon.setOnClickListener(onBookmarkTap)
+            userBookmarkIcon.setOnClickListener(onBookmarkTap)
+            aiBookmarkIcon.setOnClickListener(onBookmarkTap)
+            cardPlayIcon.setOnClickListener { onSpeakSection(turn.turnId, -1, BubbleMenu.visibleText(card)) }
+            userPlayIcon.setOnClickListener { onSpeakSection(turn.turnId, -2, BubbleMenu.visibleText(itemView.findViewById(R.id.userBubble))) }
+            aiPlayIcon.setOnClickListener { onSpeakSection(turn.turnId, -3, BubbleMenu.visibleText(ai)) }
+            aiNoteIcon.setOnClickListener { MakeCardFlow.start(itemView.context, turn) }
+            aiNoteIcon.visibility = if (turn.explanation is ExplState.Ready) View.VISIBLE else View.GONE
             val session = DrillUi.state.sessionStartedMs
             val shuffle = shuffleOn(itemView)
             val parsed = QuestionCard.parse(

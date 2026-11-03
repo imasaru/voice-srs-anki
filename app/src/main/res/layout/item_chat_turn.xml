@@ -319,15 +319,6 @@
                 android:text="@string/expl_ask"
                 android:textColor="@color/bubble_ai_on"
                 android:visibility="gone" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/makeCardChip"
-                style="@style/Widget.Material3.Chip.Assist"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/make_card"
-                android:visibility="gone"
-                app:chipMinHeight="32dp" />
         </LinearLayout>
     </LinearLayout>
 
@@ -348,19 +339,6 @@
             android:paddingStart="4dp"
             android:paddingEnd="8dp"
             android:text="@string/thread_reply"
-            android:textAppearance="?attr/textAppearanceLabelLarge"
-            android:textColor="?attr/colorPrimary" />
-
-        <TextView
-            android:id="@+id/bookmarkLink"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="?attr/selectableItemBackground"
-            android:minHeight="48dp"
-            android:gravity="center_vertical"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
-            android:text="@string/bookmark_action"
             android:textAppearance="?attr/textAppearanceLabelLarge"
             android:textColor="?attr/colorPrimary" />
     </LinearLayout>

@@ -55,7 +55,8 @@ class ChatPane(
         },
         onAskAbout = { text -> askAboutText(text) },
         onFlag = { turn -> flagCard(turn) },
-        onOpenAnki = { turn -> openInAnki(turn) }
+        onOpenAnki = { turn -> openInAnki(turn) },
+        isBookmarked = { turn -> BookmarkStore.load(list.context.filesDir).any { it.turnId == turn.turnId } }
     )
     private val tracker = ReadReceiptTracker(now = { SystemClock.elapsedRealtime() })
     private val follow = ChatFollow()

@@ -90,8 +90,6 @@ class BubbleCornerLayoutTest {
     @Test
     fun d_oldViewsStillPresent() {
         val v = inflated()
-        assertNotNull("bookmarkLink present", v.vf<View>(R.id.bookmarkLink))
-        assertNotNull("makeCardChip present", v.vf<View>(R.id.makeCardChip))
         assertNotNull("threadLink present", v.vf<View>(R.id.threadLink))
     }
 }
