@@ -112,4 +112,13 @@ class TimerRowModelTest {
         assertEquals(180, TimerRowModel.MAX_MINUTES)
         assertEquals(5, TimerRowModel.STEP_MINUTES)
     }
+
+    @Test
+    fun `progress maps elapsed against the goal onto 0 to 1000`() {
+        assertEquals(0, TimerRowModel.progress(0L, 180))
+        assertEquals(500, TimerRowModel.progress(90 * 60_000L, 180))
+        assertEquals(1000, TimerRowModel.progress(200 * 60_000L, 180))
+        assertEquals(0, TimerRowModel.progress(60_000L, 0))
+        assertEquals(0, TimerRowModel.progress(-5L, 180))
+    }
 }
