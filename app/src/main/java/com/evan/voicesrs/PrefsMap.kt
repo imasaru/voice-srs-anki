@@ -49,7 +49,15 @@ object PrefsMap {
         "keep_screen_on" to false,
         "use_headset_mic" to true,
         "speech_engine" to "AUTO",
-        "asr_url" to ""
+        "asr_url" to "",
+        "asr_servers" to "",
+        "asr_language" to "EN",
+        "read_aloud_channel" to "MEDIA",
+        "judge_strictness" to "",
+        "letter_listen" to false,
+        "exam_apply_to_anki" to false,
+        "auto_accept_rating" to true,
+        "prompt_chips" to ""
     )
 
     fun snapshot(plain: Map<String, *>, secrets: Map<String, *>): Map<String, Any?> {
