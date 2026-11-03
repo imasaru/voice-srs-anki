@@ -355,6 +355,39 @@ object OwnWordsJudge {
         }
     }
 
+    /** h107b2: fillers and drill commands are not answers, so the judge never sees them. */
+    private val NON_ANSWERS = setOf("um", "uh", "hmm", "er", "again", "repeat", "skip", "pass")
+
+    fun isNonAnswer(transcript: String): Boolean {
+        val t = transcript.trim().lowercase().replace(Regex("[.!?,]+"), "").replace(Regex("\\s+"), " ")
+        if (t.isEmpty() || t in NON_ANSWERS) return true
+        return GradeMapper.parse(t) != VoiceAction.None
+    }
+
+    private fun words(s: String): List<String> =
+        s.lowercase().split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }
+
+    /** h107b2: true when [reason] repeats 6+ consecutive words of [correctAnswer] that the learner's [input] never said
+     * in a row (the judge copied the key instead of judging). Short keys (< 6 words) are never rubber stamps. */
+    fun rubberStamp(reason: String, correctAnswer: String, input: String): Boolean {
+        val key = words(correctAnswer)
+        if (key.size < 6) return false
+        val r = " " + words(reason).joinToString(" ") + " "
+        val said = " " + words(input).joinToString(" ") + " "
+        for (i in 0..key.size - 6) {
+            // h107b2: skip a window that starts with a choice-label letter (e.g. "B.") —
+            // the learner need not have spoken the label, so it can't be a rubber-stamp run.
+            if (key[i].length == 1) continue
+            val run = " " + key.subList(i, i + 6).joinToString(" ") + " "
+            if (r.contains(run) && !said.contains(run)) return true
+        }
+        return false
+    }
+
+    /** h107b2: a non-Again verdict with a rubber-stamp reason becomes [Verdict.Fallback] (manual rating, no auto-grade). */
+    fun guardVerdict(v: Verdict, correctAnswer: String, input: String): Verdict =
+        if (v is Verdict.Graded && v.rating != Rating.AGAIN && rubberStamp(v.reason, correctAnswer, input)) Verdict.Fallback else v
+
     /** Free speech on an MCQ, not a letter and not a drill command.
      * Non-MCQ cards stay on the existing grader. h83: with [letterListen] false
      * spoken letters are not matched, so everything is judged except the
@@ -366,6 +399,7 @@ object OwnWordsJudge {
         tapped: String? = null,
     ): Boolean {
         if (transcript.isBlank() || letters.isNullOrEmpty()) return false
+        if (isNonAnswer(transcript)) return false
         if (tapped != null && transcript.trim().equals(tapped.trim(), ignoreCase = true)) return false
         if (letterListen && SpokenLetter.normalise(transcript, letters) != null) return false
         return true

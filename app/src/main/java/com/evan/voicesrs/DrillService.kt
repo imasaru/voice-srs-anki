@@ -2882,7 +2882,8 @@ class DrillService : Service(), VoiceIo {
             val body = OwnWordsJudge.requestBody(cfg.decisionModel, question, correctAnswer, judgeInput, strictness, previous)
             AiClient().postDecision(decisionBase, cfg.aiApiKey, body) { stopRequested.get() || destroyed }
         }
-        val verdict = attempt.verdict
+        val verdict = OwnWordsJudge.guardVerdict(attempt.verdict, correctAnswer, judgeInput)
+        if (verdict !== attempt.verdict) Log.i(TAG, "own-words judge rubber-stamp ignored $currentListenTag")
         Log.i(TAG, "own-words judge tries=${attempt.tries} content=${OwnWordsJudge.contentForLog(attempt.raw)}")
         when (verdict) {
             is OwnWordsJudge.Verdict.Graded -> {
