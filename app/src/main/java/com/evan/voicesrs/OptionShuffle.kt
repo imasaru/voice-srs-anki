@@ -43,10 +43,10 @@ object OptionShuffle {
     /** Stem, then each row as "B. text" in [options] order. Letters are the originals. */
     fun spoken(stem: String, options: List<QuestionCard.Option>): String {
         val rows = options.joinToString(" ") { opt ->
-            val text = AnkiText.stripHtml(opt.text).trim()
+            val text = SpeakableText.speakable(opt.text).trim()
             "${opt.letter}. $text".trim()
         }
-        return listOf(stem.trim(), rows).filter { it.isNotEmpty() }.joinToString(" ")
+        return listOf(SpeakableText.speakable(stem), rows).filter { it.isNotEmpty() }.joinToString(" ")
     }
 
     private fun normalize(text: String): String {

@@ -120,6 +120,7 @@ object AnkiText {
      */
     private fun speakable(html: String): String {
         var s = scriptStyle.replace(html, " ")
+        s = SpeakableText.codeSpans(s)
         s = lineBreak.replace(s, "\n")
         s = tag.replace(s, " ")
         s = decodeEntities(s)
@@ -129,7 +130,7 @@ object AnkiText {
             val spoken = Citation.withoutCitation(trimmed)
             if (spoken.isNotEmpty()) kept.add(spoken)
         }
-        return sanitizeForSpeech(kept.joinToString(" "))
+        return sanitizeForSpeech(SpeakableText.prose(kept.joinToString(" ")))
     }
 
     /**

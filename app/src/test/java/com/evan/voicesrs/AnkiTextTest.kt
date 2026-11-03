@@ -191,8 +191,8 @@ class AnkiTextTest {
     fun `mcq answer after the divider speaks the screen explanation once without source`() {
         val answer = AnkiText.spokenText(AnkiText.answerOnly(kengioField("Voice MCQ (kengio)", "a")))
         assertEquals(
-            "Answer B: Delta Lake with transaction log ( _delta_log ) Delta Lake provides ACID " +
-                "transactions through its transaction log ( _delta_log ), which records every operation " +
+            "Answer B: Delta Lake with transaction log ( delta log ) Delta Lake provides ACID " +
+                "transactions through its transaction log ( delta log ), which records every operation " +
                 "as an atomic commit. This enables concurrent readers and writers without data corruption. " +
                 "Parquet alone has no transaction support, Serverless warehouses are a compute option, " +
                 "and Unity Catalog handles governance — not storage-level ACID.",

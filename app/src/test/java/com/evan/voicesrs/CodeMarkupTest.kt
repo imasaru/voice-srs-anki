@@ -12,9 +12,9 @@ class CodeMarkupTest {
     @Test
     fun `spoken text and content hash ignore code tags`() {
         assertEquals("Use OPTIMIZE on the table.", AnkiText.stripHtml(front))
-        assertEquals("Use OPTIMIZE on the table.", AnkiText.spokenText(front))
+        assertEquals("Use optimize on the table.", AnkiText.spokenText(front))
         assertEquals("Run OPTIMIZE tbl . OPTIMIZE tbl", AnkiText.stripHtml(back))
-        assertEquals("Run OPTIMIZE tbl . OPTIMIZE tbl", AnkiText.spokenText(back))
+        assertEquals("Run optimize tbl . optimize tbl", AnkiText.spokenText(back))
         val plainFront = "Use OPTIMIZE on the table."
         val plainBack = "Run OPTIMIZE tbl . OPTIMIZE tbl"
         assertEquals(
