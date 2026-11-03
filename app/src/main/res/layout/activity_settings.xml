@@ -681,6 +681,14 @@
                         android:textAppearance="?attr/textAppearanceBodyLarge" />
 
                     <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/autoAcceptRatingSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="48dp"
+                        android:text="@string/settings_auto_accept_rating"
+                        android:textAppearance="?attr/textAppearanceBodyLarge" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/useHeadsetMicSwitch"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"

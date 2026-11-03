@@ -115,6 +115,7 @@ class SettingsActivity : AppCompatActivity() {
         val showCardSwitch: MaterialSwitch = findViewById(R.id.showCardSwitch)
         val keepScreenOnSwitch: MaterialSwitch = findViewById(R.id.keepScreenOnSwitch)
         val highlightSentenceSwitch: MaterialSwitch = findViewById(R.id.highlightSentenceSwitch)
+        val autoAcceptRatingSwitch: MaterialSwitch = findViewById(R.id.autoAcceptRatingSwitch)
         val useHeadsetMicSwitch: MaterialSwitch = findViewById(R.id.useHeadsetMicSwitch)
         val handsFreeSwitch: MaterialSwitch = findViewById(R.id.handsFreeSwitch)
         val handsFreeReadySwitch: MaterialSwitch = findViewById(R.id.handsFreeReadySwitch)
@@ -342,6 +343,7 @@ class SettingsActivity : AppCompatActivity() {
         showCardSwitch.isChecked = held.showCard
         keepScreenOnSwitch.isChecked = held.keepScreenOn
         highlightSentenceSwitch.isChecked = held.highlightSentence
+        autoAcceptRatingSwitch.isChecked = held.autoAcceptRating
         useHeadsetMicSwitch.isChecked = held.useHeadsetMic
         handsFreeSwitch.isChecked = held.handsFree
         handsFreeReadySwitch.isChecked = held.handsFreeReady
@@ -497,6 +499,9 @@ class SettingsActivity : AppCompatActivity() {
         }
         highlightSentenceSwitch.setOnCheckedChangeListener { _, checked ->
             persist { it.copy(highlightSentence = checked) }
+        }
+        autoAcceptRatingSwitch.setOnCheckedChangeListener { _, checked ->
+            persist { it.copy(autoAcceptRating = checked) }
         }
         useHeadsetMicSwitch.setOnCheckedChangeListener { _, checked ->
             persist { it.copy(useHeadsetMic = checked) }

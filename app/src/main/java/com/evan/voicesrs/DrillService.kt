@@ -2467,7 +2467,12 @@ class DrillService : Service(), VoiceIo {
                         continue
                     }
                     val auto = judgedEase
-                    if (auto != null && !screenCard) {
+                    val autoOn = try { Prefs.load(this).autoAcceptRating } catch (_: Exception) { true }
+                    if (auto != null && !screenCard && !autoOn) {
+                        runCatching { DrillUi.update { it.copy(selectedEase = GradeMapper.toAvailableEase(auto, gradeButtons)) } }
+                        Log.i(TAG, "auto-accept off: suggested chip lit, waiting for a rating $currentListenTag")
+                    }
+                    if (auto != null && !screenCard && autoOn) {
                         val mapped = GradeMapper.toAvailableEase(auto, gradeButtons)
                         runCatching { DrillUi.update { it.copy(selectedEase = mapped) } }
                         Log.i(TAG, "grade chip highlighted ease=$mapped $currentListenTag")

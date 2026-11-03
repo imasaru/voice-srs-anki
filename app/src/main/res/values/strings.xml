@@ -82,6 +82,7 @@
     <string name="settings_show_card">Show card on screen</string>
     <string name="settings_keep_screen_on">Keep screen on during a drill</string>
     <string name="settings_highlight_sentence">Highlight sentence while reading</string>
+    <string name="settings_auto_accept_rating">Auto-accept suggested rating</string>
     <string name="settings_use_headset_mic">Use headset mic</string>
     <string name="settings_use_headset_mic_summary">Listen through a Bluetooth headset mic when one is connected</string>
     <string name="settings_silent_mode">Silent mode</string>

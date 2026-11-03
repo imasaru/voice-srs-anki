@@ -78,6 +78,8 @@ data class AnkiConfig(
     val examApplyToAnki: Boolean = false,
     /** Route answer/rating listens to a Bluetooth headset mic when one is connected. */
     val useHeadsetMic: Boolean = true,
+    /** h104b: a judged/auto grade moves on after the 2 s countdown; false = wait for a tap or voice rating. */
+    val autoAcceptRating: Boolean = true,
     /** AUTO, WHISPER, VOSK, or GOOGLE. Stored as [SpeechChoice.name]. */
     val speechEngine: SpeechChoice = SpeechChoice.AUTO,
     /** Speech (ASR) server base URL from Settings. Blank = no server (Whisper off, no Vosk download). */
@@ -136,6 +138,7 @@ object Prefs {
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
     private const val KEY_EXAM_APPLY_TO_ANKI = "exam_apply_to_anki"
     private const val KEY_USE_HEADSET_MIC = "use_headset_mic"
+    private const val KEY_AUTO_ACCEPT_RATING = "auto_accept_rating"
     private const val KEY_SPEECH_ENGINE = SpeechEngine.PREF_KEY
     private const val KEY_ASR_URL = "asr_url"
     private const val KEY_PROMPT_CHIPS = "prompt_chips"
@@ -253,6 +256,7 @@ object Prefs {
             .putBoolean(KEY_KEEP_SCREEN_ON, cfg.keepScreenOn)
             .putBoolean(KEY_EXAM_APPLY_TO_ANKI, cfg.examApplyToAnki)
             .putBoolean(KEY_USE_HEADSET_MIC, cfg.useHeadsetMic)
+            .putBoolean(KEY_AUTO_ACCEPT_RATING, cfg.autoAcceptRating)
             .putString(KEY_SPEECH_ENGINE, cfg.speechEngine.name)
             .putString(KEY_ASR_URL, cfg.asrUrl.trim())
             .remove(KEY_AUTO_EXPLAIN)
@@ -471,6 +475,7 @@ object Prefs {
             keepScreenOn = p.getBoolean(KEY_KEEP_SCREEN_ON, KeepScreenOn.SETTING_DEFAULT),
             examApplyToAnki = p.getBoolean(KEY_EXAM_APPLY_TO_ANKI, false),
             useHeadsetMic = p.getBoolean(KEY_USE_HEADSET_MIC, true),
+            autoAcceptRating = p.getBoolean(KEY_AUTO_ACCEPT_RATING, true),
             speechEngine = SpeechEngine.parse(p.getString(KEY_SPEECH_ENGINE, null)),
             asrUrl = p.getString(KEY_ASR_URL, "").orEmpty().trim()
         )
