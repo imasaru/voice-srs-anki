@@ -44,6 +44,8 @@ data class RevRow(
 
 data class StateCounts(val new: Int, val learning: Int, val young: Int, val mature: Int, val suspended: Int) {
     val total: Int get() = new + learning + young + mature
+    /** Cards that are not suspended (a suspended card also sits in its type bucket). */
+    val active: Int get() = total - suspended
 }
 
 data class Retention(val passed: Int, val total: Int, val youngPassed: Int, val youngTotal: Int, val maturePassed: Int, val matureTotal: Int) {

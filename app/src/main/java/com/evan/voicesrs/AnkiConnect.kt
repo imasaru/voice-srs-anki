@@ -450,8 +450,8 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) : Stu
      * config cannot be read, in which case new is reported uncapped.
      */
     fun dueCounts(deckName: String): DueCounts {
-        val due = (post("findCards", mapOf("query" to "deck:\"$deckName\" is:due")) as? JSONArray)?.length() ?: 0
-        val unseen = (post("findCards", mapOf("query" to "deck:\"$deckName\" is:new")) as? JSONArray)?.length() ?: 0
+        val due = (post("findCards", mapOf("query" to "deck:\"$deckName\" is:due -is:suspended -is:buried")) as? JSONArray)?.length() ?: 0
+        val unseen = (post("findCards", mapOf("query" to "deck:\"$deckName\" is:new -is:suspended -is:buried")) as? JSONArray)?.length() ?: 0
         val introducedToday = runCatching {
             (post("findCards", mapOf("query" to "deck:\"$deckName\" introduced:1")) as? JSONArray)?.length()
         }.getOrNull()
