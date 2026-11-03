@@ -9,7 +9,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
-import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.button.MaterialButton
 import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -128,7 +128,7 @@ class FoldWidthShotsTest {
             visibility = View.VISIBLE
         }
         root.findViewById<TextView>(R.id.timerValue).text = "180 min"
-        root.findViewById<MaterialSwitch>(R.id.timerSwitch).isChecked = true
+        root.findViewById<MaterialButton>(R.id.timerGoalChip).isChecked = true
         return measureAndLayout(root, dp(widthDp), dp(heightDp))
     }
 

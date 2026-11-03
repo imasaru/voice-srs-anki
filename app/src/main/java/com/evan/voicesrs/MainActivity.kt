@@ -40,6 +40,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.chip.Chip
@@ -82,11 +84,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var errorText: TextView
     private lateinit var startButton: Button
     private var showAnswerButton: Button? = null
-    private var silentSwitch: com.google.android.material.materialswitch.MaterialSwitch? = null
+    private var voiceChip: MaterialButton? = null
     private var timerMinus: Button? = null
     private var timerValue: TextView? = null
     private var timerPlus: Button? = null
-    private var timerSwitch: com.google.android.material.materialswitch.MaterialSwitch? = null
+    private var timerGoalChip: MaterialButton? = null
+    /** Last goal minutes from refreshTimerRow; tickElapsed reads this, never Prefs. */
+    private var cachedGoalMinutes = 0
+    /** Goal-bar fill 0..1000, set each tick from [cachedGoalMinutes]. */
+    private var timerGoalBar: LinearProgressIndicator? = null
+    private var voiceChipListener: MaterialButton.OnCheckedChangeListener? = null
+    private var timerChipListener: MaterialButton.OnCheckedChangeListener? = null
     /** "Elapsed m:ss" chip beside the countdown. Null when the timer row is not inflated. */
     private var elapsedChip: TextView? = null
     /** Last switch position the user or a fresh service snapshot committed to. */
@@ -139,12 +147,18 @@ class MainActivity : AppCompatActivity() {
             chip.text = ElapsedChip.short(ms)
             chip.contentDescription = ElapsedChip.format(ms)
             chip.visibility = View.VISIBLE
+            val bar = timerGoalBar
+            if (bar != null) bar.progress = TimerRowModel.progress(ms, cachedGoalMinutes)
             elapsedHandler.postDelayed(elapsedRunnable, 1_000L)
         } else {
             elapsedHandler.removeCallbacks(elapsedRunnable)
             elapsedTicking = false
-            chip.visibility = View.GONE
-            chip.text = ""
+            val bar = timerGoalBar
+            if (bar != null) bar.progress = 0
+            // Idle: keep the chip visible at 0:00 so the row does not jump height.
+            chip.visibility = View.VISIBLE
+            chip.text = ElapsedChip.short(0)
+            chip.contentDescription = null
         }
     }
 
@@ -243,16 +257,19 @@ class MainActivity : AppCompatActivity() {
         startButton = findViewById(R.id.startButton)
         showAnswerButton = findViewById(R.id.showAnswerButton)
         showAnswerButton?.setOnClickListener { DrillService.submitShowAnswer() }
-        silentSwitch = findViewById(R.id.drillSilentSwitch)
-        silentSwitch?.setOnCheckedChangeListener { _, checked -> onSilentSwitch(checked) }
+        voiceChip = findViewById<MaterialButton>(R.id.voiceChip)
+        voiceChipListener = MaterialButton.OnCheckedChangeListener { _, checked -> onSilentSwitch(ToggleChips.silentFromVoice(checked)) }
+        voiceChip?.addOnCheckedChangeListener(voiceChipListener!!)
         timerMinus = findViewById(R.id.timerMinus)
         timerValue = findViewById(R.id.timerValue)
         timerPlus = findViewById(R.id.timerPlus)
-        timerSwitch = findViewById(R.id.timerSwitch)
+        timerGoalChip = findViewById<MaterialButton>(R.id.timerGoalChip)
+        timerGoalBar = findViewById<LinearProgressIndicator>(R.id.timerGoalBar)
         elapsedChip = findViewById<TextView>(R.id.elapsedChip)
         timerMinus?.setOnClickListener { onTimerStep(-TimerRowModel.STEP_MINUTES) }
         timerPlus?.setOnClickListener { onTimerStep(TimerRowModel.STEP_MINUTES) }
-        timerSwitch?.setOnCheckedChangeListener { _, checked -> onTimerSwitch(checked) }
+        timerChipListener = MaterialButton.OnCheckedChangeListener { _, checked -> onTimerSwitch(checked) }
+        timerGoalChip?.addOnCheckedChangeListener(timerChipListener!!)
         findViewById<Button>(R.id.retryButton).setOnClickListener { retryDrill() }
         syncChip.setOnClickListener { syncPending() }
         chipAgain?.setOnClickListener { if (ratingOpen()) DrillService.submitTestGrade("again") }
@@ -304,6 +321,7 @@ class MainActivity : AppCompatActivity() {
         }
         ViewCompat.requestApplyInsets(imeRoot)
         refreshTimerRow()
+        paintSwitch(switchModel.on)
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -1185,16 +1203,20 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {
             return
         }
+        cachedGoalMinutes = TimerRowModel.minutes(cfg)
         value.text = TimerRowModel.label(cfg)
         paintTimerSwitch(TimerRowModel.enabled(cfg))
     }
 
     private fun paintTimerSwitch(on: Boolean) {
-        val sw = timerSwitch ?: return
-        if (sw.isChecked == on) return
-        sw.setOnCheckedChangeListener(null)
-        sw.isChecked = on
-        sw.setOnCheckedChangeListener { _, checked -> onTimerSwitch(checked) }
+        val chip = timerGoalChip ?: return
+        val listener = timerChipListener ?: return
+        if (chip.isChecked != on) {
+            chip.clearOnCheckedChangeListeners()
+            chip.isChecked = on
+            chip.addOnCheckedChangeListener(listener)
+        }
+        ToggleChips.bindSwitchA11y(chip, R.string.timer_switch_label)
     }
 
     private fun onSilentSwitch(checked: Boolean) {
@@ -1216,11 +1238,16 @@ class MainActivity : AppCompatActivity() {
 
     /** Programmatic paints detach the listener so they cannot undo a tap. */
     private fun paintSwitch(on: Boolean) {
-        val sw = silentSwitch ?: return
-        if (sw.isChecked == on) return
-        sw.setOnCheckedChangeListener(null)
-        sw.isChecked = on
-        sw.setOnCheckedChangeListener { _, checked -> onSilentSwitch(checked) }
+        val chip = voiceChip ?: return
+        val listener = voiceChipListener ?: return
+        val wantOn = ToggleChips.voiceOn(on)
+        if (chip.isChecked != wantOn) {
+            chip.clearOnCheckedChangeListeners()
+            chip.isChecked = wantOn
+            chip.addOnCheckedChangeListener(listener)
+        }
+        ToggleChips.paintVoiceIcon(chip)
+        ToggleChips.bindSwitchA11y(chip, R.string.voice_chip)
     }
 
     private fun persistSilent(checked: Boolean) {

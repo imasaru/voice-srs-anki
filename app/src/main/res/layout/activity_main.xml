@@ -103,22 +103,6 @@
             android:visibility="gone"
             app:chipMinHeight="32dp" />
 
-        <com.google.android.material.materialswitch.MaterialSwitch
-            android:id="@+id/drillSilentSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:minHeight="48dp"
-            android:text="@string/silent_switch"
-            android:textAppearance="?attr/textAppearanceBodyLarge" />
-
-        <TextView
-            android:id="@+id/drillSilentSubtitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/silent_switch_sub"
-            android:textAppearance="?attr/textAppearanceBodySmall"
-            android:textColor="?attr/colorOnSurfaceVariant" />
     </LinearLayout>
 
     <include

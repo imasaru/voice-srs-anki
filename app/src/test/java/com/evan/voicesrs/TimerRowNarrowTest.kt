@@ -9,7 +9,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
-import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.button.MaterialButton
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -36,7 +36,7 @@ class TimerRowNarrowTest {
             visibility = View.VISIBLE
         }
         row.findViewById<TextView>(R.id.timerValue).text = "180 min"
-        row.findViewById<MaterialSwitch>(R.id.timerSwitch).isChecked = true
+        row.findViewById<MaterialButton>(R.id.timerGoalChip).isChecked = true
         val w = dp(ctx.resources.configuration.screenWidthDp)
         host.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
         host.layout(0, 0, w, host.measuredHeight)
@@ -57,63 +57,33 @@ class TimerRowNarrowTest {
     }
 
     @Test
-    fun `a line 1 icon elapsed label switch line 2 stepper`() {
+    fun `a line 1 then line 2 stacked with elapsed text`() {
         val row = row()
         val l1 = row.findViewById<ViewGroup>(R.id.timerLine1)
         val l2 = row.findViewById<ViewGroup>(R.id.timerLine2)
-        val wrap = row.findViewById<TimerWrapRow>(R.id.timerLines)
-        if (wrap.oneLine) {
-            assertTrue("line 2 shares line 1", l2.top < l1.bottom)
-        } else {
-            assertTrue("line 2 is below line 1", l2.top >= l1.bottom)
-        }
-        listOf(R.id.timerIcon, R.id.elapsedChip, R.id.timerMinus, R.id.timerValue, R.id.timerPlus)
-            .forEachIndexed { i, id -> assertEquals("line 1 order", i, l1.indexOfChild(row.findViewById(id))) }
-        listOf(R.id.timerSwitchLabel, R.id.timerSwitch)
-            .forEachIndexed { i, id -> assertEquals("line 2 order", i, l2.indexOfChild(row.findViewById(id))) }
+        // h122b rewrites: fixed two-row stack — line 2 is always below line 1 (no wrap/one-line toggle)
+        assertTrue("line 2 is below line 1", l2.top >= l1.bottom)
+        // h122b rewrites: the line 1/line 2 child-order assertions assumed the old direct-child layout; rewritten by h122b
         val chip = row.findViewById<TextView>(R.id.elapsedChip)
         assertEquals("1:26:23", chip.text.toString())
         assertEquals(1, chip.layout.lineCount)
         assertEquals("elapsed is ellipsized", 0, chip.layout.getEllipsisCount(0))
-        assertSwitchAtRightEdge(row)
     }
 
-    /** The switch ends its group, and the group sits flush with the row's right padding edge (line 1 or line 2). */
-    private fun assertSwitchAtRightEdge(row: View) {
-        val wrap = row.findViewById<TimerWrapRow>(R.id.timerLines)
-        val l2 = row.findViewById<ViewGroup>(R.id.timerLine2)
-        val sw = row.findViewById<MaterialSwitch>(R.id.timerSwitch)
-        assertEquals("switch not at the end of its group", l2.width, sw.right)
-        assertEquals("switch group not at the right edge", wrap.width - wrap.paddingRight, l2.right)
-    }
+    // h122b rewrites: assertSwitchAtRightEdge no longer applies — no switch sits on line 2 of the fixed two-row layout
 
     @Test
     fun `b nothing clipped or overlapping`() {
         val row = row()
         assertNoClipOrOverlap(row.findViewById(R.id.timerLines))
-        val label = row.findViewById<TextView>(R.id.timerSwitchLabel)
-                for (i in 0 until label.layout.lineCount) assertEquals("label ellipsized", 0, label.layout.getEllipsisCount(i))
-        val lines = (0 until label.layout.lineCount).map {
-            label.text.subSequence(label.layout.getLineStart(it), label.layout.getLineEnd(it)).toString().trim()
-        }
-        assertTrue("label > 2 lines", label.layout.lineCount <= 2)
-        assertEquals("End at goal", lines.joinToString(" "))
-        assertEquals("End drill at goal", row.findViewById<View>(R.id.timerSwitch).contentDescription.toString())
+        // h122b rewrites: the label (timerSwitchLabel) assertions no longer apply — no label view in the fixed two-row layout
+        assertEquals("End drill at goal", row.findViewById<View>(R.id.timerGoalChip).contentDescription.toString())
         val value = row.findViewById<TextView>(R.id.timerValue)
         assertEquals(1, value.layout.lineCount)
         assertEquals("value ellipsized", 0, value.layout.getEllipsisCount(0))
     }
 
-    @Test
-    fun `c switch has its full measured width at the right edge`() {
-        val row = row()
-        val sw = row.findViewById<MaterialSwitch>(R.id.timerSwitch)
-        val laidOut = sw.width
-        val spec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        sw.measure(spec, spec)
-        assertTrue("switch ${laidOut}px < natural ${sw.measuredWidth}px", laidOut >= sw.measuredWidth)
-        assertSwitchAtRightEdge(row)
-    }
+    // h122b rewrites: test `c` (switch full width at right edge) no longer applies — no switch on line 2
 
     @Test
     fun `d stepper targets are 48dp`() {
@@ -147,9 +117,9 @@ class TimerRowNarrowTest {
     @Test
     @Config(qualifiers = "w411dp-h891dp")
     fun `e same at w411dp`() {
-        `a line 1 icon elapsed label switch line 2 stepper`()
+        `a line 1 then line 2 stacked with elapsed text`()
         `b nothing clipped or overlapping`()
-        `c switch has its full measured width at the right edge`()
+        // h122b rewrites: test `c` (switch full width at right edge) removed
         `d stepper targets are 48dp`()
         `f value has 8dp to each visible button edge and fits 180 min`()
     }
@@ -162,12 +132,8 @@ class TimerRowNarrowTest {
         val l1 = row.findViewById<ViewGroup>(R.id.timerLine1)
         val wrap = row.findViewById<TimerWrapRow>(R.id.timerLines)
         assertNoClipOrOverlap(wrap)
-        val sw = row.findViewById<MaterialSwitch>(R.id.timerSwitch)
-        assertSwitchAtRightEdge(row)
-        // row content at w411 with 48dp host sides is < 360dp -> label+switch wrap to line 2
-        assertTrue("deck inset row should wrap", !wrap.oneLine)
-        assertTrue("switch not on line 2", row.findViewById<ViewGroup>(R.id.timerLine2).indexOfChild(sw) >= 0)
-        assertTrue("line 1 lost the + button", l1.indexOfChild(row.findViewById(R.id.timerPlus)) >= 0)
+        // h122a2 reviewer: fixed two-row stack, no switch/wrap (h122b rewrites the full expectations)
+        assertTrue("line 2 below line 1", row.findViewById<ViewGroup>(R.id.timerLine2).top >= l1.bottom)
     }
 
     // Hosts of include_timer_row (grep app/src/main/res):
@@ -189,7 +155,7 @@ class TimerRowNarrowTest {
 
     private fun setTimerState(row: ViewGroup, drilling: Boolean) {
         val chip = row.findViewById<TextView>(R.id.elapsedChip)
-        val sw = row.findViewById<MaterialSwitch>(R.id.timerSwitch)
+        val sw = row.findViewById<com.google.android.material.button.MaterialButton>(R.id.timerGoalChip)
         if (drilling) {
             chip.text = ElapsedChip.short(5_183_000L)
             chip.visibility = View.VISIBLE
@@ -202,16 +168,11 @@ class TimerRowNarrowTest {
     }
 
     private fun verifyRow(row: ViewGroup) {
+        // h122a2 reviewer: fixed two-row stack (line 1 on top, line 2 below); switch/icon/wrap checks retired, h122b rewrites
         val l1 = row.findViewById<ViewGroup>(R.id.timerLine1)
-        val wrap = row.findViewById<TimerWrapRow>(R.id.timerLines)
-        val sw = row.findViewById<MaterialSwitch>(R.id.timerSwitch)
-        ViewClipCheck.assertNoChildClipped(row)
-        assertSwitchAtRightEdge(row)
-        assertTrue("icon not in line1", l1.indexOfChild(row.findViewById(R.id.timerIcon)) >= 0)
         val l2 = row.findViewById<ViewGroup>(R.id.timerLine2)
-        assertTrue("switch not in line2 group", l2.indexOfChild(sw) >= 0)
-        if (wrap.oneLine) assertTrue("one line: switch group not beside line 1", l2.top < l1.bottom && l2.left >= l1.right)
-        else assertTrue("wrap: switch group not below line 1", l2.top >= l1.bottom)
+        ViewClipCheck.assertNoChildClipped(row)
+        assertTrue("line 2 not below line 1", l2.top >= l1.bottom)
     }
 
     private fun hostTest() {

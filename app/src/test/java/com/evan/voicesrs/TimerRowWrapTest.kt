@@ -12,7 +12,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
-import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.button.MaterialButton
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -38,7 +38,7 @@ class TimerRowWrapTest {
         val chip = row.findViewById<TextView>(R.id.elapsedChip)
         if (on) { chip.text = ElapsedChip.short(5_183_000L); chip.contentDescription = ElapsedChip.format(5_183_000L); chip.visibility = View.VISIBLE; row.findViewById<TextView>(R.id.timerValue).text = "180 min" }
         else { chip.visibility = View.GONE; row.findViewById<TextView>(R.id.timerValue).text = "20 min" }
-        row.findViewById<MaterialSwitch>(R.id.timerSwitch).isChecked = on
+        row.findViewById<MaterialButton>(R.id.timerGoalChip).apply { isChecked = on }
     }
 
     private fun contentDp(row: View) = row.findViewById<View>(R.id.timerLines).let { (it.width - it.paddingLeft - it.paddingRight) / density }
@@ -60,19 +60,15 @@ class TimerRowWrapTest {
     private fun verify(row: View, expectOneLine: Boolean, tag: String) {
         val wrap = row.findViewById<TimerWrapRow>(R.id.timerLines)
         val l1 = row.findViewById<ViewGroup>(R.id.timerLine1); val l2 = row.findViewById<ViewGroup>(R.id.timerLine2)
-        val sw = row.findViewById<MaterialSwitch>(R.id.timerSwitch)
-        val label = row.findViewById<TextView>(R.id.timerSwitchLabel)
-        val wDp = contentDp(row)
-        assertEquals("$tag oneLine at content ${wDp}dp", expectOneLine, wrap.oneLine)
-        if (expectOneLine) assertTrue("$tag one line: l2 not beside l1", l2.top < l1.bottom && l2.left >= l1.right)
-        else assertTrue("$tag wrap: l2 not below l1", l2.top >= l1.bottom)
+        val goalChip = row.findViewById<MaterialButton>(R.id.timerGoalChip)
+        // h122b rewrites: fixed two-row stack (line 1 on top, line 2 below) — the wrap/one-line toggle is gone
+        assertEquals("$tag left edge", wrap.paddingLeft, l1.left)
+        assertEquals("$tag right edge", wrap.width - wrap.paddingRight, l1.right)
+        assertTrue("$tag l1 above l2", l1.bottom <= l2.top)
         ViewClipCheck.assertNoChildClipped(row.rootView)
         assertFalse("$tag l1/l2 overlap", Rect.intersects(Rect(l1.left, l1.top, l1.right, l1.bottom), Rect(l2.left, l2.top, l2.right, l2.bottom)))
-        assertEquals("$tag switch at right edge", wrap.width - wrap.paddingRight, l2.right)
-        assertEquals("$tag switch end of l2", l2.width, sw.right)
-        assertEquals("End at goal", label.text.toString())
-        assertEquals(1, label.layout.lineCount); assertEquals(0, label.layout.getEllipsisCount(0))
-        assertEquals("End drill at goal", sw.contentDescription.toString())
+        // h122b rewrites: the goal toggle lives on line 1; the switch-at-right-edge / label assertions no longer apply
+        assertEquals("End drill at goal", goalChip.contentDescription.toString())
         val value = row.findViewById<TextView>(R.id.timerValue)
         assertEquals(1, value.layout.lineCount); assertEquals(0, value.layout.getEllipsisCount(0))
         val chip = row.findViewById<TextView>(R.id.elapsedChip)

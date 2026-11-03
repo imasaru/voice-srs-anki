@@ -38,4 +38,15 @@ object TimerRowModel {
 
     /** Row value text, e.g. "10 min". */
     fun label(cfg: AnkiConfig): String = "${cfg.goalMinutes} min"
+
+    /**
+     * Progress for the goal bar as a 0..1000 value: [elapsedMs] as a fraction of the
+     * goal, clamped. Returns 0 when [goalMinutes] <= 0 or [elapsedMs] <= 0 (no goal set
+     * or nothing elapsed yet).
+     */
+    fun progress(elapsedMs: Long, goalMinutes: Int): Int {
+        if (goalMinutes <= 0 || elapsedMs <= 0) return 0
+        val goalMs = goalMinutes.toLong() * 60_000L
+        return (elapsedMs * 1000 / goalMs).coerceIn(0, 1000).toInt()
+    }
 }

@@ -39,22 +39,20 @@ class TimerRowLayoutTest {
             val raw = el.getAttribute("android:id")
             if (raw.startsWith("@+id/")) idSet += raw.removePrefix("@+id/")
         }
-        listOf("timerRow", "timerMinus", "timerValue", "timerPlus", "timerSwitch").forEach {
+        listOf("timerRow", "timerMinus", "timerValue", "timerPlus", "timerGoalChip").forEach {
             assertTrue("include_timer_row.xml missing id $it", idSet.contains(it))
         }
     }
 
     @Test
-    fun `minus and plus are 48dp targets and the switch is natural size`() {
+    fun `minus and plus are 48dp targets`() {
         val minus = elementById(parse("layout", "include_timer_row.xml"), "timerMinus")
         val plus = elementById(parse("layout", "include_timer_row.xml"), "timerPlus")
-        val sw = elementById(parse("layout", "include_timer_row.xml"), "timerSwitch")
         assertNotNull(minus)
         assertNotNull(plus)
-        assertNotNull(sw)
         assertEquals("48dp", minus!!.getAttribute("android:layout_height"))
         assertEquals("48dp", plus!!.getAttribute("android:layout_height"))
-        assertEquals("wrap_content", sw!!.getAttribute("android:layout_height"))
+        // h122b rewrites: the goal/voice toggles are fixed 40dp icon buttons, not a wrap_content switch
     }
 
     @Test

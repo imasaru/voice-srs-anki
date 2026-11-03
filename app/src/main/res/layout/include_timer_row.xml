@@ -103,14 +103,24 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/timerMinus"
-                android:layout_width="wrap_content"
+                style="@style/Widget.Material3.Button.IconButton.Outlined"
+                android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:layout_marginEnd="4dp"
-                android:minWidth="36dp"
+                android:insetLeft="@dimen/timer_stepper_inset"
+                android:insetTop="@dimen/timer_stepper_inset"
+                android:insetRight="@dimen/timer_stepper_inset"
+                android:insetBottom="@dimen/timer_stepper_inset"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:padding="0dp"
+                android:contentDescription="@string/timer_fewer"
                 android:text="−"
-                android:textSize="18sp" />
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.Material3.Corner.Full"
+                app:strokeColor="?attr/colorOutline"
+                app:strokeWidth="@dimen/timer_stepper_stroke" />
 
             <FrameLayout
                 android:layout_width="0dp"
@@ -143,13 +153,23 @@
                     android:textStyle="bold" />
             </FrameLayout>
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/timerPlus"
-                android:layout_width="wrap_content"
+                style="@style/Widget.Material3.Button.IconButton.Outlined"
+                android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:minWidth="36dp"
+                android:insetLeft="@dimen/timer_stepper_inset"
+                android:insetTop="@dimen/timer_stepper_inset"
+                android:insetRight="@dimen/timer_stepper_inset"
+                android:insetBottom="@dimen/timer_stepper_inset"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:padding="0dp"
+                android:contentDescription="@string/timer_more"
                 android:text="+"
-                android:textSize="18sp" />
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.Material3.Corner.Full"
+                app:strokeColor="?attr/colorOutline"
+                app:strokeWidth="@dimen/timer_stepper_stroke" />
         </LinearLayout>
     </com.evan.voicesrs.TimerWrapRow>
 </com.google.android.material.card.MaterialCardView>

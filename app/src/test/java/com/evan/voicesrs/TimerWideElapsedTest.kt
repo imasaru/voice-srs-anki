@@ -7,7 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
-import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.button.MaterialButton
 import kotlin.math.ceil
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -33,7 +33,7 @@ class TimerWideElapsedTest {
     private fun drilling(row: View, on: Boolean) {
         val chip = row.findViewById<TextView>(R.id.elapsedChip)
         if (on) { chip.text = ElapsedChip.short(5_183_000L); chip.contentDescription = ElapsedChip.format(5_183_000L); chip.visibility = View.VISIBLE; row.findViewById<TextView>(R.id.timerValue).text = "180 min" }
-        row.findViewById<MaterialSwitch>(R.id.timerSwitch).isChecked = on
+        row.findViewById<MaterialButton>(R.id.timerGoalChip).isChecked = on
     }
 
     private fun check() {
