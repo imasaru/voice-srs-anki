@@ -4,10 +4,11 @@ package com.evan.voicesrs
 object SentenceSplit {
     private val ABBREV = setOf("e.g.", "i.e.", "vs.", "mr.", "mrs.", "dr.")
 
-    /** Sentence ranges. A sentence ends at . ! ? followed by whitespace or end of text (not after a known abbreviation), at ！？, or at a newline. Blank pieces are dropped. */
+    /** Sentence ranges. A sentence ends at . ! ? followed by whitespace or end of text (not after a known abbreviation), at ！？, or at a newline. Blank pieces are dropped. On a choice card (A. and B. markers) a lone letter A..H plus dot starts a new sentence instead of ending one. */
     fun ranges(text: String): List<IntRange> {
         val out = mutableListOf<IntRange>()
         var start = 0
+        val choices = hasChoices(text)
         fun emit(endExcl: Int) {
             var s = start
             var e = endExcl
@@ -22,6 +23,8 @@ object SentenceSplit {
                 emit(i); start = i + 1
             } else if (ch in "。！？") {
                 emit(i + 1); start = i + 1
+            } else if (choices && ch == '.' && isChoiceLetter(text, i)) {
+                emit(i - 1); start = i - 1
             } else if (ch in ".!?" && (i + 1 == text.length || text[i + 1].isWhitespace()) && !isAbbrev(text, i)) {
                 emit(i + 1); start = i + 1
             }
@@ -46,4 +49,10 @@ object SentenceSplit {
         while (s > 0 && !text[s - 1].isWhitespace()) s--
         return text.substring(s, dot + 1).trimStart('(', '"', '\'').lowercase() in ABBREV
     }
+
+    /** True when [text] has choice markers: an "A." token at the start or after whitespace, and a "B." token after whitespace. */
+    private fun hasChoices(text: String): Boolean = Regex("(^|\\s)A\\.\\s").containsMatchIn(text) && Regex("\\sB\\.(\\s|$)").containsMatchIn(text)
+
+    /** The '.' at [dot] ends a lone choice letter A..H that starts a word and is followed by whitespace or end of text. */
+    private fun isChoiceLetter(text: String, dot: Int): Boolean = dot >= 1 && text[dot - 1] in 'A'..'H' && (dot == 1 || text[dot - 2].isWhitespace()) && (dot + 1 == text.length || text[dot + 1].isWhitespace())
 }

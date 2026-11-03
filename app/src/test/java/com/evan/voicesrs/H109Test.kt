@@ -10,8 +10,8 @@ class H109Test {
     @Test fun `every spoken part of a choice card maps to a shown block`() {
         val parts = SentenceReading.parts("Which fixes the skew? A. Use repartition(8) B. Use coalesce(1)")
         val blocks = listOf("Which fixes the skew?", "") + rows
-        assertEquals(listOf("Which fixes the skew?", "A.", "Use repartition(8) B.", "Use coalesce(1)"), parts)
-        // lone "A." lights row A; the split puts the next letter on the previous row, which still lights row A.
-        assertEquals(listOf(0, 2, 2, 3), parts.map { ReadingSpan.pick(blocks, it)!!.block })
+        assertEquals(listOf("Which fixes the skew?", "A. Use repartition(8)", "B. Use coalesce(1)"), parts)
+        // each choice letter starts its own part, so each row lights on its own (h123).
+        assertEquals(listOf(0, 2, 3), parts.map { ReadingSpan.pick(blocks, it)!!.block })
     }
 }
