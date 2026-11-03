@@ -765,7 +765,8 @@ class SettingsActivity : AppCompatActivity() {
                 return
             }
             asrUrlLayout.error = null
-            persist { it.copy(asrUrl = raw) }
+            if (!AutoSave.decide(held.asrUrl, raw).save) return
+            persist { it.copy(asrUrl = raw, asrServers = AsrServers.remember(it.asrServers, raw)) }
         }
         fun commitNeuralToken() {
             val typed = neuralTokenView.text?.toString()?.trim().orEmpty()

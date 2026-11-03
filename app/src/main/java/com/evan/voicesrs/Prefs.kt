@@ -83,7 +83,9 @@ data class AnkiConfig(
     /** AUTO, WHISPER, VOSK, or GOOGLE. Stored as [SpeechChoice.name]. */
     val speechEngine: SpeechChoice = SpeechChoice.AUTO,
     /** Speech (ASR) server base URL from Settings. Blank = no server (Whisper off, no Vosk download). */
-    val asrUrl: String = ""
+    val asrUrl: String = "",
+    /** h119: speech server URLs the user saved, newest first. */
+    val asrServers: List<String> = emptyList()
 )
 
 /** SharedPreferences-backed settings. The API key and neural token live in encrypted prefs. */
@@ -141,6 +143,7 @@ object Prefs {
     private const val KEY_AUTO_ACCEPT_RATING = "auto_accept_rating"
     private const val KEY_SPEECH_ENGINE = SpeechEngine.PREF_KEY
     private const val KEY_ASR_URL = "asr_url"
+    private const val KEY_ASR_SERVERS = "asr_servers"
     private const val KEY_PROMPT_CHIPS = "prompt_chips"
 
     val DEFAULT_URL: String get() = BuildConfig.DEFAULT_ANKI_URL
@@ -259,6 +262,7 @@ object Prefs {
             .putBoolean(KEY_AUTO_ACCEPT_RATING, cfg.autoAcceptRating)
             .putString(KEY_SPEECH_ENGINE, cfg.speechEngine.name)
             .putString(KEY_ASR_URL, cfg.asrUrl.trim())
+            .putString(KEY_ASR_SERVERS, AsrServers.encode(cfg.asrServers))
             .remove(KEY_AUTO_EXPLAIN)
             .remove(KEY_API_KEY)
             .remove(KEY_NEURAL_TOKEN)
@@ -477,7 +481,8 @@ object Prefs {
             useHeadsetMic = p.getBoolean(KEY_USE_HEADSET_MIC, true),
             autoAcceptRating = p.getBoolean(KEY_AUTO_ACCEPT_RATING, true),
             speechEngine = SpeechEngine.parse(p.getString(KEY_SPEECH_ENGINE, null)),
-            asrUrl = p.getString(KEY_ASR_URL, "").orEmpty().trim()
+            asrUrl = p.getString(KEY_ASR_URL, "").orEmpty().trim(),
+            asrServers = AsrServers.decode(p.getString(KEY_ASR_SERVERS, null))
         )
     }
 
