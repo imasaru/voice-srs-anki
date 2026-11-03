@@ -190,7 +190,7 @@ object GeneralChat {
                     tools = StudyTools.schemas()
                     onTool = { toolName, args ->
                         val anki = AnkiConnect(cfg.url, cfg.apiKey)
-                        StudyToolRunner(anki, cfg.deck, pending = { LocalQueueStore(app.filesDir).readGrades() }).invoke(toolName, args)
+                        StudyToolRunner(anki, cfg.deck, pending = { LocalQueueStore(app.filesDir).readGrades() }, examDate = { Prefs.loadExam(app, cfg.deck).date }).invoke(toolName, args)
                     }
                 }
                 synchronized(lock) { retryReq.blob = contextBlob }
