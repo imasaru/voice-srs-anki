@@ -519,10 +519,10 @@ class ChatAdapter(
             guideLabel.visibility = if (row.guide == 0) View.GONE else View.VISIBLE
             showAnswer.setOnClickListener { DrillService.submitShowAnswer() }
             chips.visibility = if (row.rating) View.VISIBLE else View.GONE
-            RatingSuggest.apply(again, 1, row.selectedEase, row.suggestedEase)
-            RatingSuggest.apply(hard, 2, row.selectedEase, row.suggestedEase)
-            RatingSuggest.apply(good, 3, row.selectedEase, row.suggestedEase)
-            RatingSuggest.apply(easy, 4, row.selectedEase, row.suggestedEase)
+            RatingSuggest.apply(again, 1, row.selectedEase, row.suggestedEase, row.autoAcceptStep)
+            RatingSuggest.apply(hard, 2, row.selectedEase, row.suggestedEase, row.autoAcceptStep)
+            RatingSuggest.apply(good, 3, row.selectedEase, row.suggestedEase, row.autoAcceptStep)
+            RatingSuggest.apply(easy, 4, row.selectedEase, row.suggestedEase, row.autoAcceptStep)
             again.setOnClickListener { DrillService.submitTestGrade("again") }
             hard.setOnClickListener { DrillService.submitTestGrade("hard") }
             good.setOnClickListener { DrillService.submitTestGrade("good") }

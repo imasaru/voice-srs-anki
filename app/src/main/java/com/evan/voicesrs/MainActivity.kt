@@ -907,10 +907,11 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.gradeChips)?.visibility = ratingVis
         val sel = if (controls.rating) state.selectedEase else null
         val suggested = if (controls.rating) state.suggestedEase else null
-        RatingSuggest.apply(chipAgain, 1, sel, suggested)
-        RatingSuggest.apply(chipHard, 2, sel, suggested)
-        RatingSuggest.apply(chipGood, 3, sel, suggested)
-        RatingSuggest.apply(chipEasy, 4, sel, suggested)
+        val ringStep = if (controls.rating) state.autoAcceptStep else null
+        RatingSuggest.apply(chipAgain, 1, sel, suggested, ringStep)
+        RatingSuggest.apply(chipHard, 2, sel, suggested, ringStep)
+        RatingSuggest.apply(chipGood, 3, sel, suggested, ringStep)
+        RatingSuggest.apply(chipEasy, 4, sel, suggested, ringStep)
         startButton.isEnabled = true
         startButton.visibility = View.VISIBLE
         startButton.setText(
