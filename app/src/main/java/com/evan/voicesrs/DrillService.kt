@@ -2476,9 +2476,7 @@ class DrillService : Service(), VoiceIo {
                         var shownLeft = -1
                         while (!stopRequested.get() && SystemClock.elapsedRealtime() < holdUntil) {
                             val tapped = claimedEase()
-                            if (tapped != null) {
-                                return gradedByTap(tapped, gradeButtons, presentedAt, transcript, answerHtml, questionForGrade)
-                            }
+                            if (tapped != null) return gradedByTap(tapped, gradeButtons, presentedAt, transcript, answerHtml, questionForGrade)
                             val left = GradeConfirm.secondsLeft(holdUntil - SystemClock.elapsedRealtime())
                             if (left != shownLeft) {
                                 shownLeft = left
@@ -4412,12 +4410,8 @@ internal object GradeConfirm {
     /** How long the lit chip stays visible before the card moves on. */
     const val CHIP_HOLD_MS = 1200L
 
-    /** h104a: auto-accept window for a suggested grade; a tap on another chip inside it wins. */
     const val AUTO_ACCEPT_MS = 2000L
-
-    /** Whole seconds left, rounded up, never negative. */
     fun secondsLeft(remainingMs: Long): Int = if (remainingMs <= 0L) 0 else ((remainingMs + 999L) / 1000L).toInt()
-
     fun countdownStatus(ease: Int, secondsLeft: Int): String = "${ratedStatus(ease)} · moving on in ${secondsLeft}s"
 
     fun label(ease: Int): String = when (ease) {

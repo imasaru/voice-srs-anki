@@ -8,7 +8,6 @@ import org.junit.Test
 
 /** h104a: 2 s auto-accept countdown for a suggested grade. Pure, no Android. */
 class H104aTest {
-
     @Test
     fun autoAcceptMs() {
         assertEquals(2000L, GradeConfirm.AUTO_ACCEPT_MS)
