@@ -10,7 +10,6 @@ import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -31,16 +30,16 @@ class H112Test {
 
     @Test fun a_readyReplySelectableAfterBind() {
         val h = bound(ExplState.Ready(report, false))
-        assertTrue(reply(h).isTextSelectable)
-        assertTrue(h.itemView.findViewById<TextView>(R.id.askQuestion).isTextSelectable)
-        assertNotNull(reply(h).customSelectionActionModeCallback)
+        assertFalse(reply(h).isTextSelectable)
+        assertTrue(reply(h).isLongClickable)
+        assertTrue(h.itemView.findViewById<TextView>(R.id.askQuestion).isLongClickable)
     }
 
     @Test fun b_rebindKeepsSelectable() {
         val h = holder()
         h.bind(ChatRow.Ask(1L, "q", ExplState.Error("boom", true)))
         h.bind(ChatRow.Ask(2L, "q", ExplState.Ready(report, false)))
-        assertTrue(reply(h).isTextSelectable)
+        assertTrue(reply(h).isLongClickable)
     }
 
     @Test fun c_retryableErrorStaysTappable() {

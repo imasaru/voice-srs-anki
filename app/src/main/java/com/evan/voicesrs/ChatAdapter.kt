@@ -349,12 +349,14 @@ class ChatAdapter(
         private val question: TextView = view.findViewById(R.id.askQuestion)
         private val reply: TextView = view.findViewById(R.id.askReply)
         private val replyBubble: LinearLayout = view.findViewById(R.id.askReplyBubble)
+        private val questionBubble: View = view.findViewById(R.id.askQuestionBubble)
         private val askQuestionPlayIcon: ImageButton = view.findViewById(R.id.askQuestionPlayIcon)
         private val askReplyPlayIcon: ImageButton = view.findViewById(R.id.askReplyPlayIcon)
         private var askId = 0L
 
         init {
-            BubbleCopy.addCopyAll(reply)
+            BubbleMenu.attach(questionBubble, question)
+            BubbleMenu.attach(replyBubble, reply)
             askQuestionPlayIcon.setOnClickListener { onSpeak(askId, SpeakSection.ASK_QUESTION, question.text.toString()) }
             askReplyPlayIcon.setOnClickListener { onSpeak(askId, SpeakSection.ASK_REPLY, BubbleCopy.plain(reply)) }
         }
@@ -383,8 +385,6 @@ class ChatAdapter(
                 }
             }
             val retryable = row.state is ExplState.Error && (row.state as ExplState.Error).retryable
-            BubbleCopy.selectable(question, true)
-            BubbleCopy.selectable(reply, !retryable)
             if (retryable) {
                 reply.setOnClickListener { GeneralChat.retry(it.context, row.id) }
             } else {
