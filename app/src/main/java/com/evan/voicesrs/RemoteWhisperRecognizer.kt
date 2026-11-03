@@ -21,7 +21,8 @@ import java.util.concurrent.atomic.AtomicInteger
 class RemoteWhisperRecognizer(
     private val context: Context,
     private val baseUrl: String,
-    private val token: String
+    private val token: String,
+    private val language: String? = null
 ) : Recognizer {
     override val kind: EngineKind = EngineKind.WHISPER
 
@@ -104,7 +105,7 @@ class RemoteWhisperRecognizer(
             postFinal(cb, "")
             return
         }
-        val text = AsrHttp.transcribe(baseUrl, token, WavBytes.wrap(bytes))
+        val text = AsrHttp.transcribe(baseUrl, token, WavBytes.wrap(bytes), language)
         if (state.get() == CANCELLED) return
         if (text == null) postError(cb, SpeechRecognizer.ERROR_NETWORK)
         else postFinal(cb, text)

@@ -12,7 +12,7 @@ import android.speech.SpeechRecognizer
  * DrillService path: complete-silence is an Int (a Long was ignored),
  * possibly-complete stays a Long, and nothing calls stopListening().
  */
-class GoogleRecognizer(private val context: Context) : Recognizer {
+class GoogleRecognizer(private val context: Context, private val language: String? = SpokenLetter.LANGUAGE) : Recognizer {
     override val kind: EngineKind = EngineKind.GOOGLE
 
     private var speech: SpeechRecognizer? = null
@@ -35,7 +35,7 @@ class GoogleRecognizer(private val context: Context) : Recognizer {
         val complete = SpokenLetter.silenceExtra(silenceMs)
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, SpokenLetter.LANGUAGE)
+            if (language != null) putExtra(RecognizerIntent.EXTRA_LANGUAGE, language)
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, SpokenLetter.PREFER_OFFLINE)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, SpokenLetter.MAX_RESULTS)

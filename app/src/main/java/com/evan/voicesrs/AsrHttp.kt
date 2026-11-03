@@ -28,10 +28,14 @@ object AsrHttp {
         }
     }
 
+    /** h120: the transcribe URL; [language] null or blank (Auto) adds nothing. */
+    fun transcribeUrl(base: String, language: String?): String =
+        base.trimEnd('/') + "/asr/transcribe" + if (language.isNullOrBlank()) "" else "?language=$language"
+
     /** Null on HTTP or IO failure. Blank text is an empty string, not a failure. */
-    fun transcribe(base: String, token: String, wav: ByteArray): String? {
+    fun transcribe(base: String, token: String, wav: ByteArray, language: String? = null): String? {
         val conn = try {
-            open(base.trimEnd('/') + "/asr/transcribe", "POST", token, CONNECT_MS, READ_MS)
+            open(transcribeUrl(base, language), "POST", token, CONNECT_MS, READ_MS)
         } catch (_: Exception) {
             return null
         }
