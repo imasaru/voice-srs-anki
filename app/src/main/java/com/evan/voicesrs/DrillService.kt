@@ -2472,8 +2472,20 @@ class DrillService : Service(), VoiceIo {
                         runCatching { DrillUi.update { it.copy(selectedEase = mapped) } }
                         Log.i(TAG, "grade chip highlighted ease=$mapped $currentListenTag")
                         showStatus(GradeConfirm.ratedStatus(mapped))
-                        val holdUntil = SystemClock.elapsedRealtime() + GradeConfirm.CHIP_HOLD_MS
-                        while (!stopRequested.get() && SystemClock.elapsedRealtime() < holdUntil) SystemClock.sleep(100)
+                        val holdUntil = SystemClock.elapsedRealtime() + GradeConfirm.AUTO_ACCEPT_MS
+                        var shownLeft = -1
+                        while (!stopRequested.get() && SystemClock.elapsedRealtime() < holdUntil) {
+                            val tapped = claimedEase()
+                            if (tapped != null) {
+                                return gradedByTap(tapped, gradeButtons, presentedAt, transcript, answerHtml, questionForGrade)
+                            }
+                            val left = GradeConfirm.secondsLeft(holdUntil - SystemClock.elapsedRealtime())
+                            if (left != shownLeft) {
+                                shownLeft = left
+                                showStatus(GradeConfirm.countdownStatus(mapped, left))
+                            }
+                            SystemClock.sleep(100)
+                        }
                         return CardStep.Graded(
                             mapped,
                             ThinkTime.answerDurationMs(presentedAt, SystemClock.elapsedRealtime()),
@@ -4399,6 +4411,14 @@ class DrillService : Service(), VoiceIo {
 internal object GradeConfirm {
     /** How long the lit chip stays visible before the card moves on. */
     const val CHIP_HOLD_MS = 1200L
+
+    /** h104a: auto-accept window for a suggested grade; a tap on another chip inside it wins. */
+    const val AUTO_ACCEPT_MS = 2000L
+
+    /** Whole seconds left, rounded up, never negative. */
+    fun secondsLeft(remainingMs: Long): Int = if (remainingMs <= 0L) 0 else ((remainingMs + 999L) / 1000L).toInt()
+
+    fun countdownStatus(ease: Int, secondsLeft: Int): String = "${ratedStatus(ease)} · moving on in ${secondsLeft}s"
 
     fun label(ease: Int): String = when (ease) {
         1 -> "Again"; 2 -> "Hard"; 3 -> "Good"; 4 -> "Easy"; else -> "Good"
