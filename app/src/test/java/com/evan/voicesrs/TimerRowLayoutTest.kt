@@ -31,7 +31,7 @@ class TimerRowLayoutTest {
     }
 
     @Test
-    fun `timer row has the five expected ids`() {
+    fun `timer row has the two-row ids`() {
         val idSet = mutableSetOf<String>()
         val nodes = parse("layout", "include_timer_row.xml").getElementsByTagName("*")
         for (i in 0 until nodes.length) {
@@ -39,7 +39,7 @@ class TimerRowLayoutTest {
             val raw = el.getAttribute("android:id")
             if (raw.startsWith("@+id/")) idSet += raw.removePrefix("@+id/")
         }
-        listOf("timerRow", "timerMinus", "timerValue", "timerPlus", "timerGoalChip").forEach {
+        listOf("timerRow", "timerLines", "timerLine1", "elapsedChip", "timerGoalChip", "voiceChip", "timerLine2", "timerMinus", "timerGoalBar", "timerValue", "timerPlus").forEach {
             assertTrue("include_timer_row.xml missing id $it", idSet.contains(it))
         }
     }
@@ -51,8 +51,21 @@ class TimerRowLayoutTest {
         assertNotNull(minus)
         assertNotNull(plus)
         assertEquals("48dp", minus!!.getAttribute("android:layout_height"))
+        assertEquals("48dp", minus!!.getAttribute("android:layout_width"))
         assertEquals("48dp", plus!!.getAttribute("android:layout_height"))
-        // h122b rewrites: the goal/voice toggles are fixed 40dp icon buttons, not a wrap_content switch
+        assertEquals("48dp", plus!!.getAttribute("android:layout_width"))
+    }
+
+    @Test
+    fun `goal and voice toggles are 40dp icon buttons`() {
+        val goal = elementById(parse("layout", "include_timer_row.xml"), "timerGoalChip")
+        val voice = elementById(parse("layout", "include_timer_row.xml"), "voiceChip")
+        assertNotNull(goal)
+        assertNotNull(voice)
+        assertEquals("40dp", goal!!.getAttribute("android:layout_width"))
+        assertEquals("40dp", goal.getAttribute("android:layout_height"))
+        assertEquals("40dp", voice!!.getAttribute("android:layout_width"))
+        assertEquals("40dp", voice.getAttribute("android:layout_height"))
     }
 
     @Test
