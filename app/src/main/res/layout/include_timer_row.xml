@@ -1,128 +1,155 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- h94c: TimerWrapRow: line1 = icon, elapsed, - value + (48dp targets, 36dp circles); label+switch on line1 right when row content >= 360dp, else line 2 right-aligned. -->
-<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<!-- h122: two fixed rows, see h122/reference/mockup-spec.md -->
+<com.google.android.material.card.MaterialCardView
     android:id="@+id/timerRow"
-    style="@style/Widget.Material3.CardView.Outlined"
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:minHeight="48dp"
-    android:contentDescription="@string/timer_title"
-    app:cardCornerRadius="14dp"
+    app:cardCornerRadius="12dp"
     app:cardElevation="0dp"
-    app:contentPadding="0dp"
-    app:strokeColor="?attr/colorOutline"
-    app:strokeWidth="1dp">
+    app:contentPadding="12dp">
 
     <com.evan.voicesrs.TimerWrapRow
         android:id="@+id/timerLines"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:padding="12dp"
         android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp">
+        android:paddingEnd="12dp">
 
         <LinearLayout
             android:id="@+id/timerLine1"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <ImageView
-                android:id="@+id/timerIcon"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:contentDescription="@string/timer_title"
-                android:src="@drawable/ic_timer" />
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/elapsedChip"
+                <TextView
+                    android:id="@+id/elapsedChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFeatureSettings="tnum"
+                    android:maxLines="1"
+                    android:text="0:00"
+                    android:textSize="28sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/elapsedCaption"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/timer_elapsed_caption"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:visibility="gone"
-                android:textAppearance="?attr/textAppearanceLabelLarge" />
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/timerMinus"
-                style="@style/Widget.Material3.Button.IconButton.Outlined"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginStart="4dp"
-                android:insetLeft="@dimen/timer_stepper_inset"
-                android:insetTop="@dimen/timer_stepper_inset"
-                android:insetRight="@dimen/timer_stepper_inset"
-                android:insetBottom="@dimen/timer_stepper_inset"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:padding="0dp"
-                android:contentDescription="@string/timer_fewer"
-                android:text="−"
-                app:shapeAppearanceOverlay="@style/ShapeAppearance.Material3.Corner.Full"
-                app:strokeColor="?attr/colorOutline"
-                app:strokeWidth="@dimen/timer_stepper_stroke" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/timerGoalChip"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:checkable="true"
+                    android:contentDescription="@string/timer_switch_label"
+                    app:icon="@drawable/ic_drill_stop"
+                    style="@style/Widget.Material3.Button.IconButton.Filled.Tonal" />
 
-            <TextView
-                android:id="@+id/timerValue"
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/timer_goal_short"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/timer_value_margin"
-                android:layout_marginEnd="@dimen/timer_value_margin"
-                android:minWidth="@dimen/timer_value_min_width"
-                android:gravity="center"
-                android:maxLines="1"
-                android:textSize="16sp"
-                android:textAppearance="?attr/textAppearanceLabelLarge"
-                android:text="10 min" />
+                android:layout_marginStart="8dp"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/timerPlus"
-                style="@style/Widget.Material3.Button.IconButton.Outlined"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:insetLeft="@dimen/timer_stepper_inset"
-                android:insetTop="@dimen/timer_stepper_inset"
-                android:insetRight="@dimen/timer_stepper_inset"
-                android:insetBottom="@dimen/timer_stepper_inset"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:padding="0dp"
-                android:contentDescription="@string/timer_more"
-                android:text="+"
-                app:shapeAppearanceOverlay="@style/ShapeAppearance.Material3.Corner.Full"
-                app:strokeColor="?attr/colorOutline"
-                app:strokeWidth="@dimen/timer_stepper_stroke" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/voiceChip"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:checkable="true"
+                    android:contentDescription="@string/voice_chip"
+                    app:icon="@drawable/ic_mic"
+                    style="@style/Widget.Material3.Button.IconButton.Filled.Tonal" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/voice_short"
+                    android:textSize="11sp" />
+            </LinearLayout>
         </LinearLayout>
 
         <LinearLayout
             android:id="@+id/timerLine2"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/timerSwitchLabel"
+            <Button
+                android:id="@+id/timerMinus"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="6dp"
-                android:gravity="end|center_vertical"
-                android:labelFor="@+id/timerSwitch"
-                android:maxLines="1"
-                android:text="@string/timer_switch_text"
-                android:textColor="?attr/colorOnSurfaceVariant"
-                android:textSize="13sp" />
+                android:layout_height="48dp"
+                android:layout_marginEnd="4dp"
+                android:minWidth="36dp"
+                android:text="−"
+                android:textSize="18sp" />
 
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/timerSwitch"
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="28dp"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp"
+                android:layout_weight="1">
+
+                <com.google.android.material.progressindicator.LinearProgressIndicator
+                    android:id="@+id/timerGoalBar"
+                    android:max="1000"
+                    android:indeterminate="false"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center_vertical"
+                    app:indicatorColor="?attr/colorTertiary"
+                    app:trackColor="?attr/colorSurfaceVariant"
+                    app:trackCornerRadius="10dp"
+                    app:trackThickness="20dp" />
+
+                <TextView
+                    android:id="@+id/timerValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:fontFeatureSettings="tnum"
+                    android:maxLines="1"
+                    android:text="10 min"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
+
+            <Button
+                android:id="@+id/timerPlus"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minHeight="0dp"
-                android:contentDescription="@string/timer_switch_label" />
+                android:layout_height="48dp"
+                android:minWidth="36dp"
+                android:text="+"
+                android:textSize="18sp" />
         </LinearLayout>
     </com.evan.voicesrs.TimerWrapRow>
 </com.google.android.material.card.MaterialCardView>

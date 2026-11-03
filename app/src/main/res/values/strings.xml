@@ -314,6 +314,12 @@
     <string name="timer_switch_label">End drill at goal</string>
     <!-- Visible switch text: one line now, fits above 400dp too. -->
     <string name="timer_switch_text">End at goal</string>
+    <string name="voice_chip">Voice</string>
+    <string name="voice_short">voice</string>
+    <string name="timer_goal_short">goal</string>
+    <string name="timer_elapsed_caption">elapsed</string>
+    <string name="chip_state_on">On</string>
+    <string name="chip_state_off">Off</string>
     <string name="your_answer_label">YOUR ANSWER</string>
     <string name="prompt_chip_add_desc">Add prompt</string>
 </resources>
