@@ -141,7 +141,9 @@ class ChatAdapter(
             } catch (_: Exception) {
                 HighlightSentence.SETTING_DEFAULT
             }
-            CardFaceBinder.paintReadingIn(blocks, ReadingSpan.sentenceFor(turn.cardId, DrillUi.state, highlightOn))
+            val sentence = ReadingSpan.sentenceFor(turn.cardId, DrillUi.state, highlightOn)
+            CardFaceBinder.paintReadingIn(blocks, sentence)
+            CardFaceBinder.paintReadingIn(listOf(cardStem) + CardFaceBinder.optionViews(optionRows), sentence)
         }
 
         fun bind(turn: ReviewTurn) {
@@ -425,7 +427,7 @@ class ChatAdapter(
                 HighlightSentence.SETTING_DEFAULT
             }
             val sentence = if (row.revealText) ReadingSpan.sentenceFor(row.cardId, DrillUi.state, highlightOn) else ""
-            CardFaceBinder.paintReadingIn(listOf(question, answer), sentence)
+            CardFaceBinder.paintReadingIn(listOf(question, answer) + CardFaceBinder.optionViews(options), sentence)
         }
 
         private fun composerBusy(v: View): Boolean {

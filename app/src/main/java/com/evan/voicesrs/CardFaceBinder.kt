@@ -306,6 +306,14 @@ object CardFaceBinder {
         view.text = sp
     }
 
+    /** Direct TextView children of [host] (choice rows built by bindQuestion). Empty when null or GONE. */
+    fun optionViews(host: LinearLayout?): List<TextView> {
+        if (host == null || host.visibility == View.GONE) return emptyList()
+        val out = mutableListOf<TextView>()
+        for (i in 0 until host.childCount) (host.getChildAt(i) as? TextView)?.let { out.add(it) }
+        return out
+    }
+
     /**
      * Card face text. Plain strings are set as-is. HTML keeps bold and breaks,
      * and `<code>` / `<pre>` become the chip and code-block styles.
