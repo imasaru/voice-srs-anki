@@ -12,13 +12,21 @@ object MakeCardFlow {
     private val main = Handler(Looper.getMainLooper())
 
     fun start(context: Context, turn: ReviewTurn) {
-        val app = context.applicationContext
-        Toast.makeText(context, context.getString(R.string.make_card_drafting), Toast.LENGTH_SHORT).show()
         val explanation = when (val state = turn.explanation) {
             is ExplState.Ready -> state.text
             is ExplState.Streaming -> state.partial
             else -> ""
         }
+        draft(context, turn.frontText, turn.backText, explanation)
+    }
+
+    fun startAsk(context: Context, question: String, reply: String) {
+        draft(context, question, "", reply)
+    }
+
+    private fun draft(context: Context, front: String, back: String, explanation: String) {
+        val app = context.applicationContext
+        Toast.makeText(context, context.getString(R.string.make_card_drafting), Toast.LENGTH_SHORT).show()
         Thread({
             try {
                 val cfg = Prefs.load(app)
@@ -27,7 +35,7 @@ object MakeCardFlow {
                     cfg.aiApiKey,
                     cfg.aiModel,
                     MakeCard.system(),
-                    MakeCard.userMessage(turn.frontText, turn.backText, explanation)
+                    MakeCard.userMessage(front, back, explanation)
                 )
                 val draft = MakeCard.parse(raw)
                 main.post {

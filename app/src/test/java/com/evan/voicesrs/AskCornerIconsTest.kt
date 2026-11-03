@@ -86,6 +86,6 @@ class AskCornerIconsTest {
     @Test
     fun `e ask layout has no icon beyond the two play icons`() {
         val h = holder(Hooks()).also { it.bind(ChatRow.Ask(7L, "q", ExplState.None)) }
-        assertEquals(2, countButtons(h.itemView))
+        assertEquals(3, countButtons(h.itemView))
     }
 }

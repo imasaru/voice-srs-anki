@@ -352,6 +352,7 @@ class ChatAdapter(
         private val questionBubble: View = view.findViewById(R.id.askQuestionBubble)
         private val askQuestionPlayIcon: ImageButton = view.findViewById(R.id.askQuestionPlayIcon)
         private val askReplyPlayIcon: ImageButton = view.findViewById(R.id.askReplyPlayIcon)
+        private val askReplyNoteIcon: ImageButton = view.findViewById(R.id.askReplyNoteIcon)
         private var askId = 0L
 
         init {
@@ -359,6 +360,7 @@ class ChatAdapter(
             BubbleMenu.attach(replyBubble, reply)
             askQuestionPlayIcon.setOnClickListener { onSpeak(askId, SpeakSection.ASK_QUESTION, question.text.toString()) }
             askReplyPlayIcon.setOnClickListener { onSpeak(askId, SpeakSection.ASK_REPLY, BubbleCopy.plain(reply)) }
+            askReplyNoteIcon.setOnClickListener { MakeCardFlow.startAsk(itemView.context, question.text.toString(), BubbleCopy.plain(reply)) }
         }
 
         fun bind(row: ChatRow.Ask) {
@@ -392,6 +394,7 @@ class ChatAdapter(
             }
             reply.isClickable = retryable
             askReplyPlayIcon.visibility = if (row.state is ExplState.Ready) View.VISIBLE else View.GONE
+            askReplyNoteIcon.visibility = if (row.state is ExplState.Ready) View.VISIBLE else View.GONE
         }
     }
 

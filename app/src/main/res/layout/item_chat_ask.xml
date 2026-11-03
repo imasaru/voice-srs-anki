@@ -73,6 +73,18 @@
             android:orientation="horizontal">
 
             <ImageButton
+                android:id="@+id/askReplyNoteIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/corner_make_card"
+                android:padding="3dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_note_add"
+                android:visibility="gone"
+                app:tint="#99FFFFFF" />
+
+            <ImageButton
                 android:id="@+id/askReplyPlayIcon"
                 android:layout_width="24dp"
                 android:layout_height="24dp"
