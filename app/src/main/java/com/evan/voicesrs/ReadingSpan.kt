@@ -21,6 +21,15 @@ object ReadingSpan {
         return best
     }
 
+    /** Index of the first [rows] entry where [sentence] is a strict sentence-span, else -1. Blank [sentence] -> -1. */
+    fun pickOption(rows: List<String>, sentence: String): Int {
+        if (sentence.isBlank()) return -1
+        for ((i, row) in rows.withIndex()) {
+            if (SentenceReading.strictSpanIn(row, sentence) != null) return i
+        }
+        return -1
+    }
+
     /** True when the turn for [turnCardId] is the card the drill is reading now. */
     fun isCurrentTurn(turnCardId: Long, state: DrillUiState): Boolean =
         state.drillRunning && state.cardId == turnCardId && state.frontHtml.isNotBlank()

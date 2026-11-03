@@ -51,4 +51,16 @@ class ReadingSpanTest {
         assertEquals(-1, ReadingSpan.currentTurnIndex(listOf(8L, null), reading))
         assertEquals(-1, ReadingSpan.currentTurnIndex(ids, reading.copy(drillRunning = false)))
     }
+
+    private val choiceRows = listOf("A. Use repartition(8)", "B. Use coalesce(1)", "C. Increase spark.executor.memory", "D. Broadcast the small table")
+    @Test fun `pickOption picks the spoken choice row`() {
+        assertEquals(1, ReadingSpan.pickOption(choiceRows, "B. Use coalesce(1)"))
+        assertEquals(2, ReadingSpan.pickOption(choiceRows, "C. Increase spark dot executor dot memory."))
+        assertEquals(3, ReadingSpan.pickOption(choiceRows, "D. Broadcast the small table."))
+        assertEquals(-1, ReadingSpan.pickOption(choiceRows, "Which fixes the skew?"))
+        assertEquals(-1, ReadingSpan.pickOption(choiceRows, ""))
+    }
+    @Test fun `pick skips question and answer to reach the choice rows`() {
+        assertEquals(3, ReadingSpan.pick(listOf("Which fixes the skew?", "") + choiceRows, "B. Use coalesce(1)")?.block)
+    }
 }
