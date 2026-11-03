@@ -58,7 +58,7 @@ class ChatAdapter(
         return when (viewType) {
             TYPE_DIVIDER -> DividerHolder(inflater.inflate(R.layout.item_chat_divider, parent, false))
             TYPE_LIVE -> LiveHolder(inflater.inflate(R.layout.item_chat_live, parent, false))
-            TYPE_ASK -> AskHolder(inflater.inflate(R.layout.item_chat_ask, parent, false))
+            TYPE_ASK -> AskHolder(inflater.inflate(R.layout.item_chat_ask, parent, false), onSpeakSection)
             TYPE_NOTICE -> NoticeHolder(inflater.inflate(R.layout.item_chat_notice, parent, false))
             else -> PastHolder(inflater.inflate(R.layout.item_chat_turn, parent, false))
         }
@@ -337,15 +337,25 @@ class ChatAdapter(
 
     class DividerHolder(view: View) : RecyclerView.ViewHolder(view)
 
-    class AskHolder(view: View) : RecyclerView.ViewHolder(view) {
+    class AskHolder(
+        view: View,
+        private val onSpeak: (Long, Int, String) -> Unit = { _, _, _ -> }
+    ) : RecyclerView.ViewHolder(view) {
         private val question: TextView = view.findViewById(R.id.askQuestion)
         private val reply: TextView = view.findViewById(R.id.askReply)
+        private val replyBubble: LinearLayout = view.findViewById(R.id.askReplyBubble)
+        private val askQuestionPlayIcon: ImageButton = view.findViewById(R.id.askQuestionPlayIcon)
+        private val askReplyPlayIcon: ImageButton = view.findViewById(R.id.askReplyPlayIcon)
+        private var askId = 0L
 
         init {
             BubbleCopy.addCopyAll(reply)
+            askQuestionPlayIcon.setOnClickListener { onSpeak(askId, -4, question.text.toString()) }
+            askReplyPlayIcon.setOnClickListener { onSpeak(askId, -5, BubbleCopy.plain(reply)) }
         }
 
         fun bind(row: ChatRow.Ask) {
+            askId = row.id
             question.text = row.question
             val text = when (val state = row.state) {
                 is ExplState.Ready -> state.text
@@ -357,8 +367,10 @@ class ChatAdapter(
             if (text.isBlank()) {
                 reply.visibility = View.GONE
                 reply.text = ""
+                replyBubble.visibility = View.GONE
             } else {
                 reply.visibility = View.VISIBLE
+                replyBubble.visibility = View.VISIBLE
                 if (row.state is ExplState.Ready || row.state is ExplState.Streaming) {
                     CardFaceBinder.applySections(reply, text)
                 } else {
@@ -374,6 +386,7 @@ class ChatAdapter(
                 reply.setOnClickListener(null)
             }
             reply.isClickable = retryable
+            askReplyPlayIcon.visibility = if (row.state is ExplState.Ready) View.VISIBLE else View.GONE
         }
     }
 
