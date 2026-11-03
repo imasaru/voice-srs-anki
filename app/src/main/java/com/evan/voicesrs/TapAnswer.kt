@@ -55,6 +55,13 @@ object TapAnswer {
         return if (correct != null && letter.equals(correct, ignoreCase = true)) 3 else 1
     }
 
+    /** h107b3: spoken result for a letter choice; [ease] lights the grade chip. */
+    data class LetterResult(val ease: Int, val line: String)
+
+    fun letterResult(letter: String, correct: String): LetterResult =
+        if (letter.trim().equals(correct.trim(), ignoreCase = true)) LetterResult(3, "Correct.")
+        else LetterResult(1, "Not quite. The answer is ${correct.trim().uppercase()}.")
+
     /** Thread label. A letter choice reads "YOUR ANSWER: B"; anything else keeps the old line. */
     fun heading(transcript: String): String {
         val letter = parseSpoken(transcript, ('A'..'F').map { it.toString() }.toSet())

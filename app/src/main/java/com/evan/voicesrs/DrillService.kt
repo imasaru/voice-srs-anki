@@ -2402,6 +2402,7 @@ class DrillService : Service(), VoiceIo {
         showAnswerEarly.set(false)
         if (transcript.isBlank()) chosenLetter?.let { transcript = it }
         judgeOwnWordsIfNeeded(questionHtml, correct, transcript, cardId, buttons)
+        announceLetterResult(transcript)
         if (!awaitChatResume()) return CardStep.Paused
         if (stopRequested.get()) return CardStep.Paused
         val revealed = reveal()
@@ -2943,6 +2944,19 @@ class DrillService : Service(), VoiceIo {
             Log.i(TAG, "think silence; mic restart")
         }
         return step
+    }
+
+    /** h107b3: a letter choice always hears Correct / Not quite; judgedEase lights the chip like a judge verdict. */
+    private fun announceLetterResult(transcript: String) {
+        val letter = chosenLetter?.takeIf { transcript.trim().equals(it, ignoreCase = true) } ?: return
+        val plain = BubbleModel.fullQuestion(DrillUi.state.frontHtml).ifBlank { DrillUi.state.frontHtml }
+        val answer = QuestionCard.highlightSource(DrillUi.state.correctField, AnkiText.stripHtml(DrillUi.state.backHtml))
+        val correct = QuestionCard.correctLetter(answer, QuestionCard.parse(plain).options) ?: return
+        val result = TapAnswer.letterResult(letter, correct)
+        judgedEase = result.ease
+        Log.i(TAG, "letter result ease=${result.ease} $currentListenTag")
+        showStatus(result.line)
+        if (!sessionSilent) speak(result.line)
     }
 
     /** Outline Good or Again. The chip is not selected and the card is not graded. */
