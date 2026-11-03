@@ -694,8 +694,14 @@
                         android:layout_height="wrap_content"
                         android:minHeight="48dp"
                         android:text="@string/settings_use_headset_mic"
-                        android:summary="@string/settings_use_headset_mic_summary"
                         android:textAppearance="?attr/textAppearanceBodyLarge" />
+
+                    <TextView
+                        android:id="@+id/useHeadsetMicSummary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_use_headset_mic_summary"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"

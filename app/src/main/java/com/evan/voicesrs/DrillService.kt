@@ -1630,23 +1630,27 @@ class DrillService : Service(), VoiceIo {
         answerListenNow = answerListen
         // h105c: route answer/rating listens to a headset mic before the start cue.
         val routeKind = if (grading) MicRouteTiming.Kind.RATING else if (answerListen) MicRouteTiming.Kind.ANSWER else MicRouteTiming.Kind.COMMAND
-        val raw = runCatching {
-            val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-            am?.getDevices(AudioManager.GET_DEVICES_INPUTS) ?: emptyArray()
-        }.getOrDefault(emptyArray())
-        val devs = raw.map { MicRoute.AudioDev(it.id, MicRoute.typeOf(it.type), it.productName.toString()) }
-        val picked = AudioRouteDecision.listenInput(
-            try { Prefs.load(this).useHeadsetMic } catch (_: Exception) { true },
-            devs, Prefs.READ_ALOUD_MEDIA
-        )
-        if (picked != null && MicRouteTiming.shouldRoute(routeKind, picked)) {
-            Log.i(TAG, MicRouteTiming.routeLog(picked, true, Prefs.READ_ALOUD_MEDIA))
-            raw.firstOrNull { MicRoute.typeOf(it.type) == picked.type }?.let { setCommDevice(it) }
+        // h105e: route on every (re)open; finishListen clears the comm device.
+        fun routeMic() {
+            val raw = runCatching {
+                val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                am?.getDevices(AudioManager.GET_DEVICES_INPUTS) ?: emptyArray()
+            }.getOrDefault(emptyArray())
+            val devs = raw.map { MicRoute.AudioDev(it.id, MicRoute.typeOf(it.type), it.productName.toString()) }
+            val picked = AudioRouteDecision.listenInput(
+                try { Prefs.load(this).useHeadsetMic } catch (_: Exception) { true },
+                devs, Prefs.READ_ALOUD_MEDIA
+            )
+            if (picked != null && MicRouteTiming.shouldRoute(routeKind, picked)) {
+                Log.i(TAG, MicRouteTiming.routeLog(picked, true, Prefs.READ_ALOUD_MEDIA))
+                raw.firstOrNull { it.id == picked.id }?.let { setCommDevice(it) }
+            }
         }
         var reopens = 0
         while (true) {
             if (focusPaused && !awaitFocusResume()) return null
             if (!acquireFocus()) return null
+            routeMic()
             focusPhase = FocusPolicy.Phase.LISTENING
             val listenStartedAt = SystemClock.elapsedRealtime()
             val scripted = SpeechHooks.scripted
