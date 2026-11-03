@@ -16,4 +16,10 @@ object AsrServers {
 
     fun decode(raw: String?): List<String> =
         raw.orEmpty().split("\n").map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(MAX)
+
+    /** h119b: dropdown rows = saved servers, then the "+ Add server…" row last. */
+    fun menuItems(saved: List<String>, addLabel: String): List<String> = saved + addLabel
+
+    /** True when [position] is the "+ Add server…" row of [menuItems]. */
+    fun isAddRow(position: Int, saved: List<String>): Boolean = position == saved.size
 }
