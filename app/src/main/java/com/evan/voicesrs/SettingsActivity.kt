@@ -126,6 +126,7 @@ class SettingsActivity : AppCompatActivity() {
         val explainGood: Chip = findViewById(R.id.autoExplainGood)
         val explainEasy: Chip = findViewById(R.id.autoExplainEasy)
         val listenWaitView: MaterialAutoCompleteTextView = findViewById(R.id.listenWaitInput)
+        val asrLanguageView: MaterialAutoCompleteTextView = findViewById(R.id.asrLanguageInput)
         val endSilenceView: MaterialAutoCompleteTextView = findViewById(R.id.endSilenceInput)
         val listenAttemptsView: MaterialAutoCompleteTextView = findViewById(R.id.listenAttemptsInput)
         val thinkTimeView: MaterialAutoCompleteTextView = findViewById(R.id.thinkTimeInput)
@@ -358,6 +359,14 @@ class SettingsActivity : AppCompatActivity() {
         }
         val silenceLabels = ListenWindow.SILENCE_MS_CHOICES.map {
             getString(R.string.settings_end_silence_choice, it)
+        }
+        val asrLanguageLabels = listOf(
+            getString(R.string.settings_asr_language_auto),
+            getString(R.string.settings_asr_language_en),
+            getString(R.string.settings_asr_language_ja)
+        )
+        bindChoices(asrLanguageView, asrLanguageLabels, asrLanguageLabels[held.asrLanguage.ordinal]) { label ->
+            persist { it.copy(asrLanguage = AsrLanguage.fromLabel(label, asrLanguageLabels)) }
         }
         bindChoices(
             listenWaitView,

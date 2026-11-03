@@ -49,6 +49,11 @@
     <string name="settings_asr_url">Speech server URL</string>
     <string name="settings_asr_url_help">Whisper server for Auto and Whisper. Blank = none: Auto uses Vosk if its model is already downloaded, else Google. Uses the Neural token.</string>
     <string name="settings_asr_add_server">+ Add server…</string>
+    <string name="settings_asr_language">Speech language</string>
+    <string name="settings_asr_language_auto">Auto-detect</string>
+    <string name="settings_asr_language_en">English</string>
+    <string name="settings_asr_language_ja">Japanese</string>
+    <string name="settings_asr_language_help">Language the speech server and Google listen for. Auto-detect lets them guess. Offline Vosk is always English.</string>
     <string name="settings_listen_wait">Rating listen window</string>
     <string name="settings_listen_wait_help">How long the mic stays open for each listen (ratings, and answers when Think time is Off).</string>
     <string name="settings_end_silence">End-of-speech silence</string>
