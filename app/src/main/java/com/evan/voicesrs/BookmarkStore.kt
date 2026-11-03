@@ -21,6 +21,7 @@ object BookmarkStore {
     const val FILE_NAME = "bookmarks.json"
     const val MARKDOWN_NAME = "bookmarks.md"
     private val lock = Any()
+    @Volatile private var cachedTurnIds: Pair<String, Set<Long>>? = null
 
     fun file(dir: File): File = File(dir, FILE_NAME)
 
@@ -36,6 +37,7 @@ object BookmarkStore {
     }
 
     fun save(dir: File, marks: List<Bookmark>) = synchronized(lock) {
+        cachedTurnIds = null
         dir.mkdirs()
         writeAtomic(File(dir, FILE_NAME), encode(marks))
         writeAtomic(File(dir, MARKDOWN_NAME), toMarkdown(marks))
@@ -43,10 +45,31 @@ object BookmarkStore {
 
     fun add(dir: File, bookmark: Bookmark): List<Bookmark> {
         val all = load(dir).toMutableList()
+        if (bookmark.turnId != 0L && all.any { it.turnId == bookmark.turnId }) return all
         val id = if (bookmark.id > 0L) bookmark.id else nextId(all)
         all += bookmark.copy(id = id)
         save(dir, all)
         return all
+    }
+
+    /** h121e: a second tap removes. Returns true when the turn is bookmarked after the call. */
+    fun toggle(dir: File, bookmark: Bookmark): Boolean {
+        val all = load(dir)
+        if (bookmark.turnId != 0L && all.any { it.turnId == bookmark.turnId }) {
+            save(dir, all.filter { it.turnId != bookmark.turnId })
+            return false
+        }
+        add(dir, bookmark)
+        return true
+    }
+
+    /** h121e: bookmarked turn ids, cached until the next save (every row bind asks). */
+    fun turnIds(dir: File): Set<Long> {
+        val key = dir.absolutePath
+        cachedTurnIds?.let { if (it.first == key) return it.second }
+        val ids = load(dir).map { it.turnId }.filter { it != 0L }.toSet()
+        cachedTurnIds = key to ids
+        return ids
     }
 
     fun remove(dir: File, id: Long): List<Bookmark> {

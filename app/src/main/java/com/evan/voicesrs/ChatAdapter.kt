@@ -159,15 +159,18 @@ class ChatAdapter(
             thread.setOnClickListener { onThread(turn.turnId) }
             val bookmarkFilled = R.drawable.ic_bookmark_filled
             val bookmarkOutline = R.drawable.ic_bookmark
-            val bookmarkRes = if (isBookmarked(turn)) bookmarkFilled else bookmarkOutline
+            var marked = isBookmarked(turn)
+            val bookmarkRes = if (marked) bookmarkFilled else bookmarkOutline
             cardBookmarkIcon.setImageResource(bookmarkRes)
             userBookmarkIcon.setImageResource(bookmarkRes)
             aiBookmarkIcon.setImageResource(bookmarkRes)
             val onBookmarkTap: View.() -> Unit = {
                 onBookmark(turn)
-                cardBookmarkIcon.setImageResource(bookmarkFilled)
-                userBookmarkIcon.setImageResource(bookmarkFilled)
-                aiBookmarkIcon.setImageResource(bookmarkFilled)
+                marked = !marked
+                val res = if (marked) bookmarkFilled else bookmarkOutline
+                cardBookmarkIcon.setImageResource(res)
+                userBookmarkIcon.setImageResource(res)
+                aiBookmarkIcon.setImageResource(res)
             }
             cardBookmarkIcon.setOnClickListener(onBookmarkTap)
             userBookmarkIcon.setOnClickListener(onBookmarkTap)

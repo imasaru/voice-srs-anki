@@ -156,6 +156,7 @@
     <string name="corner_bookmark">Bookmark</string>
     <string name="corner_make_card">Make a card</string>
     <string name="bookmark_saved">Bookmarked.</string>
+    <string name="bookmark_removed">Bookmark removed.</string>
     <string name="bookmarks_title">Bookmarks</string>
     <string name="bookmarks_empty">No bookmarks yet.</string>
     <string name="bookmark_delete">Delete</string>

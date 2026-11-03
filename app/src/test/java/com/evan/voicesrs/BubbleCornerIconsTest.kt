@@ -129,6 +129,19 @@ class BubbleCornerIconsTest {
         assertEquals(R.drawable.ic_bookmark, resId(o.aiBookmark))
     }
 
+    @Test fun `f tapping a filled bookmark outlines all three`() {
+        val hooks = Hooks()
+        val bind = bindHolder(hooks = hooks, isBookmarked = { true })
+        bind.holder.bind(readyTurn())
+        val f = icons(bind.holder)
+        assertEquals(R.drawable.ic_bookmark_filled, resId(f.cardBookmark))
+        f.cardBookmark.performClick()
+        assertEquals(1, hooks.bookmarkCount)
+        assertEquals(R.drawable.ic_bookmark, resId(f.cardBookmark))
+        assertEquals(R.drawable.ic_bookmark, resId(f.userBookmark))
+        assertEquals(R.drawable.ic_bookmark, resId(f.aiBookmark))
+    }
+
     @Test
     fun `c play icons speak their bubble with a negative section`() {
         val hooks = Hooks()

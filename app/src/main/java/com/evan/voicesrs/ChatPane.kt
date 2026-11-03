@@ -36,7 +36,7 @@ class ChatPane(
                 is ExplState.Ready -> expl.text
                 else -> turn.frontText
             }
-            BookmarkStore.add(
+            val marked = BookmarkStore.toggle(
                 list.context.filesDir,
                 Bookmark(
                     id = 0L,
@@ -49,14 +49,14 @@ class ChatPane(
             )
             android.widget.Toast.makeText(
                 list.context,
-                list.context.getString(R.string.bookmark_saved),
+                list.context.getString(if (marked) R.string.bookmark_saved else R.string.bookmark_removed),
                 android.widget.Toast.LENGTH_SHORT
             ).show()
         },
         onAskAbout = { text -> askAboutText(text) },
         onFlag = { turn -> flagCard(turn) },
         onOpenAnki = { turn -> openInAnki(turn) },
-        isBookmarked = { turn -> BookmarkStore.load(list.context.filesDir).any { it.turnId == turn.turnId } }
+        isBookmarked = { turn -> turn.turnId in BookmarkStore.turnIds(list.context.filesDir) }
     )
     private val tracker = ReadReceiptTracker(now = { SystemClock.elapsedRealtime() })
     private val follow = ChatFollow()
