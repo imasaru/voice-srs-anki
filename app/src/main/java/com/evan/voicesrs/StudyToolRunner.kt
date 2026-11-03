@@ -211,6 +211,26 @@ class StudyToolRunner(
         }
     }
 
+    /**
+     * Exam-readiness forecast JSON for [defaultDeck] over a rolling
+     * [StudyTools.EXAM_WINDOW_DEFAULT]-day window. Reuses [examReadinessJson]
+     * (no maths duplicated); never throws.
+     */
+    fun readinessJson(): String = try {
+        val today = AnkiDay.today(zone)
+        val exam = runCatching { examDate() }.getOrNull()
+        val query = deckQuery(defaultDeck)
+        val cards = anki.cardSnaps(query)
+        val rows = anki.revRows(
+            defaultDeck,
+            AnkiDay.startMs(today.minusDays(StudyTools.EXAM_WINDOW_DEFAULT - 1L), zone)
+        )
+        val tags = cards.associate { it.cardId to it.tags }
+        examReadinessJson(today, exam, cards, rows, tags, StudyTools.EXAM_WINDOW_DEFAULT, zone).toString()
+    } catch (e: Exception) {
+        JSONObject().put("error", e.javaClass.simpleName).toString()
+    }
+
     private fun deckQuery(deck: String): String = "deck:\"$deck\""
 
     /**

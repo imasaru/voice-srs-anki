@@ -296,6 +296,7 @@
     <string name="prompt_src_reviews">Today\'s reviews</string>
     <string name="prompt_src_card">Card on screen</string>
     <string name="prompt_src_chats">Card chats</string>
+    <string name="prompt_src_exam">Exam readiness</string>
     <string name="prompt_move_up">Move up</string>
     <string name="prompt_move_down">Move down</string>
     <string name="prompt_edit">Edit</string>
