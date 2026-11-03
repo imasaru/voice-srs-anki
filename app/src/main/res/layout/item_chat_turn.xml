@@ -21,11 +21,45 @@
         android:paddingEnd="14dp"
         android:paddingBottom="10dp">
 
+        <LinearLayout
+            android:id="@+id/cardCorner"
+            android:layout_width="wrap_content"
+            android:layout_height="24dp"
+            android:layout_gravity="end"
+            android:layout_marginEnd="-6dp"
+            android:layout_marginBottom="-22dp"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/cardBookmarkIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/corner_bookmark"
+                android:padding="3dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_bookmark"
+                app:tint="#99404943" />
+
+            <ImageButton
+                android:id="@+id/cardPlayIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/corner_read_aloud"
+                android:layout_marginStart="6dp"
+                android:padding="3dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_volume_up"
+                app:tint="#99404943" />
+        </LinearLayout>
+
         <TextView
             android:id="@+id/questionLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:letterSpacing="0.08"
+            android:paddingEnd="64dp"
             android:textAllCaps="true"
             android:textAppearance="?attr/textAppearanceLabelSmall"
             android:textColor="?attr/colorOnSurfaceVariant"
@@ -65,6 +99,39 @@
         android:paddingEnd="14dp"
         android:paddingBottom="10dp">
 
+        <LinearLayout
+            android:id="@+id/userCorner"
+            android:layout_width="wrap_content"
+            android:layout_height="24dp"
+            android:layout_gravity="end"
+            android:layout_marginEnd="-6dp"
+            android:layout_marginBottom="-22dp"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/userBookmarkIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/corner_bookmark"
+                android:padding="3dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_bookmark"
+                app:tint="#99FFFFFF" />
+
+            <ImageButton
+                android:id="@+id/userPlayIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/corner_read_aloud"
+                android:layout_marginStart="6dp"
+                android:padding="3dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_volume_up"
+                app:tint="#99FFFFFF" />
+        </LinearLayout>
+
         <!-- h82 narrow-v2 Bubble A: header = YOUR ANSWER (weight 1) + rating pill right; answer full width below. -->
         <LinearLayout
             android:id="@+id/userAnswerHeader"
@@ -72,7 +139,8 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="@dimen/answer_header_bottom"
             android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:paddingEnd="64dp">
 
             <TextView
                 android:id="@+id/userAnswerLabel"
@@ -136,6 +204,51 @@
         android:paddingTop="10dp"
         android:paddingEnd="14dp"
         android:paddingBottom="10dp">
+
+        <LinearLayout
+            android:id="@+id/aiCorner"
+            android:layout_width="wrap_content"
+            android:layout_height="24dp"
+            android:layout_gravity="end"
+            android:layout_marginEnd="-6dp"
+            android:layout_marginBottom="4dp"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/aiNoteIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/corner_make_card"
+                android:padding="3dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_note_add"
+                app:tint="#99FFFFFF" />
+
+            <ImageButton
+                android:id="@+id/aiBookmarkIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/corner_bookmark"
+                android:layout_marginStart="6dp"
+                android:padding="3dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_bookmark"
+                app:tint="#99FFFFFF" />
+
+            <ImageButton
+                android:id="@+id/aiPlayIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/corner_read_aloud"
+                android:layout_marginStart="6dp"
+                android:padding="3dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_volume_up"
+                app:tint="#99FFFFFF" />
+        </LinearLayout>
 
         <LinearLayout
             android:id="@+id/explSection"

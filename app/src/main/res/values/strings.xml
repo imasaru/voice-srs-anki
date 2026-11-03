@@ -152,6 +152,9 @@
     <string name="chat_new_divider">● New</string>
     <string name="thread_reply">💬 Reply in thread</string>
     <string name="bookmark_action">Bookmark</string>
+    <string name="corner_read_aloud">Read aloud</string>
+    <string name="corner_bookmark">Bookmark</string>
+    <string name="corner_make_card">Make a card</string>
     <string name="bookmark_saved">Bookmarked.</string>
     <string name="bookmarks_title">Bookmarks</string>
     <string name="bookmarks_empty">No bookmarks yet.</string>
