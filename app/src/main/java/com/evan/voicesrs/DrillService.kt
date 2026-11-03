@@ -2721,7 +2721,7 @@ class DrillService : Service(), VoiceIo {
             original
         } else {
             val fromSpoken = QuestionLabel.resolve(original.trim(), 1)
-            if (fromSpoken.fromCard) fromSpoken.spoken else SpeakableText.speakable(face.spoken)
+            if (fromSpoken.fromCard) fromSpoken.spoken else SpeakableText.speakablePlain(face.spoken)
         }
         val parsed = QuestionCard.parse(if (face.fromCard) face.stem else plain)
         if (!parsed.mcq) return spoken

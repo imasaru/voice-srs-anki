@@ -31,6 +31,10 @@ object SpeakableText {
         return tidy(s).lines().map { AnkiText.sanitizeForSpeech(it) }.filter { it.isNotEmpty() }.joinToString("\n")
     }
 
+    /** h110b: already-plain text (no tags, entities decoded): prose + sanitize only, so a literal < or > is kept. */
+    fun speakablePlain(text: String): String =
+        tidy(prose(text)).lines().map { AnkiText.sanitizeForSpeech(it) }.filter { it.isNotEmpty() }.joinToString("\n")
+
     /** Plain text: underscore identifiers and lone ==, ->, != outside code tags. */
     fun prose(text: String): String {
         val s = proseIdent.replace(text) { m -> words(m.value) }
