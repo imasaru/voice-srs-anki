@@ -19,6 +19,7 @@ object BubbleMenu {
     private const val ID_COPY = 0x7a01
     private const val ID_ASK = 0x7a02
     private const val ID_FLAG = 0x7a03
+    private const val ID_OPEN_ANKI = 0x7a04
 
     /**
      * Quote [text] for a chat prompt: every line prefixed with "> " and joined by "\n", plus
@@ -59,14 +60,16 @@ object BubbleMenu {
 
     /**
      * Attach a long-press PopupMenu to [bubble] and to each view in [also]. Shows "Copy", and
-     * "Ask about this" when [onAsk] is non-null and "Flag card" when [onFlag] is non-null. Every
-     * long-press copies/asks/flags the primary [bubble]'s content (not the tapped view's own).
+     * "Ask about this" when [onAsk] is non-null and "Flag card" when [onFlag] is non-null and
+     * "Open in Anki" when [onOpenAnki] is non-null. Every
+     * long-press copies/asks/flags/opens the primary [bubble]'s content (not the tapped view's own).
      */
     fun attach(
         bubble: View,
         onAsk: ((String) -> Unit)?,
         onFlag: (() -> Unit)?,
-        vararg also: View
+        vararg also: View,
+        onOpenAnki: (() -> Unit)? = null
     ) {
         for (v in listOf(bubble) + also) {
             v.isLongClickable = true
@@ -77,6 +80,7 @@ object BubbleMenu {
                 popup.menu.add(ID_COPY, ID_COPY, 0, R.string.chat_menu_copy)
                 if (onAsk != null) popup.menu.add(ID_ASK, ID_ASK, 0, R.string.chat_menu_ask)
                 if (onFlag != null) popup.menu.add(ID_FLAG, ID_FLAG, 0, R.string.chat_menu_flag)
+                if (onOpenAnki != null) popup.menu.add(ID_OPEN_ANKI, ID_OPEN_ANKI, 0, R.string.chat_menu_open_anki)
                 popup.setOnMenuItemClickListener { item ->
                     when (item.itemId) {
                         ID_COPY -> {
@@ -89,6 +93,10 @@ object BubbleMenu {
                         }
                         ID_FLAG -> {
                             onFlag?.invoke()
+                            true
+                        }
+                        ID_OPEN_ANKI -> {
+                            onOpenAnki?.invoke()
                             true
                         }
                         else -> false

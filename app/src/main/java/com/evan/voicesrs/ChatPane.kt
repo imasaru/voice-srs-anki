@@ -54,7 +54,8 @@ class ChatPane(
             ).show()
         },
         onAskAbout = { text -> askAboutText(text) },
-        onFlag = { turn -> flagCard(turn) }
+        onFlag = { turn -> flagCard(turn) },
+        onOpenAnki = { turn -> openInAnki(turn) }
     )
     private val tracker = ReadReceiptTracker(now = { SystemClock.elapsedRealtime() })
     private val follow = ChatFollow()
@@ -233,6 +234,19 @@ class ChatPane(
                 ).show()
             }
         }, "flag-card").start()
+    }
+
+    /** h121c: "Open in Anki" — launch AnkiDroid's browser deep link for this turn's card. */
+    private fun openInAnki(turn: ReviewTurn) {
+        try {
+            list.context.startActivity(AnkiDroidLink.intentFor(turn.cardId))
+        } catch (e: android.content.ActivityNotFoundException) {
+            android.widget.Toast.makeText(
+                list.context,
+                list.context.getString(R.string.chat_anki_missing),
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        }
     }
 
     private fun render() {

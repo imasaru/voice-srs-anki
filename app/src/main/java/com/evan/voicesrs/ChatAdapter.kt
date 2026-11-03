@@ -28,7 +28,9 @@ class ChatAdapter(
     /** h121b: "Ask about this" — the bubble's quoted text dropped into the chat input. */
     private val onAskAbout: (String) -> Unit = {},
     /** h121b: "Flag card" — tag the note behind this turn's card for follow-up review. */
-    private val onFlag: (ReviewTurn) -> Unit = {}
+    private val onFlag: (ReviewTurn) -> Unit = {},
+    /** h121c: "Open in Anki" — open this turn's card in the AnkiDroid browser. */
+    private val onOpenAnki: (ReviewTurn) -> Unit = {}
 ) : ListAdapter<ChatRow, RecyclerView.ViewHolder>(DIFF) {
 
     private val cardOpen = HashSet<Long>()
@@ -196,9 +198,11 @@ class ChatAdapter(
             CardFaceBinder.bindPills(userAnswer, userPill, turn.transcript, turn.ease, onRegrade, userLabel)
             var onFlagHere: (() -> Unit)? = null
             if (turn.cardId != 0L) onFlagHere = { onFlag(turn) }
-            BubbleMenu.attach(card, onAskAbout, onFlagHere)
-            BubbleMenu.attach(itemView.findViewById(R.id.userBubble), onAskAbout, onFlagHere, userAnswer)
-            BubbleMenu.attach(ai, onAskAbout, onFlagHere, body)
+            var onOpenHere: (() -> Unit)? = null
+            if (turn.cardId != 0L) onOpenHere = { onOpenAnki(turn) }
+            BubbleMenu.attach(card, onAskAbout, onFlagHere, onOpenAnki = onOpenHere)
+            BubbleMenu.attach(itemView.findViewById(R.id.userBubble), onAskAbout, onFlagHere, userAnswer, onOpenAnki = onOpenHere)
+            BubbleMenu.attach(ai, onAskAbout, onFlagHere, body, onOpenAnki = onOpenHere)
             val why = JudgeNote.shown(turn)
             userReason.text = if (why == null) "" else itemView.context.getString(R.string.own_words_reason, why)
             userReason.visibility = if (why == null) View.GONE else View.VISIBLE

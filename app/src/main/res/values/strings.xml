@@ -170,6 +170,8 @@
     <string name="chat_menu_copy">Copy</string>
     <string name="chat_menu_ask">Ask about this</string>
     <string name="chat_menu_flag">Flag card</string>
+    <string name="chat_menu_open_anki">Open in Anki</string>
+    <string name="chat_anki_missing">AnkiDroid not installed</string>
     <string name="chat_flagged">Flagged</string>
     <string name="chat_flag_failed">Could not flag card</string>
     <string name="chat_ask_unavailable">Open the chat to ask about this</string>
