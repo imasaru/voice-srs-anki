@@ -38,6 +38,8 @@ data class DrillUiState(
     val autoAcceptStep: Int? = null,
     /** Whole seconds left on the think timer. Null hides the countdown. */
     val thinkSecondsLeft: Int? = null,
+    /** h149a: SystemClock.elapsedRealtime when the rating listen closes; null hides "Rate Ns". */
+    val rateDeadlineMs: Long? = null,
     /** Chat input, a thread, or a chat question has frozen this card. */
     val chatPaused: Boolean = false,
     /** 1-based session order of the live question. Zero when no card is up. */

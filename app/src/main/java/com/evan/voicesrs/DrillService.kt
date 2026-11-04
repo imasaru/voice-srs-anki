@@ -1578,7 +1578,8 @@ class DrillService : Service(), VoiceIo {
             if (!AudioGate.micAllowed(sessionSilent)) return null
             if (showAnswerEarly.get()) return null
             tapTranscript = false
-            val result = captureListen(timeoutMs)
+            if (grading) publishRateDeadline(SystemClock.elapsedRealtime() + timeoutMs)
+            val result = try { captureListen(timeoutMs) } finally { publishRateDeadline(null) }
             // Pause killed this window. Retry it without charging a listen attempt.
             if (chatPaused.get()) continue
             // A tap word is not a mic sample: no "I heard" and no dead-mic streak change.
@@ -1589,6 +1590,11 @@ class DrillService : Service(), VoiceIo {
             return afterListen(result)
         }
         return null
+    }
+
+    /** h149a: rating listen deadline for the "Rate Ns" pill; null hides it. */
+    private fun publishRateDeadline(deadlineMs: Long?) {
+        runCatching { DrillUi.update { it.copy(rateDeadlineMs = deadlineMs) } }
     }
 
     /**
