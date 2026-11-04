@@ -17,7 +17,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** h82 / p82a / R17 / h94c: timer row in every real host at 320-700dp: nothing clipped or overlapping, switch full width at the right edge (line 1, or line 2 when wrapped), 48dp targets, 36dp visible stepper circles with >= 4dp to the value. */
+/** h82 / p82a / h122: two-row timer in every real host at 320-700dp: nothing clipped or overlapping, line 2 below line 1, 48dp stepper targets, 36dp visible stepper circles with >= 4dp to the value. */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w320dp-h640dp")
 class TimerRowNarrowTest {
@@ -61,29 +61,22 @@ class TimerRowNarrowTest {
         val row = row()
         val l1 = row.findViewById<ViewGroup>(R.id.timerLine1)
         val l2 = row.findViewById<ViewGroup>(R.id.timerLine2)
-        // h122b rewrites: fixed two-row stack — line 2 is always below line 1 (no wrap/one-line toggle)
         assertTrue("line 2 is below line 1", l2.top >= l1.bottom)
-        // h122b rewrites: the line 1/line 2 child-order assertions assumed the old direct-child layout; rewritten by h122b
         val chip = row.findViewById<TextView>(R.id.elapsedChip)
         assertEquals("1:26:23", chip.text.toString())
         assertEquals(1, chip.layout.lineCount)
         assertEquals("elapsed is ellipsized", 0, chip.layout.getEllipsisCount(0))
     }
 
-    // h122b rewrites: assertSwitchAtRightEdge no longer applies — no switch sits on line 2 of the fixed two-row layout
-
     @Test
     fun `b nothing clipped or overlapping`() {
         val row = row()
         assertNoClipOrOverlap(row.findViewById(R.id.timerLines))
-        // h122b rewrites: the label (timerSwitchLabel) assertions no longer apply — no label view in the fixed two-row layout
         assertEquals("End drill at goal", row.findViewById<View>(R.id.timerGoalChip).contentDescription.toString())
         val value = row.findViewById<TextView>(R.id.timerValue)
         assertEquals(1, value.layout.lineCount)
         assertEquals("value ellipsized", 0, value.layout.getEllipsisCount(0))
     }
-
-    // h122b rewrites: test `c` (switch full width at right edge) no longer applies — no switch on line 2
 
     @Test
     fun `d stepper targets are 48dp`() {
@@ -92,7 +85,7 @@ class TimerRowNarrowTest {
             val v = row.findViewById<View>(id)
             assertTrue("${name(v)} ${v.width}x${v.height} < 48dp", v.width >= dp(48) && v.height >= dp(48))
         }
-        assertTrue("line1 holds the 48dp steppers", row.findViewById<ViewGroup>(R.id.timerLine1).height >= dp(48))
+        assertTrue("line2 holds the 48dp steppers", row.findViewById<ViewGroup>(R.id.timerLine2).height >= dp(48))
     }
 
     @Test
@@ -119,20 +112,17 @@ class TimerRowNarrowTest {
     fun `e same at w411dp`() {
         `a line 1 then line 2 stacked with elapsed text`()
         `b nothing clipped or overlapping`()
-        // h122b rewrites: test `c` (switch full width at right edge) removed
         `d stepper targets are 48dp`()
         `f value has 8dp to each visible button edge and fits 180 min`()
     }
 
-    /** p82a REPRO: the deck card insets the row more than the slim header, so at w411dp with a 48dp host the label+switch on line 2 of the old layout overflow the right edge. Fails on 978a534, passes after the fix. */
+    /** p82a: the deck card insets the row more than the slim header; at w411dp with a 48dp host the two-row timer still fits, nothing clipped. */
     @Test
     @Config(qualifiers = "w411dp-h891dp")
     fun `g deck card inset at w411dp`() {
         val row = row(48)
         val l1 = row.findViewById<ViewGroup>(R.id.timerLine1)
-        val wrap = row.findViewById<TimerWrapRow>(R.id.timerLines)
-        assertNoClipOrOverlap(wrap)
-        // h122a2 reviewer: fixed two-row stack, no switch/wrap (h122b rewrites the full expectations)
+        assertNoClipOrOverlap(row.findViewById(R.id.timerLines))
         assertTrue("line 2 below line 1", row.findViewById<ViewGroup>(R.id.timerLine2).top >= l1.bottom)
     }
 
@@ -155,20 +145,19 @@ class TimerRowNarrowTest {
 
     private fun setTimerState(row: ViewGroup, drilling: Boolean) {
         val chip = row.findViewById<TextView>(R.id.elapsedChip)
-        val sw = row.findViewById<com.google.android.material.button.MaterialButton>(R.id.timerGoalChip)
+        val goal = row.findViewById<com.google.android.material.button.MaterialButton>(R.id.timerGoalChip)
         if (drilling) {
             chip.text = ElapsedChip.short(5_183_000L)
             chip.visibility = View.VISIBLE
             row.findViewById<TextView>(R.id.timerValue).text = "180 min"
-            sw.isChecked = true
+            goal.isChecked = true
         } else {
             chip.visibility = View.GONE
-            sw.isChecked = false
+            goal.isChecked = false
         }
     }
 
     private fun verifyRow(row: ViewGroup) {
-        // h122a2 reviewer: fixed two-row stack (line 1 on top, line 2 below); switch/icon/wrap checks retired, h122b rewrites
         val l1 = row.findViewById<ViewGroup>(R.id.timerLine1)
         val l2 = row.findViewById<ViewGroup>(R.id.timerLine2)
         ViewClipCheck.assertNoChildClipped(row)
