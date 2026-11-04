@@ -130,6 +130,23 @@ object AudioRouteDecision {
     }
 
     /**
+     * h143b: which output, if any, should carry the read-aloud TTS as a
+     * communication device. Only [Prefs.READ_ALOUD_CALL] keeps the classic
+     * Bluetooth SCO headset on the comm channel; [Prefs.READ_ALOUD_MEDIA] never
+     * does (returns null). Returns the first BLUETOOTH_SCO output when the
+     * channel is CALL and one is present, otherwise null. Pure — the Android
+     * side enumerates the outputs and matches the returned device back to an
+     * [android.media.AudioDeviceInfo].
+     */
+    fun ttsCommOutput(
+        channel: String,
+        outputs: List<MicRoute.AudioDev>,
+    ): MicRoute.AudioDev? =
+        if (channel == Prefs.READ_ALOUD_CALL)
+            outputs.firstOrNull { it.type == MicRoute.AudioDevType.BLUETOOTH_SCO }
+        else null
+
+    /**
      * Which communication-device call a [Result] maps to. [CLEAR] and [SET] are
      * API 31+ only; [NONE] means the platform has no such API (below 31).
      */

@@ -1346,7 +1346,21 @@ class DrillService : Service(), VoiceIo {
         val spoken = AnkiText.sanitizeForSpeech(text)
         if (spoken.isBlank()) return
         if (!AudioGate.outputAllowed(sessionSilent)) return
-        clearCommRoute()
+        val channel = runCatching { Prefs.load(this).readAloudChannel }.getOrDefault(Prefs.READ_ALOUD_MEDIA)
+        val rawOutputs = runCatching {
+            val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            am?.getDevices(AudioManager.GET_DEVICES_OUTPUTS) ?: emptyArray()
+        }.getOrDefault(emptyArray())
+        val outputs = rawOutputs.map { MicRoute.AudioDev(it.id, MicRoute.typeOf(it.type), it.productName.toString()) }
+        val keep = AudioRouteDecision.ttsCommOutput(channel, outputs)
+        if (keep != null) {
+            if (!commRouteActive) {
+                rawOutputs.firstOrNull { it.id == keep.id }?.let { setCommDevice(it) }
+            }
+            Log.i(TAG, "tts route: CALL keeps SCO comm device")
+        } else {
+            clearCommRoute()
+        }
         var reSpeaks = 0
         speechInterrupted = false
         speechSkipped = false
