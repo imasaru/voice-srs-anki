@@ -43,9 +43,9 @@ class H119bTest {
     fun settingsActivityWiresDropdown() {
         val src = File("src/main/java/com/evan/voicesrs/SettingsActivity.kt").readText()
         assertTrue(src.contains("MaterialAutoCompleteTextView = findViewById(R.id.asrUrlInput)"))
-        assertTrue(src.contains("AsrServers.menuItems(held.asrServers"))
-        assertTrue(src.contains("AsrServers.isAddRow(position, held.asrServers)"))
-        assertTrue(src.contains("AsrServers.remember(it.asrServers, raw)"))
+        assertTrue(src.contains("SavedUrls.menuItems(saved(), addLabel)"))
+        assertTrue(src.contains("SavedUrls.isAddRow(position, saved())"))
+        assertTrue(src.contains("SavedUrls.remember(it.asrServers, raw)"))
     }
 
     @Test

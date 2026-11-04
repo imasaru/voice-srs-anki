@@ -767,29 +767,6 @@ class SettingsActivity : AppCompatActivity() {
             if (!AutoSave.decide(held.neuralUrl, url).save) return
             persist { it.copy(neuralUrl = url) }
         }
-        var asrAddingNew = false
-        fun bindAsrMenu() {
-            asrUrlView.setAdapter(
-                StableAdapter(this, AsrServers.menuItems(held.asrServers, getString(R.string.settings_asr_add_server)))
-            )
-        }
-        fun commitAsrUrl() {
-            val raw = asrUrlView.text?.toString()?.trim().orEmpty()
-            if (AsrServers.keepPrevious(raw, asrAddingNew)) {
-                asrAddingNew = false
-                asrUrlView.setText(held.asrUrl, false)
-                return
-            }
-            if (raw.isNotEmpty() && !raw.startsWith("http://") && !raw.startsWith("https://")) {
-                asrUrlLayout.error = getString(R.string.settings_ai_url_error)
-                return
-            }
-            asrAddingNew = false
-            asrUrlLayout.error = null
-            if (!AutoSave.decide(held.asrUrl, raw).save) return
-            persist { it.copy(asrUrl = raw, asrServers = AsrServers.remember(it.asrServers, raw)) }
-            bindAsrMenu()
-        }
         fun commitNeuralToken() {
             val typed = neuralTokenView.text?.toString()?.trim().orEmpty()
             if (typed.isEmpty()) return
@@ -817,18 +794,7 @@ class SettingsActivity : AppCompatActivity() {
         track(batchSizeView) { commitBatch() }
         track(goalAmountView) { commitGoalAmount() }
         track(neuralUrlView) { commitNeuralUrl() }
-        track(asrUrlView) { commitAsrUrl() }
-        bindAsrMenu()
-        asrUrlView.setOnItemClickListener { _, _, position, _ ->
-            if (AsrServers.isAddRow(position, held.asrServers)) {
-                asrAddingNew = true
-                asrUrlView.setText("", false)
-                asrUrlView.requestFocus()
-                getSystemService(InputMethodManager::class.java)?.showSoftInput(asrUrlView, 0)
-            } else {
-                commitAsrUrl()
-            }
-        }
+        bindSavedUrlField(asrUrlView, asrUrlLayout, getString(R.string.settings_asr_add_server), { held.asrUrl }, { held.asrServers }) { raw -> persist { it.copy(asrUrl = raw, asrServers = SavedUrls.remember(it.asrServers, raw)) } }
         track(neuralTokenView) { commitNeuralToken() }
         val aiEnabledSwitch: MaterialSwitch = findViewById(R.id.aiEnabledSwitch)
         val generatedDeckInput: TextInputEditText = findViewById(R.id.generatedDeckInput)
@@ -1375,6 +1341,45 @@ class SettingsActivity : AppCompatActivity() {
                 testResultView.text = text
             }
         }.start()
+    }
+
+    private fun bindSavedUrlField(view: MaterialAutoCompleteTextView, layout: TextInputLayout, addLabel: String, current: () -> String, saved: () -> List<String>, save: (String) -> Unit) {
+        var addingNew = false
+        fun bindMenu() = view.setAdapter(StableAdapter(this, SavedUrls.menuItems(saved(), addLabel)))
+        fun commit() {
+            val raw = view.text?.toString()?.trim().orEmpty()
+            if (SavedUrls.keepPrevious(raw, addingNew)) {
+                addingNew = false
+                view.setText(current(), false)
+                return
+            }
+            if (raw.isNotEmpty() && !raw.startsWith("http://") && !raw.startsWith("https://")) {
+                layout.error = getString(R.string.settings_ai_url_error)
+                return
+            }
+            addingNew = false
+            layout.error = null
+            if (!AutoSave.decide(current(), raw).save) return
+            save(raw)
+            bindMenu()
+        }
+        view.setOnEditorActionListener { v, actionId, _ ->
+            if (actionId != EditorInfo.IME_ACTION_DONE) return@setOnEditorActionListener false
+            commit()
+            val imm = getSystemService(InputMethodManager::class.java)
+            imm?.hideSoftInputFromWindow(v.windowToken, 0)
+            true
+        }
+        view.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) commit() }
+        bindMenu()
+        view.setOnItemClickListener { _, _, position, _ ->
+            if (SavedUrls.isAddRow(position, saved())) {
+                addingNew = true
+                view.setText("", false)
+                view.requestFocus()
+                getSystemService(InputMethodManager::class.java)?.showSoftInput(view, 0)
+            } else commit()
+        }
     }
 
     private fun loadDecks(

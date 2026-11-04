@@ -18,11 +18,11 @@ class H119cTest {
     @Test
     fun settingsActivityTracksAddingNew() {
         val src = File("src/main/java/com/evan/voicesrs/SettingsActivity.kt").readText()
-        assertTrue(src.contains("var asrAddingNew = false"))
-        assertTrue(src.contains("AsrServers.keepPrevious(raw, asrAddingNew)"))
-        assertTrue(src.contains("asrUrlView.setText(held.asrUrl, false)"))
-        val addTrue = src.indexOf("asrAddingNew = true")
-        val clear = src.indexOf("asrUrlView.setText(\"\", false)")
+        assertTrue(src.contains("var addingNew = false"))
+        assertTrue(src.contains("SavedUrls.keepPrevious(raw, addingNew)"))
+        assertTrue(src.contains("view.setText(current(), false)"))
+        val addTrue = src.indexOf("addingNew = true")
+        val clear = src.indexOf("view.setText(\"\", false)")
         assertTrue(addTrue > 0)
         assertTrue(addTrue < clear)
     }

@@ -48,7 +48,7 @@ class H119aTest {
     @Test
     fun commitAsrUrlUsesAutoSaveDecideAndRemembersSavedUrl() {
         val src = File("src/main/java/com/evan/voicesrs/SettingsActivity.kt").readText()
-        assertTrue(src.contains("AutoSave.decide(held.asrUrl, raw)"))
-        assertTrue(src.contains("AsrServers.remember(it.asrServers, raw)"))
+        assertTrue(src.contains("AutoSave.decide(current(), raw)"))
+        assertTrue(src.contains("SavedUrls.remember(it.asrServers, raw)"))
     }
 }
