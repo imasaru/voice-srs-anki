@@ -67,6 +67,8 @@ data class AnkiConfig(
     val decisionEnabled: Boolean = false,
     val decisionUrl: String = "",
     val decisionModel: String = "",
+    /** h132c: decision model URLs the user saved, newest first. */
+    val decisionServers: List<String> = emptyList(),
     val judgeStrictness: String = OwnWordsJudge.Strictness.DEFAULT.key,
     val letterListen: Boolean = false,
     /** Wrap detected code on card faces. Display only. */
@@ -134,6 +136,7 @@ object Prefs {
     private const val KEY_AUTO_EXPLAIN = "auto_explain"
     private const val KEY_DECISION_ENABLED = "decision_enabled"
     private const val KEY_DECISION_URL = "decision_url"
+    private const val KEY_DECISION_SERVERS = "decision_servers"
     private const val KEY_DECISION_MODEL = "decision_model"
     private const val KEY_JUDGE_STRICTNESS = "judge_strictness"
     private const val KEY_LETTER_LISTEN = "letter_listen"
@@ -254,6 +257,7 @@ object Prefs {
             .putString(KEY_AUTO_EXPLAIN_EASES, AutoExplain.encode(cfg.autoExplainEases))
             .putBoolean(KEY_DECISION_ENABLED, cfg.decisionEnabled)
             .putString(KEY_DECISION_URL, cfg.decisionUrl.trim())
+            .putString(KEY_DECISION_SERVERS, SavedUrls.encode(cfg.decisionServers))
             .putString(KEY_DECISION_MODEL, cfg.decisionModel.trim())
             .putString(KEY_JUDGE_STRICTNESS, OwnWordsJudge.Strictness.of(cfg.judgeStrictness).key)
             .putBoolean(KEY_LETTER_LISTEN, cfg.letterListen)
@@ -476,6 +480,7 @@ object Prefs {
                 .ifBlank { DEFAULT_DECISION_URL },
             decisionModel = p.getString(KEY_DECISION_MODEL, DEFAULT_DECISION_MODEL).orEmpty()
                 .ifBlank { DEFAULT_DECISION_MODEL },
+            decisionServers = SavedUrls.decode(p.getString(KEY_DECISION_SERVERS, null)),
             judgeStrictness = OwnWordsJudge.Strictness.of(p.getString(KEY_JUDGE_STRICTNESS, null)).key,
             detectCode = p.getBoolean(KEY_DETECT_CODE, CodeDetect.SETTING_DEFAULT),
             generatedDeck = p.getString(KEY_GENERATED_DECK, MakeCard.DEFAULT_DECK).orEmpty()

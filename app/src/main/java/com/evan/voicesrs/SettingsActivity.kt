@@ -819,7 +819,7 @@ class SettingsActivity : AppCompatActivity() {
         aiBatchSwitch.isChecked = held.aiBatch
         val decisionEnabledSwitch: MaterialSwitch = findViewById(R.id.decisionEnabledSwitch)
         val decisionUrlLayout: TextInputLayout = findViewById(R.id.decisionUrlLayout)
-        val decisionUrlInput: TextInputEditText = findViewById(R.id.decisionUrlInput)
+        val decisionUrlInput: MaterialAutoCompleteTextView = findViewById(R.id.decisionUrlInput)
         val decisionModelInput: MaterialAutoCompleteTextView = findViewById(R.id.decisionModelInput)
         decisionEnabledSwitch.isChecked = held.decisionEnabled
         decisionUrlInput.setText(held.decisionUrl)
@@ -941,15 +941,6 @@ class SettingsActivity : AppCompatActivity() {
             aiLookaheadLayout.error = null
             persist { it.copy(aiLookahead = n) }
         }
-        fun commitDecisionUrl() {
-            val raw = decisionUrlInput.text?.toString()?.trim().orEmpty()
-            if (raw.isNotEmpty() && !raw.startsWith("http://") && !raw.startsWith("https://")) {
-                decisionUrlLayout.error = getString(R.string.settings_ai_url_error)
-                return
-            }
-            decisionUrlLayout.error = null
-            persist { it.copy(decisionUrl = raw) }
-        }
         fun commitDecisionModel() {
             val model = decisionModelInput.text?.toString()?.trim().orEmpty()
             persist { it.copy(decisionModel = model) }
@@ -958,7 +949,7 @@ class SettingsActivity : AppCompatActivity() {
         track(aiModelInput) { commitAiModel() }
         track(aiKeyInput) { commitAiKey() }
         track(aiLookaheadInput) { commitAiLookahead() }
-        track(decisionUrlInput) { commitDecisionUrl() }
+        bindSavedUrlField(decisionUrlInput, decisionUrlLayout, getString(R.string.settings_asr_add_server), { held.decisionUrl }, { held.decisionServers }) { raw -> persist { it.copy(decisionUrl = raw, decisionServers = SavedUrls.remember(it.decisionServers, raw)) } }
         track(decisionModelInput) { commitDecisionModel() }
         fun loadAiModels() {
             val raw = aiBaseUrlInput.text?.toString()?.trim().orEmpty()
@@ -1034,7 +1025,6 @@ class SettingsActivity : AppCompatActivity() {
             commitAiModel()
             commitAiKey()
             commitAiLookahead()
-            commitDecisionUrl()
             commitDecisionModel()
             if (rateCustomLayout.visibility == View.VISIBLE) commitCustomRate(hideOnSuccess = false)
         }
@@ -1043,7 +1033,6 @@ class SettingsActivity : AppCompatActivity() {
             commitAiModel()
             commitAiKey()
             commitAiLookahead()
-            commitDecisionUrl()
             commitDecisionModel()
             if (aiBaseUrlLayout.error != null || aiLookaheadLayout.error != null || decisionUrlLayout.error != null) return@setOnClickListener
             val url = aiBaseUrlInput.text?.toString()?.trim().orEmpty().ifBlank { Prefs.DEFAULT_AI_URL }

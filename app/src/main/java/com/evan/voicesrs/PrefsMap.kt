@@ -44,6 +44,7 @@ object PrefsMap {
         "decision_enabled" to false,
         "decision_url" to "",
         "decision_model" to "",
+        "decision_servers" to "",
         "detect_code" to false,
         "generated_deck" to "",
         "keep_screen_on" to false,
