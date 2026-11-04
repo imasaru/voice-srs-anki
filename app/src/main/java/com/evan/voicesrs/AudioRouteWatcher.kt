@@ -163,7 +163,7 @@ class AudioRouteWatcher(private val context: Context) {
 
     /** Set true when [evaluate] decides the route changed; cleared by [consumeChange]. */
     @Volatile
-    var routeChanged = false
+    @Volatile var routeChanged = false
         private set
 
     private var previousInput: MicRoute.AudioDev? = null
@@ -183,6 +183,9 @@ class AudioRouteWatcher(private val context: Context) {
     fun stop() {
         audioManager.unregisterAudioDeviceCallback(callback)
     }
+
+    /** h143 review: whether a route change is pending, without clearing it (startListening still consumes it to rebuild). */
+    fun peekChange(): Boolean = routeChanged
 
     /** Returns whether a route change happened, and clears the flag. */
     fun consumeChange(): Boolean {

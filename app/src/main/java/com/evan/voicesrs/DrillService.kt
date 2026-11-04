@@ -1690,7 +1690,7 @@ class DrillService : Service(), VoiceIo {
             val lostInWindow = focusState.lostAt > listenStartedAt &&
                 !FocusPolicy.shouldGrade(focusState.lostAt, SystemClock.elapsedRealtime())
             if (!focusPaused && !lostInWindow) {
-                val routeChanged = routeWatcher?.consumeChange() == true
+                val routeChanged = routeWatcher?.peekChange() == true
                 if (!result.isNullOrBlank() && !routeChanged) {
                     return maybeGrade(result)
                 }
