@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:left="6dp" android:right="6dp">
-        <shape android:shape="rectangle">
-            <solid android:color="?attr/colorSurface" android:alpha="0.85" />
-            <corners android:radius="8dp" />
-        </shape>
-    </item>
-</layer-list>
+<!-- h144 review: plain shape so the 6dp side padding pads the label (a layer-list inset only shrank the pill under the text). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="?attr/colorSurface" />
+    <corners android:radius="8dp" />
+    <padding android:left="6dp" android:right="6dp" />
+</shape>
