@@ -10,6 +10,7 @@ object PrefsMap {
     /** Typed placeholders so [SettingsJson.parse] knows each key's type. */
     fun typedDefaults(): Map<String, Any?> = linkedMapOf(
         "anki_url" to "",
+        "anki_servers" to "",
         "anki_key" to "",
         "deck_name" to "",
         "tts_rate" to 0f,

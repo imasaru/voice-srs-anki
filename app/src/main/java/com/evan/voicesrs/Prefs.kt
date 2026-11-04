@@ -8,6 +8,7 @@ import androidx.security.crypto.MasterKey
 
 data class AnkiConfig(
     val url: String,
+    val ankiServers: List<String> = emptyList(),
     val apiKey: String,
     val deck: String,
     /** Speech rate, clamped to [TtsRate.MIN]..[TtsRate.MAX]. Slider covers up to [TtsRate.SLIDER_MAX]. */
@@ -101,6 +102,7 @@ object Prefs {
     private const val FILE = "voicesrs"
     private const val SECRET_FILE = "voicesrs_secrets"
     private const val KEY_URL = "anki_url"
+    private const val KEY_ANKI_SERVERS = "anki_servers"
     private const val KEY_API_KEY = "anki_key"
     private const val KEY_DECK = "deck_name"
     private const val KEY_TTS_RATE = "tts_rate"
@@ -230,6 +232,7 @@ object Prefs {
     fun write(p: SharedPreferences, cfg: AnkiConfig) {
         p.edit()
             .putString(KEY_URL, cfg.url)
+            .putString(KEY_ANKI_SERVERS, SavedUrls.encode(cfg.ankiServers))
             .putString(KEY_DECK, cfg.deck)
             .putFloat(KEY_TTS_RATE, TtsRate.clamp(cfg.ttsRate))
             .putString(KEY_TTS_VOICE, cfg.ttsVoice)
@@ -432,6 +435,7 @@ object Prefs {
     private fun readPlain(p: SharedPreferences): AnkiConfig {
         return AnkiConfig(
             url = p.getString(KEY_URL, DEFAULT_URL).orEmpty().ifBlank { DEFAULT_URL },
+            ankiServers = SavedUrls.decode(p.getString(KEY_ANKI_SERVERS, null)),
             apiKey = "",
             deck = p.getString(KEY_DECK, DEFAULT_DECK).orEmpty().ifBlank { DEFAULT_DECK },
             ttsRate = TtsRate.clamp(p.getFloat(KEY_TTS_RATE, TtsRate.DEFAULT)),

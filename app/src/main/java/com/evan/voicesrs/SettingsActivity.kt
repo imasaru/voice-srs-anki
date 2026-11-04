@@ -81,7 +81,8 @@ class SettingsActivity : AppCompatActivity() {
         setSupportActionBar(toolbar)
         toolbar.setNavigationOnClickListener { finish() }
 
-        val urlView: TextInputEditText = findViewById(R.id.urlInput)
+        val urlView: MaterialAutoCompleteTextView = findViewById(R.id.urlInput)
+        val urlLayout: TextInputLayout = findViewById(R.id.urlLayout)
         val keyView: TextInputEditText = findViewById(R.id.keyInput)
         val deckView: MaterialAutoCompleteTextView = findViewById(R.id.deckInput)
         val deckStatus: TextView = findViewById(R.id.deckStatus)
@@ -133,8 +134,8 @@ class SettingsActivity : AppCompatActivity() {
         val thinkTimeView: MaterialAutoCompleteTextView = findViewById(R.id.thinkTimeInput)
 
         held = Prefs.load(this)
-        urlView.setText(held.url)
-        (urlView.parent as? TextInputLayout)?.helperText =
+        urlView.setText(held.url, false)
+        urlLayout.helperText =
             if (Prefs.promptForUrl(held.url)) getString(R.string.settings_url_missing) else null
         keyView.setText("")
         keyStatus.text = getString(
@@ -698,14 +699,6 @@ class SettingsActivity : AppCompatActivity() {
         loadDecks(urlView, keyView, deckView, deckStatus)
         loadNeural(neuralUrlView, neuralTokenView, neuralVoiceView, neuralStatus, held.neuralVoice)
 
-        fun commitUrl() {
-            val url = urlView.text?.toString()?.trim().orEmpty().ifBlank { Prefs.DEFAULT_URL }
-            if (urlView.text?.toString() != url) urlView.setText(url)
-            (urlView.parent as? TextInputLayout)?.helperText =
-                if (Prefs.promptForUrl(url)) getString(R.string.settings_url_missing) else null
-            if (!AutoSave.decide(held.url, url).save) return
-            persist { it.copy(url = url) }
-        }
         fun commitKey() {
             val typed = keyView.text?.toString()?.trim().orEmpty()
             if (typed.isEmpty()) return
@@ -782,7 +775,7 @@ class SettingsActivity : AppCompatActivity() {
                 if (!hasFocus) commit()
             }
         }
-        track(urlView) { commitUrl() }
+        bindSavedUrlField(urlView, urlLayout, getString(R.string.settings_asr_add_server), { held.url }, { held.ankiServers }) { raw -> persist { it.copy(url = raw, ankiServers = SavedUrls.remember(it.ankiServers, raw)) }; urlLayout.helperText = if (Prefs.promptForUrl(raw)) getString(R.string.settings_url_missing) else null }
         track(keyView) { commitKey() }
         track(deckView) { commitDeck() }
         track(examTargetInput) { commitExamTarget() }
@@ -997,7 +990,6 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<View>(R.id.decisionModelRefresh).setOnClickListener { loadDecisionModels() }
         loadDecisionModels()
         flushTexts = {
-            commitUrl()
             commitKey()
             commitDeck()
             commitExamTarget()
@@ -1353,7 +1345,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun loadDecks(
-        urlView: TextInputEditText,
+        urlView: MaterialAutoCompleteTextView,
         keyView: TextInputEditText,
         deckView: MaterialAutoCompleteTextView,
         deckStatus: TextView
