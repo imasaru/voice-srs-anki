@@ -775,14 +775,14 @@ class SettingsActivity : AppCompatActivity() {
                 if (!hasFocus) commit()
             }
         }
-        val flushAnkiUrl = bindSavedUrlField(urlView, urlLayout, getString(R.string.settings_asr_add_server), { held.url }, { held.ankiServers }) { raw -> persist { it.copy(url = raw, ankiServers = SavedUrls.remember(it.ankiServers, raw)) }; urlLayout.helperText = if (Prefs.promptForUrl(raw)) getString(R.string.settings_url_missing) else null }
+        val flushAnkiUrl = bindSavedUrlField(urlView, urlLayout, getString(R.string.settings_asr_add_server), { held.url }, { held.ankiServers }, { l -> persist { it.copy(ankiServers = l) } }, { raw -> persist { it.copy(url = raw, ankiServers = SavedUrls.remember(it.ankiServers, raw)) }; urlLayout.helperText = if (Prefs.promptForUrl(raw)) getString(R.string.settings_url_missing) else null })
         track(keyView) { commitKey() }
         track(deckView) { commitDeck() }
         track(examTargetInput) { commitExamTarget() }
         track(batchSizeView) { commitBatch() }
         track(goalAmountView) { commitGoalAmount() }
-        val flushNeuralUrl = bindSavedUrlField(neuralUrlView, neuralUrlLayout, getString(R.string.settings_asr_add_server), { held.neuralUrl }, { held.neuralServers }) { raw -> persist { it.copy(neuralUrl = raw, neuralServers = SavedUrls.remember(it.neuralServers, raw)) } }
-        val flushAsrUrl = bindSavedUrlField(asrUrlView, asrUrlLayout, getString(R.string.settings_asr_add_server), { held.asrUrl }, { held.asrServers }) { raw -> persist { it.copy(asrUrl = raw, asrServers = SavedUrls.remember(it.asrServers, raw)) } }
+        val flushNeuralUrl = bindSavedUrlField(neuralUrlView, neuralUrlLayout, getString(R.string.settings_asr_add_server), { held.neuralUrl }, { held.neuralServers }, { l -> persist { it.copy(neuralServers = l) } }, { raw -> persist { it.copy(neuralUrl = raw, neuralServers = SavedUrls.remember(it.neuralServers, raw)) } })
+        val flushAsrUrl = bindSavedUrlField(asrUrlView, asrUrlLayout, getString(R.string.settings_asr_add_server), { held.asrUrl }, { held.asrServers }, { l -> persist { it.copy(asrServers = l) } }, { raw -> persist { it.copy(asrUrl = raw, asrServers = SavedUrls.remember(it.asrServers, raw)) } })
         track(neuralTokenView) { commitNeuralToken() }
         val aiEnabledSwitch: MaterialSwitch = findViewById(R.id.aiEnabledSwitch)
         val generatedDeckInput: TextInputEditText = findViewById(R.id.generatedDeckInput)
@@ -922,11 +922,11 @@ class SettingsActivity : AppCompatActivity() {
             val model = decisionModelInput.text?.toString()?.trim().orEmpty()
             persist { it.copy(decisionModel = model) }
         }
-        val flushAiUrl = bindSavedUrlField(aiBaseUrlInput, aiBaseUrlLayout, getString(R.string.settings_asr_add_server), { held.aiBaseUrl }, { held.aiBaseServers }) { raw -> persist { it.copy(aiBaseUrl = raw, aiBaseServers = SavedUrls.remember(it.aiBaseServers, raw)) } }
+        val flushAiUrl = bindSavedUrlField(aiBaseUrlInput, aiBaseUrlLayout, getString(R.string.settings_asr_add_server), { held.aiBaseUrl }, { held.aiBaseServers }, { l -> persist { it.copy(aiBaseServers = l) } }, { raw -> persist { it.copy(aiBaseUrl = raw, aiBaseServers = SavedUrls.remember(it.aiBaseServers, raw)) } })
         track(aiModelInput) { commitAiModel() }
         track(aiKeyInput) { commitAiKey() }
         track(aiLookaheadInput) { commitAiLookahead() }
-        val flushDecisionUrl = bindSavedUrlField(decisionUrlInput, decisionUrlLayout, getString(R.string.settings_asr_add_server), { held.decisionUrl }, { held.decisionServers }) { raw -> persist { it.copy(decisionUrl = raw, decisionServers = SavedUrls.remember(it.decisionServers, raw)) } }
+        val flushDecisionUrl = bindSavedUrlField(decisionUrlInput, decisionUrlLayout, getString(R.string.settings_asr_add_server), { held.decisionUrl }, { held.decisionServers }, { l -> persist { it.copy(decisionServers = l) } }, { raw -> persist { it.copy(decisionUrl = raw, decisionServers = SavedUrls.remember(it.decisionServers, raw)) } })
         track(decisionModelInput) { commitDecisionModel() }
         fun loadAiModels() {
             val raw = aiBaseUrlInput.text?.toString()?.trim().orEmpty()
@@ -1312,9 +1312,9 @@ class SettingsActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun bindSavedUrlField(view: MaterialAutoCompleteTextView, layout: TextInputLayout, addLabel: String, current: () -> String, saved: () -> List<String>, save: (String) -> Unit): () -> Unit {
+    private fun bindSavedUrlField(view: MaterialAutoCompleteTextView, layout: TextInputLayout, addLabel: String, current: () -> String, saved: () -> List<String>, forget: (List<String>) -> Unit, save: (String) -> Unit): () -> Unit {
         var addingNew = false
-        fun bindMenu() = view.setAdapter(StableAdapter(this, SavedUrls.menuItems(saved(), addLabel)))
+        var rebind: () -> Unit = {}
         fun commit() {
             val raw = view.text?.toString()?.trim().orEmpty()
             if (SavedUrls.keepPrevious(raw, addingNew)) {
@@ -1330,8 +1330,28 @@ class SettingsActivity : AppCompatActivity() {
             layout.error = null
             if (!AutoSave.decide(current(), raw).save) return
             save(raw)
-            bindMenu()
+            rebind()
         }
+        fun pick(position: Int) {
+            if (SavedUrls.isAddRow(position, saved())) {
+                addingNew = true
+                view.setText("", false)
+                view.requestFocus()
+                getSystemService(InputMethodManager::class.java)?.showSoftInput(view, 0)
+            } else {
+                view.setText(saved()[position], false)
+                commit()
+            }
+            view.dismissDropDown()
+        }
+        fun askForget(position: Int) {
+            if (SavedUrls.isAddRow(position, saved())) return
+            val url = saved()[position]
+            view.dismissDropDown()
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(this).setMessage(getString(R.string.settings_server_forget_q, url)).setPositiveButton(R.string.settings_server_forget) { _, _ -> forget(SavedUrls.forget(saved(), url)); rebind() }.setNegativeButton(android.R.string.cancel, null).show()
+        }
+        fun bindMenu() = view.setAdapter(StableAdapter(this, SavedUrls.menuItems(saved(), addLabel), onPick = { pick(it) }, onLongPress = { askForget(it) }))
+        rebind = { bindMenu() }
         view.setOnEditorActionListener { v, actionId, _ ->
             if (actionId != EditorInfo.IME_ACTION_DONE) return@setOnEditorActionListener false
             commit()
@@ -1341,14 +1361,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         view.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) commit() }
         bindMenu()
-        view.setOnItemClickListener { _, _, position, _ ->
-            if (SavedUrls.isAddRow(position, saved())) {
-                addingNew = true
-                view.setText("", false)
-                view.requestFocus()
-                getSystemService(InputMethodManager::class.java)?.showSoftInput(view, 0)
-            } else commit()
-        }
+        view.setOnItemClickListener { _, _, position, _ -> pick(position) }
         return { commit() }
     }
 
@@ -1539,7 +1552,9 @@ class SettingsActivity : AppCompatActivity() {
 
     private class StableAdapter(
         context: android.content.Context,
-        private val labels: List<String>
+        private val labels: List<String>,
+        private val onPick: ((Int) -> Unit)? = null,
+        private val onLongPress: ((Int) -> Unit)? = null
     ) : ArrayAdapter<String>(context, android.R.layout.simple_dropdown_item_1line, labels.toMutableList()) {
         override fun getFilter(): Filter = object : Filter() {
             override fun performFiltering(constraint: CharSequence?) = FilterResults().apply {
@@ -1550,6 +1565,12 @@ class SettingsActivity : AppCompatActivity() {
             override fun publishResults(constraint: CharSequence?, results: FilterResults?) {
                 notifyDataSetChanged()
             }
+        }
+
+        override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
+            val v = super.getView(position, convertView, parent)
+            if (onLongPress != null) { v.setOnLongClickListener { onLongPress.invoke(position); true }; v.setOnClickListener { onPick?.invoke(position) } }
+            return v
         }
     }
 }

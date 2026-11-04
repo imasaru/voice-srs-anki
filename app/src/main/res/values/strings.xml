@@ -49,6 +49,8 @@
     <string name="settings_asr_url">Speech server URL</string>
     <string name="settings_asr_url_help">Whisper server for Auto and Whisper. Blank = none: Auto uses Vosk if its model is already downloaded, else Google. Uses the Neural token.</string>
     <string name="settings_asr_add_server">+ Add server…</string>
+    <string name="settings_server_forget_q">Forget %1$s?</string>
+    <string name="settings_server_forget">Forget</string>
     <string name="settings_asr_language">Speech language</string>
     <string name="settings_asr_language_auto">Auto-detect</string>
     <string name="settings_asr_language_en">English</string>

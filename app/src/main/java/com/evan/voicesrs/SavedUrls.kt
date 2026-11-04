@@ -18,6 +18,12 @@ object SavedUrls {
         return (listOf(u) + saved.filter { it.trim().trimEnd('/') != key }).take(MAX)
     }
 
+    /** h137: [saved] without [url] (a trailing slash does not count); unknown url = unchanged. */
+    fun forget(saved: List<String>, url: String): List<String> {
+        val key = url.trim().trimEnd('/')
+        return saved.filter { it.trim().trimEnd('/') != key }
+    }
+
     fun encode(list: List<String>): String = list.joinToString("\n")
 
     fun decode(raw: String?): List<String> =
