@@ -336,8 +336,8 @@ class SettingsActivity : AppCompatActivity() {
                 .show()
         }
         showExam()
-        neuralUrlView.setText(held.neuralUrl)
-        asrUrlView.setText(held.asrUrl)
+        neuralUrlView.setText(held.neuralUrl, false)
+        asrUrlView.setText(held.asrUrl, false)
         neuralTokenView.setText("")
         tokenStatus.text = getString(
             if (held.neuralToken.isNotBlank()) R.string.settings_token_saved else R.string.settings_token_missing
@@ -775,14 +775,14 @@ class SettingsActivity : AppCompatActivity() {
                 if (!hasFocus) commit()
             }
         }
-        bindSavedUrlField(urlView, urlLayout, getString(R.string.settings_asr_add_server), { held.url }, { held.ankiServers }) { raw -> persist { it.copy(url = raw, ankiServers = SavedUrls.remember(it.ankiServers, raw)) }; urlLayout.helperText = if (Prefs.promptForUrl(raw)) getString(R.string.settings_url_missing) else null }
+        val flushAnkiUrl = bindSavedUrlField(urlView, urlLayout, getString(R.string.settings_asr_add_server), { held.url }, { held.ankiServers }) { raw -> persist { it.copy(url = raw, ankiServers = SavedUrls.remember(it.ankiServers, raw)) }; urlLayout.helperText = if (Prefs.promptForUrl(raw)) getString(R.string.settings_url_missing) else null }
         track(keyView) { commitKey() }
         track(deckView) { commitDeck() }
         track(examTargetInput) { commitExamTarget() }
         track(batchSizeView) { commitBatch() }
         track(goalAmountView) { commitGoalAmount() }
-        bindSavedUrlField(neuralUrlView, neuralUrlLayout, getString(R.string.settings_asr_add_server), { held.neuralUrl }, { held.neuralServers }) { raw -> persist { it.copy(neuralUrl = raw, neuralServers = SavedUrls.remember(it.neuralServers, raw)) } }
-        bindSavedUrlField(asrUrlView, asrUrlLayout, getString(R.string.settings_asr_add_server), { held.asrUrl }, { held.asrServers }) { raw -> persist { it.copy(asrUrl = raw, asrServers = SavedUrls.remember(it.asrServers, raw)) } }
+        val flushNeuralUrl = bindSavedUrlField(neuralUrlView, neuralUrlLayout, getString(R.string.settings_asr_add_server), { held.neuralUrl }, { held.neuralServers }) { raw -> persist { it.copy(neuralUrl = raw, neuralServers = SavedUrls.remember(it.neuralServers, raw)) } }
+        val flushAsrUrl = bindSavedUrlField(asrUrlView, asrUrlLayout, getString(R.string.settings_asr_add_server), { held.asrUrl }, { held.asrServers }) { raw -> persist { it.copy(asrUrl = raw, asrServers = SavedUrls.remember(it.asrServers, raw)) } }
         track(neuralTokenView) { commitNeuralToken() }
         val aiEnabledSwitch: MaterialSwitch = findViewById(R.id.aiEnabledSwitch)
         val generatedDeckInput: TextInputEditText = findViewById(R.id.generatedDeckInput)
@@ -922,11 +922,11 @@ class SettingsActivity : AppCompatActivity() {
             val model = decisionModelInput.text?.toString()?.trim().orEmpty()
             persist { it.copy(decisionModel = model) }
         }
-        bindSavedUrlField(aiBaseUrlInput, aiBaseUrlLayout, getString(R.string.settings_asr_add_server), { held.aiBaseUrl }, { held.aiBaseServers }) { raw -> persist { it.copy(aiBaseUrl = raw, aiBaseServers = SavedUrls.remember(it.aiBaseServers, raw)) } }
+        val flushAiUrl = bindSavedUrlField(aiBaseUrlInput, aiBaseUrlLayout, getString(R.string.settings_asr_add_server), { held.aiBaseUrl }, { held.aiBaseServers }) { raw -> persist { it.copy(aiBaseUrl = raw, aiBaseServers = SavedUrls.remember(it.aiBaseServers, raw)) } }
         track(aiModelInput) { commitAiModel() }
         track(aiKeyInput) { commitAiKey() }
         track(aiLookaheadInput) { commitAiLookahead() }
-        bindSavedUrlField(decisionUrlInput, decisionUrlLayout, getString(R.string.settings_asr_add_server), { held.decisionUrl }, { held.decisionServers }) { raw -> persist { it.copy(decisionUrl = raw, decisionServers = SavedUrls.remember(it.decisionServers, raw)) } }
+        val flushDecisionUrl = bindSavedUrlField(decisionUrlInput, decisionUrlLayout, getString(R.string.settings_asr_add_server), { held.decisionUrl }, { held.decisionServers }) { raw -> persist { it.copy(decisionUrl = raw, decisionServers = SavedUrls.remember(it.decisionServers, raw)) } }
         track(decisionModelInput) { commitDecisionModel() }
         fun loadAiModels() {
             val raw = aiBaseUrlInput.text?.toString()?.trim().orEmpty()
@@ -991,6 +991,11 @@ class SettingsActivity : AppCompatActivity() {
         loadDecisionModels()
         flushTexts = {
             commitKey()
+            flushAnkiUrl()
+            flushNeuralUrl()
+            flushAsrUrl()
+            flushAiUrl()
+            flushDecisionUrl()
             commitDeck()
             commitExamTarget()
             commitBatch()
@@ -1305,7 +1310,7 @@ class SettingsActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun bindSavedUrlField(view: MaterialAutoCompleteTextView, layout: TextInputLayout, addLabel: String, current: () -> String, saved: () -> List<String>, save: (String) -> Unit) {
+    private fun bindSavedUrlField(view: MaterialAutoCompleteTextView, layout: TextInputLayout, addLabel: String, current: () -> String, saved: () -> List<String>, save: (String) -> Unit): () -> Unit {
         var addingNew = false
         fun bindMenu() = view.setAdapter(StableAdapter(this, SavedUrls.menuItems(saved(), addLabel)))
         fun commit() {
@@ -1342,6 +1347,7 @@ class SettingsActivity : AppCompatActivity() {
                 getSystemService(InputMethodManager::class.java)?.showSoftInput(view, 0)
             } else commit()
         }
+        return { commit() }
     }
 
     private fun loadDecks(
