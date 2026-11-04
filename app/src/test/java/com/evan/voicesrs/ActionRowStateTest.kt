@@ -5,7 +5,7 @@ import org.junit.Test
 
 /**
  * Action-row decision logic (item 54A), with the maintainer's fixed-controls rule:
- * Start drill / Stop drill never move, change or hide; only Pause toggles ⏸/▶.
+ * Start drill / Stop drill never move, change or hide; only Pause toggles pause/play.
  */
 class ActionRowStateTest {
 

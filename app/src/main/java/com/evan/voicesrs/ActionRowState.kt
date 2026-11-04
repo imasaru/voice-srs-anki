@@ -6,9 +6,9 @@ package com.evan.voicesrs
  *
  * Review fix (the maintainer, 2026-10-27): the Start drill and Stop drill buttons keep their
  * text, size and position in every state — they are never hidden or swapped for
- * icons. Only the Pause control next to the chat box changes: ⏸ while drilling,
- * ▶ while paused, at the same size. [ActionPill.RESUME] is kept for source
- * compatibility but [decide] never returns it; resuming is the ▶ state of Pause.
+ * icons. Only the Pause control next to the chat box changes: a pause icon while drilling,
+ * a play icon while paused, at the same size. [ActionPill.RESUME] is kept for source
+ * compatibility but [decide] never returns it; resuming is the play state of Pause.
  */
 
 /** High-level drill lifecycle the row reacts to. */
@@ -25,13 +25,11 @@ data class ActionRowState(
     val progressText: String?,      // "Q6 of 44" or null
     val showReportChip: Boolean,    // report chip
     val inputHint: String,
-    val pauseShowsResume: Boolean = false, // true -> Pause control shows ▶ (paused), else ⏸
+    val pauseShowsResume: Boolean = false, // true -> Pause control shows the play icon (paused), else the pause icon
 ) {
     companion object {
         const val HINT_IDLE = "Ask the AI…"
         const val HINT_DRILLING = "Answer or ask…"
-        const val PAUSE_ICON = "⏸"
-        const val RESUME_ICON = "▶"
 
         fun decide(
             phase: DrillPhase,

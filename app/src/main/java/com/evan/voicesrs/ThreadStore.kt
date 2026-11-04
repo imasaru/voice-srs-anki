@@ -187,7 +187,7 @@ object ThreadLabel {
         zone: java.time.ZoneId = java.time.ZoneId.systemDefault(),
         now: Long = System.currentTimeMillis()
     ): String {
-        if (count <= 0 || lastAt == null || lastAt <= 0L) return "💬 Reply in thread"
+        if (count <= 0 || lastAt == null || lastAt <= 0L) return "Reply in thread"
         val nowDay = java.time.LocalDate.ofInstant(
             java.time.Instant.ofEpochMilli(now), zone
         )
@@ -202,7 +202,7 @@ object ThreadLabel {
         val clock = java.time.format.DateTimeFormatter.ofPattern(pattern, java.util.Locale.ENGLISH).withZone(zone)
         val hhmm = clock.format(java.time.Instant.ofEpochMilli(lastAt))
         val noun = if (count == 1) "reply" else "replies"
-        return "💬 $count $noun · last $hhmm"
+        return "$count $noun · last $hhmm"
     }
 
     fun count(followUps: List<FollowUp>): Int {

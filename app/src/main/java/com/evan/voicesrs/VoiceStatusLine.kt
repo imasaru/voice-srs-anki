@@ -43,9 +43,9 @@ object VoiceStatusLine {
             deviceDisplayName(voiceDisplayName)
         }
         return if (engine == EngineChoice.NEURAL) {
-            "🔊 Voice: $name (Edge, natural) $FALLBACK_NOTE"
+            "Voice: $name (Edge, natural) $FALLBACK_NOTE"
         } else {
-            "🔊 Voice: $name (device)"
+            "Voice: $name (device)"
         }
     }
 

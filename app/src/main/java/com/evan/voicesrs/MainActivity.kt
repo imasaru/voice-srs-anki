@@ -70,7 +70,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progressText: TextView
     /** Plain voice line on the wide status card. Absent on the narrow header. */
     private var voiceLineView: TextView? = null
-    /** Narrow header: "Done N · Left N · 🔊 Voice: …". Absent on the wide layout. */
+    /** Narrow header: "Done N · Left N · Voice: …". Absent on the wide layout. */
     private var headerMeta: TextView? = null
     /** Null until /health returns. Unknown health still shows Edge when it is selected. */
     @Volatile private var edgeHealthy: Boolean? = null
@@ -803,6 +803,8 @@ class MainActivity : AppCompatActivity() {
             progressText.visibility = View.GONE
         } else {
             voiceLineView?.text = voice
+            voiceLineView?.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_volume_up, 0, 0, 0)
+            voiceLineView?.compoundDrawablePadding = (6 * resources.displayMetrics.density).toInt()
             voiceLineView?.visibility = View.VISIBLE
             val shown = SessionProgress.withGoal(progressLine, goal)
             if (shown.isBlank()) {
@@ -883,7 +885,10 @@ class MainActivity : AppCompatActivity() {
                 }
                 val addChip = layoutInflater.inflate(R.layout.item_prompt_chip, chipRow, false) as Chip
                 addChip.id = R.id.promptChipRowAdd
-                addChip.text = "＋"
+                addChip.text = ""
+                addChip.chipIcon = androidx.appcompat.content.res.AppCompatResources.getDrawable(this, R.drawable.ic_add)
+                addChip.isChipIconVisible = true
+                addChip.textEndPadding = 0f
                 addChip.contentDescription = getString(R.string.prompt_chip_add_desc)
                 addChip.setOnClickListener { startActivity(Intent(this, PromptChipEditActivity::class.java)) }
                 chipRow.addView(addChip)

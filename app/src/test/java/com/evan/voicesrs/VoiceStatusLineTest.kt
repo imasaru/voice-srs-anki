@@ -9,7 +9,7 @@ class VoiceStatusLineTest {
         assertEquals("Aria", VoiceStatusLine.edgeDisplayName("en-US-AriaNeural"))
         assertEquals("Ava", VoiceStatusLine.edgeDisplayName("en-US-AvaMultilingualNeural"))
         assertEquals(
-            "🔊 Voice: Aria (Edge, natural) · falls back to device voice offline",
+            "Voice: Aria (Edge, natural) · falls back to device voice offline",
             VoiceStatusLine.format(EngineChoice.NEURAL, "en-US-AriaNeural")
         )
     }
@@ -17,11 +17,11 @@ class VoiceStatusLineTest {
     @Test
     fun `device line uses the stored name`() {
         assertEquals(
-            "🔊 Voice: System default (device)",
+            "Voice: System default (device)",
             VoiceStatusLine.format(EngineChoice.ON_DEVICE, "  ")
         )
         assertEquals(
-            "🔊 Voice: English (device)",
+            "Voice: English (device)",
             VoiceStatusLine.format(EngineChoice.ON_DEVICE, "English")
         )
     }

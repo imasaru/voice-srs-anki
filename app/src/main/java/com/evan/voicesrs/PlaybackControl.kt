@@ -89,7 +89,7 @@ object PlaybackControl {
         drillRunning || serviceRunning
 
     /**
-     * The pause button reads ⏸ Pause when the drill is running, not paused, and
+     * The pause button shows the pause icon and Pause when the drill is running, not paused, and
      * read-aloud is idle.
      */
     fun pauseShowsDrillPause(snap: Snapshot, drilling: Boolean, drillPaused: Boolean): Boolean =

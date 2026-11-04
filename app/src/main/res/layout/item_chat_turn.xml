@@ -339,6 +339,9 @@
             android:paddingStart="4dp"
             android:paddingEnd="8dp"
             android:text="@string/thread_reply"
+            android:drawableStart="@drawable/ic_forum"
+            android:drawablePadding="6dp"
+            android:drawableTint="?attr/colorPrimary"
             android:textAppearance="?attr/textAppearanceLabelLarge"
             android:textColor="?attr/colorPrimary" />
     </LinearLayout>

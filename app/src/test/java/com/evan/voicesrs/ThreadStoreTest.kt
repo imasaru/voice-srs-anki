@@ -73,14 +73,14 @@ class ThreadStoreTest {
 
     @Test
     fun `link text counts replies and formats the last clock`() {
-        assertEquals("💬 Reply in thread", ThreadLabel.text(0, null, ZoneOffset.UTC))
+        assertEquals("Reply in thread", ThreadLabel.text(0, null, ZoneOffset.UTC))
         val at = 1_700_000_000_000L
         val label = ThreadLabel.text(2, at, ZoneOffset.UTC)
-        assertTrue(label.startsWith("💬 2 replies · last "))
+        assertTrue(label.startsWith("2 replies · last "))
         assertTrue(label.contains(":"))
         assertFalse(label.contains("**"))
         assertEquals(
-            "💬 1 reply · last 22:13",
+            "1 reply · last 22:13",
             ThreadLabel.text(1, at, ZoneOffset.UTC, now = at)
         )
     }
@@ -89,21 +89,21 @@ class ThreadStoreTest {
     fun `link text shows the date when the reply is not today`() {
         val sameDayNow = Instant.parse("2026-10-27T14:30:00Z").toEpochMilli()
         assertEquals(
-            "💬 2 replies · last 14:06",
+            "2 replies · last 14:06",
             ThreadLabel.text(
                 2, Instant.parse("2026-10-27T14:06:00Z").toEpochMilli(),
                 ZoneOffset.UTC, sameDayNow
             )
         )
         assertEquals(
-            "💬 2 replies · last Oct 25 14:06",
+            "2 replies · last Oct 25 14:06",
             ThreadLabel.text(
                 2, Instant.parse("2026-10-25T14:06:00Z").toEpochMilli(),
                 ZoneOffset.UTC, Instant.parse("2026-10-27T09:00:00Z").toEpochMilli()
             )
         )
         assertEquals(
-            "💬 1 reply · last Dec 31, 2025 23:10",
+            "1 reply · last Dec 31, 2025 23:10",
             ThreadLabel.text(
                 1, Instant.parse("2025-12-31T23:10:00Z").toEpochMilli(),
                 ZoneOffset.UTC, Instant.parse("2026-01-02T08:00:00Z").toEpochMilli()
@@ -111,7 +111,7 @@ class ThreadStoreTest {
         )
         val tokyo = java.time.ZoneId.of("Asia/Tokyo")
         assertEquals(
-            "💬 1 reply · last 01:00",
+            "1 reply · last 01:00",
             ThreadLabel.text(
                 1, Instant.parse("2026-10-26T16:00:00Z").toEpochMilli(),
                 tokyo, Instant.parse("2026-10-27T01:00:00Z").toEpochMilli()
