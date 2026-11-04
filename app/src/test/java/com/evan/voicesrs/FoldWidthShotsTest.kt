@@ -26,7 +26,7 @@ import org.robolectric.annotation.GraphicsMode
  *    layout-w600dp/activity_main.xml gives its status card), deck "Databricks DEA", "Due now: 189
  *    cards", timer "20 min", idle (elapsedChip GONE).
  *  - drill_<w>: activity_main drilling at 1:26:23 with a 180-min goal (elapsedChip VISIBLE, value
- *    "180 min", switch on).
+ *    "180 min", goal toggle on).
  *
  * Each PNG is written to app/build/screenshots/fold/<name>.png and ViewClipCheck runs on the timer
  * row and its host card/header. Helpers inflated from ScreenshotSmokeTest (left untouched).
@@ -113,7 +113,7 @@ class FoldWidthShotsTest {
         card.findViewById<TextView>(R.id.deckName).text = "Databricks DEA"
         card.findViewById<TextView>(R.id.dueCount).text = app.getString(R.string.due_format, 189)
         card.findViewById<TextView>(R.id.timerValue).text = "20 min"
-        // idle: elapsed chip hidden, icon + switch stay on line 1
+        // idle: elapsed chip hidden, goal and voice toggles stay on line 1
         card.findViewById<TextView>(R.id.elapsedChip).visibility = View.GONE
         return measureAndLayout(host, dp(widthDp), dp(heightDp)) as ViewGroup
     }

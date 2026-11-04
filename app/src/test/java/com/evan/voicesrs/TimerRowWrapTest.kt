@@ -23,9 +23,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** h94c: compact timer row. Row content width (own width minus padding) >= 360dp -> one line; below -> label+switch wrap to line 2, right-aligned.
- *  Nothing clipped, 36dp visible stepper circles, label "End at goal", switch desc "End drill at goal".
- *  Also every host placement (activity_main drill header, include_status_card deck card). Writes wrap_*.png. */
+/** h122: two-row timer at 320-700dp, bare and in every host (activity_main drill header, include_status_card deck card): line 1 above line 2, nothing clipped, 36dp visible stepper circles, goal toggle desc "End drill at goal". Writes wrap_*.png. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class TimerRowWrapTest {
@@ -57,17 +55,15 @@ class TimerRowWrapTest {
         return host
     }
 
-    private fun verify(row: View, expectOneLine: Boolean, tag: String) {
+    private fun verify(row: View, tag: String) {
         val wrap = row.findViewById<TimerWrapRow>(R.id.timerLines)
         val l1 = row.findViewById<ViewGroup>(R.id.timerLine1); val l2 = row.findViewById<ViewGroup>(R.id.timerLine2)
         val goalChip = row.findViewById<MaterialButton>(R.id.timerGoalChip)
-        // h122b rewrites: fixed two-row stack (line 1 on top, line 2 below) — the wrap/one-line toggle is gone
         assertEquals("$tag left edge", wrap.paddingLeft, l1.left)
         assertEquals("$tag right edge", wrap.width - wrap.paddingRight, l1.right)
         assertTrue("$tag l1 above l2", l1.bottom <= l2.top)
         ViewClipCheck.assertNoChildClipped(row.rootView)
         assertFalse("$tag l1/l2 overlap", Rect.intersects(Rect(l1.left, l1.top, l1.right, l1.bottom), Rect(l2.left, l2.top, l2.right, l2.bottom)))
-        // h122b rewrites: the goal toggle lives on line 1; the switch-at-right-edge / label assertions no longer apply
         assertEquals("End drill at goal", goalChip.contentDescription.toString())
         val value = row.findViewById<TextView>(R.id.timerValue)
         assertEquals(1, value.layout.lineCount); assertEquals(0, value.layout.getEllipsisCount(0))
@@ -98,7 +94,7 @@ class TimerRowWrapTest {
         for (on in listOf(true, false)) {
             val h = bareRow(rowDp, on)
             assertEquals("content width", rowDp.toFloat(), contentDp(h.getChildAt(0)), 0.5f)
-            verify(h.getChildAt(0), rowDp >= 360, "bare ${rowDp}dp drilling=$on")
+            verify(h.getChildAt(0), "bare ${rowDp}dp drilling=$on")
             assertEquals("bare: chip not ellipsized", Int.MAX_VALUE, h.findViewById<TextView>(R.id.elapsedChip).maxWidth)
             shot(h, "wrap_row_${rowDp}dp_" + if (on) "drill" else "idle")
         }
@@ -114,7 +110,7 @@ class TimerRowWrapTest {
             root.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY))
             root.layout(0, 0, w, h)
             val rowDp = contentDp(row)
-            verify(row, rowDp >= 360f, "drill host w${ctx.resources.configuration.screenWidthDp} drilling=$on row=${rowDp}dp")
+            verify(row, "drill host w${ctx.resources.configuration.screenWidthDp} drilling=$on row=${rowDp}dp")
             if (on) shot(row, "wrap_host_drill_w${ctx.resources.configuration.screenWidthDp}dp")
         }
         val deckHost = FrameLayout(ctx); deckHost.setPadding(dp(20), 0, dp(20), 0); deckHost.setBackgroundColor(Color.WHITE)
@@ -125,7 +121,7 @@ class TimerRowWrapTest {
             deckHost.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
             deckHost.layout(0, 0, w, deckHost.measuredHeight)
             val rowDp = contentDp(card)
-            verify(card, rowDp >= 360f, "deck host w${ctx.resources.configuration.screenWidthDp} drilling=$on row=${rowDp}dp")
+            verify(card, "deck host w${ctx.resources.configuration.screenWidthDp} drilling=$on row=${rowDp}dp")
             if (!on) shot(deckHost, "wrap_host_deck_w${ctx.resources.configuration.screenWidthDp}dp")
         }
     }
@@ -136,7 +132,7 @@ class TimerRowWrapTest {
     @Test @Config(qualifiers = "w411dp-h891dp") fun `w411 bare row and hosts`() { bare(411); hosts() }
     @Test @Config(qualifiers = "w600dp-h891dp") fun `w600 bare row and hosts`() { bare(600); hosts() }
     @Test @Config(qualifiers = "w700dp-h891dp") fun `w700 bare row and hosts`() { bare(700); hosts() }
-    @Test @Config(qualifiers = "w411dp-h891dp") fun `content 359 wraps 360 one line`() {
-        verify(bareRow(359, true).getChildAt(0), false, "359"); verify(bareRow(360, true).getChildAt(0), true, "360")
+    @Test @Config(qualifiers = "w411dp-h891dp") fun `content 359 and 360 keep the two-row stack`() {
+        verify(bareRow(359, true).getChildAt(0), "359"); verify(bareRow(360, true).getChildAt(0), "360")
     }
 }
