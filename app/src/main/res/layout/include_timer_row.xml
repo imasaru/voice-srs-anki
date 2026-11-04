@@ -155,16 +155,20 @@
                     app:indicatorColor="?attr/colorTertiary"
                     app:trackColor="?attr/colorSurfaceVariant"
                     app:trackCornerRadius="10dp"
-                    app:trackThickness="20dp" />
+                    app:trackThickness="20dp"
+                    app:indicatorTrackGapSize="0dp"
+                    app:trackStopIndicatorSize="0dp" />
 
                 <TextView
                     android:id="@+id/timerValue"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
+                    android:background="@drawable/timer_value_pill"
                     android:fontFeatureSettings="tnum"
                     android:maxLines="1"
                     android:text="10 min"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="13sp"
                     android:textStyle="bold" />
             </FrameLayout>
