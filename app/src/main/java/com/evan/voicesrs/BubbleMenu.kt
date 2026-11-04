@@ -42,6 +42,7 @@ object BubbleMenu {
         fun walk(v: View) {
             if (v.visibility != View.VISIBLE) return
             when (v) {
+                is android.widget.Button -> Unit
                 is TextView -> {
                     val t = v.text.toString().trim()
                     if (t.isNotEmpty()) {

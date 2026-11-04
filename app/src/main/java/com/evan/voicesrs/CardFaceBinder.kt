@@ -16,7 +16,6 @@ import android.util.Log
 import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
@@ -170,6 +169,7 @@ object CardFaceBinder {
         turnId: Long = 0L,
         playback: PlaybackControl.Snapshot = PlaybackControl.Snapshot(),
         highlightOn: Boolean = HighlightSentence.SETTING_DEFAULT,
+        /** h138: ignored; bubbles have no per-section play buttons, only the corner read-aloud icon. */
         onSpeak: ((Int, String) -> Unit)? = null,
         readingSentence: String = ""
     ) {
@@ -215,26 +215,6 @@ object CardFaceBinder {
             row.gravity = android.view.Gravity.TOP
             if (PlaybackControl.highlight(playback, turnId, index, highlightOn)) {
                 row.setBackgroundColor(host.context.getColor(R.color.reading_highlight))
-            }
-            if (onSpeak != null) {
-                val speak = Button(host.context, null, android.R.attr.borderlessButtonStyle)
-                val section = PlaybackControl.sectionState(playback, turnId, index)
-                speak.text = when (section) {
-                    PlaybackControl.State.LOADING -> "…"
-                    PlaybackControl.State.READING -> "■"
-                    else -> "▶"
-                }
-                speak.contentDescription = host.context.getString(R.string.playback_read_section)
-                speak.minHeight = (40 * density).toInt()
-                speak.minWidth = (40 * density).toInt()
-                speak.setOnClickListener { onSpeak.invoke(index, block.text) }
-                row.addView(
-                    speak,
-                    LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                    )
-                )
             }
             view.layoutParams = LinearLayout.LayoutParams(
                 0,
