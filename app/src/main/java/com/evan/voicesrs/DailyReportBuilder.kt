@@ -4,7 +4,7 @@ import org.json.JSONObject
 
 data class DumpRev(val time: String, val ease: Int, val type: Int, val ivl: Int, val ms: Long)
 data class DumpCard(val cid: Long, val deck: String, val domain: String, val stem: String, val correctText: String, val revs: List<DumpRev>)
-data class PctRow(val name: String, val correct: Int, val total: Int) {
+data class PctRow(val name: String, val correct: Int, val total: Int, val hard: Int = 0) {
     val pct: Double get() = if (total == 0) 0.0 else correct * 100.0 / total
 }
 data class DailyReport(
@@ -21,6 +21,7 @@ data class DailyReport(
     val byDeck: List<PctRow>,      // name = last "::" segment of deck; sorted by total desc
     val byDomain: List<PctRow>,    // blank domain -> "Unknown"; sorted by pct ASC (weakest first), ties by name
     val missedByConcept: Map<String, List<DumpCard>>, // cards with any ease==1 rev, grouped by concept(); LinkedHashMap in CONCEPTS order, "Other" last; empty groups omitted
+    val hardCards: List<DumpCard>,   // cards with any ease==2 and no ease==1, review order
 )
 object DailyReportBuilder {
     /** Ordered: the first group whose keyword appears (case-insensitive) in stem+" "+correctText wins. */
@@ -101,7 +102,8 @@ object DailyReportBuilder {
         val byDomain = withRevs
             .groupBy { if (it.domain.isBlank()) "Unknown" else it.domain }
             .map { (domain, cs) ->
-                PctRow(domain, cs.sumOf { it.revs.count { r -> r.ease > 1 } }, cs.sumOf { it.revs.size })
+                PctRow(domain, cs.sumOf { it.revs.count { r -> r.ease > 1 } }, cs.sumOf { it.revs.size },
+                    cs.sumOf { it.revs.count { r -> r.ease == 2 } })
             }
             .sortedWith(compareBy<PctRow> { it.pct }.thenBy { it.name })
 
@@ -120,6 +122,7 @@ object DailyReportBuilder {
             val list = missed[b]
             if (list != null && list.isNotEmpty()) missedByConcept[b] = list
         }
+        val hardCards = withRevs.filter { it.revs.any { r -> r.ease == 2 } && !it.revs.any { r -> r.ease == 1 } }
 
         return DailyReport(
             date = date,
@@ -139,6 +142,7 @@ object DailyReportBuilder {
             byDeck = byDeck,
             byDomain = byDomain,
             missedByConcept = missedByConcept,
+            hardCards = hardCards,
         )
     }
     fun pct(d: Double): String = String.format(java.util.Locale.ROOT, "%.1f%%", d)  // 75.0%
@@ -186,15 +190,39 @@ object DailyReportBuilder {
         }
 
         sb.append("## Weakest domains\n")
-        for (row in r.byDomain) {
-            sb.append("- ").append(row.name).append(": ").append(pct(row.pct))
-                .append(" (").append(row.correct).append("/").append(row.total).append(")").append('\n')
+        val weak = r.byDomain.filter { it.correct < it.total || it.hard > 0 }
+            .sortedWith(compareBy<PctRow> { it.pct }.thenByDescending { it.hard }.thenBy { it.name })
+        if (weak.isEmpty()) {
+            sb.append("- None — no misses\n")
+        } else {
+            for (row in weak) {
+                sb.append("- ").append(row.name).append(": ").append(pct(row.pct))
+                if (row.hard > 0) {
+                    sb.append(" (").append(row.correct).append("/").append(row.total).append(", ").append(row.hard).append(" Hard)")
+                } else {
+                    sb.append(" (").append(row.correct).append("/").append(row.total).append(")")
+                }
+                sb.append('\n')
+            }
         }
 
         sb.append("## Missed cards by concept\n")
-        for ((group, cards) in r.missedByConcept) {
-            sb.append("### ").append(group).append(" (").append(cards.size).append(")\n")
-            for (c in cards) {
+        if (r.missedByConcept.isEmpty()) {
+            sb.append("- None\n")
+        } else {
+            for ((group, cards) in r.missedByConcept) {
+                sb.append("### ").append(group).append(" (").append(cards.size).append(")\n")
+                for (c in cards) {
+                    val flat = oneLine(c.stem)
+                    val stem = if (flat.length > 100) flat.substring(0, 100) else flat
+                    sb.append("- ").append(stem).append(" → ").append(oneLine(c.correctText)).append('\n')
+                }
+            }
+        }
+
+        if (r.hardCards.isNotEmpty()) {
+            sb.append("## Hard — worth a review\n")
+            for (c in r.hardCards) {
                 val flat = oneLine(c.stem)
                 val stem = if (flat.length > 100) flat.substring(0, 100) else flat
                 sb.append("- ").append(stem).append(" → ").append(oneLine(c.correctText)).append('\n')
@@ -203,8 +231,16 @@ object DailyReportBuilder {
 
         if (beforeFocus.isNotBlank()) sb.append(beforeFocus.trimEnd()).append('\n')
         sb.append("## Focus next\n")
-        for (row in r.byDomain.take(3)) {
-            sb.append("- ").append(row.name).append('\n')
+        if (weak.isEmpty()) {
+            if (r.hardCards.isEmpty()) {
+                sb.append("- None — no misses\n")
+            } else {
+                sb.append("- Review Hard cards above\n")
+            }
+        } else {
+            for (row in weak.take(3)) {
+                sb.append("- ").append(row.name).append('\n')
+            }
         }
         for (row in r.byDeck) {
             if (row.pct < 60.0) {
