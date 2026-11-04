@@ -149,6 +149,7 @@ class MainActivity : AppCompatActivity() {
             chip.visibility = View.VISIBLE
             val bar = timerGoalBar
             if (bar != null) bar.progress = TimerRowModel.progress(ms, cachedGoalMinutes)
+            renderRateCountdown(state, state.drillRunning || DrillService.running, switchModel.on)
             elapsedHandler.postDelayed(elapsedRunnable, 1_000L)
         } else {
             elapsedHandler.removeCallbacks(elapsedRunnable)
@@ -1067,6 +1068,19 @@ class MainActivity : AppCompatActivity() {
             pauseRow?.visibility = View.GONE
             countdown?.visibility = View.GONE
             stopResumePulse(resume)
+        }
+        renderRateCountdown(state, drilling, silentOn)
+    }
+
+    /** h149b (item 61): "Rate Ns" pill while the spoken rating listen is open. */
+    private fun renderRateCountdown(state: DrillUiState, drilling: Boolean, silentOn: Boolean) {
+        val pill = findViewById<TextView>(R.id.rateCountdown) ?: return
+        val left = RateCountdown.secondsLeft(state.rateDeadlineMs, SystemClock.elapsedRealtime())
+        if (left != null && RateCountdown.visible(drilling, silentOn, state.chatPaused, state.showBack, left)) {
+            pill.text = RateCountdown.text(left)
+            pill.visibility = View.VISIBLE
+        } else {
+            pill.visibility = View.GONE
         }
     }
 
