@@ -48,7 +48,31 @@ class H130TimerAlignTest {
         val r = row()
         val line = r.findViewById<ViewGroup>(R.id.timerLine1)
         val voiceGroup = r.findViewById<View>(R.id.voiceChip).parent as View
-        val inset = ctx.resources.getDimensionPixelSize(R.dimen.timer_stepper_inset)
-        assertEquals(line.width - inset, voiceGroup.right)
+        // h133: the circle itself is inset 6dp inside the 40dp button, so the column sits flush and
+        // the visible circle lines up with the + circle below.
+        assertEquals(line.width, voiceGroup.right)
+    }
+
+    /** h133: on the Fold3 the toggle circles (32dp visible) stood taller than the 28sp digits and rose above
+     *  them; keep the 40dp target but draw a 28dp circle (6dp insets, same as the steppers' inset). */
+    @Test fun `toggle circle fits inside the hero text height`() {
+        val r = row()
+        val hero = r.findViewById<TextView>(R.id.elapsedChip)
+        for (id in listOf(R.id.timerGoalChip, R.id.voiceChip)) {
+            val b = r.findViewById<com.google.android.material.button.MaterialButton>(id)
+            val visible = b.height - b.insetTop - b.insetBottom
+            assertEquals(dp(28), visible)
+            assertTrue("circle $visible < hero ${hero.height}", visible < hero.height)
+        }
+    }
+
+    @Test fun `toggle labels lift into the circle inset`() {
+        val r = row()
+        val lift = ctx.resources.getDimensionPixelSize(R.dimen.timer_toggle_label_lift)
+        assertEquals(-dp(4), lift)
+        for (id in listOf(R.id.timerGoalChip, R.id.voiceChip)) {
+            val label = (r.findViewById<View>(id).parent as ViewGroup).getChildAt(1)
+            assertEquals(lift, (label.layoutParams as ViewGroup.MarginLayoutParams).topMargin)
+        }
     }
 }

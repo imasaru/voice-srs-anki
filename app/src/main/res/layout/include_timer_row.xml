@@ -56,6 +56,13 @@
                     android:id="@+id/timerGoalChip"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
+                    android:insetLeft="@dimen/timer_stepper_inset"
+                    android:insetTop="@dimen/timer_stepper_inset"
+                    android:insetRight="@dimen/timer_stepper_inset"
+                    android:insetBottom="@dimen/timer_stepper_inset"
+                    android:padding="11dp"
+                    app:iconPadding="0dp"
+                    app:iconSize="18dp"
                     android:checkable="true"
                     android:contentDescription="@string/timer_switch_label"
                     app:icon="@drawable/ic_drill_stop"
@@ -64,6 +71,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/timer_toggle_label_lift"
                     android:text="@string/timer_goal_short"
                     android:textSize="11sp" />
             </LinearLayout>
@@ -71,8 +79,8 @@
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_marginEnd="@dimen/timer_stepper_inset"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="0dp"
                 android:gravity="center_horizontal"
                 android:orientation="vertical">
 
@@ -80,6 +88,13 @@
                     android:id="@+id/voiceChip"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
+                    android:insetLeft="@dimen/timer_stepper_inset"
+                    android:insetTop="@dimen/timer_stepper_inset"
+                    android:insetRight="@dimen/timer_stepper_inset"
+                    android:insetBottom="@dimen/timer_stepper_inset"
+                    android:padding="11dp"
+                    app:iconPadding="0dp"
+                    app:iconSize="18dp"
                     android:checkable="true"
                     android:contentDescription="@string/voice_chip"
                     app:icon="@drawable/ic_mic"
@@ -88,6 +103,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/timer_toggle_label_lift"
                     android:text="@string/voice_short"
                     android:textSize="11sp" />
             </LinearLayout>

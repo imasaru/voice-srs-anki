@@ -7,6 +7,8 @@
     <!-- h82 narrow-v2 -->
     <dimen name="touch_target">48dp</dimen>
     <dimen name="timer_stepper_inset">6dp</dimen>
+    <!-- h133: labels tuck into the toggle's transparent 6dp inset so the circle centres on the hero digits (Fold3 bounds 11-04). -->
+    <dimen name="timer_toggle_label_lift">-4dp</dimen>
     <dimen name="timer_stepper_stroke">1dp</dimen>
     <dimen name="timer_value_margin">0dp</dimen>
     <dimen name="timer_value_min_width">52dp</dimen>
