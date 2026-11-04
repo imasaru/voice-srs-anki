@@ -26,7 +26,7 @@ class ChatAdapter(
     private val onThread: (Long) -> Unit,
     private val onSpeakSection: (Long, Int, String) -> Unit = { _, _, _ -> },
     private val onBookmark: (ReviewTurn) -> Unit = {},
-    /** h131: "Bookmark" on the live question card (add-only; no turn yet). */
+    /** h131/h136: "Bookmark" on the live question card; a second tap removes it. */
     private val onBookmarkLive: (ChatRow.Live) -> Unit = {},
     /** h121b: "Ask about this" — the bubble's quoted text dropped into the chat input. */
     private val onAskAbout: (String) -> Unit = {},
@@ -35,7 +35,9 @@ class ChatAdapter(
     /** h121c: "Open in Anki" — open this turn's card in the AnkiDroid browser. */
     private val onOpenAnki: (ReviewTurn) -> Unit = {},
     /** h121d2: true when this turn already has a bookmark (corner icon shows filled). */
-    private val isBookmarked: (ReviewTurn) -> Boolean = { false }
+    private val isBookmarked: (ReviewTurn) -> Boolean = { false },
+    /** h136: true when the live question card already has a bookmark. */
+    private val isBookmarkedLive: (ChatRow.Live) -> Boolean = { false }
 ) : ListAdapter<ChatRow, RecyclerView.ViewHolder>(DIFF) {
 
     private val cardOpen = HashSet<Long>()
@@ -458,8 +460,8 @@ class ChatAdapter(
 
         fun bind(row: ChatRow.Live) {
             livePlayIcon.setOnClickListener { onSpeakSection(0L, SpeakSection.CARD, BubbleMenu.visibleText(itemView.findViewById(R.id.liveBubble))) }
-            liveBookmarkIcon.setImageResource(R.drawable.ic_bookmark)
-            liveBookmarkIcon.setOnClickListener { onBookmarkLive(row); liveBookmarkIcon.setImageResource(R.drawable.ic_bookmark_filled) }
+            liveBookmarkIcon.setImageResource(if (isBookmarkedLive(row)) R.drawable.ic_bookmark_filled else R.drawable.ic_bookmark)
+            liveBookmarkIcon.setOnClickListener { onBookmarkLive(row); liveBookmarkIcon.setImageResource(if (isBookmarkedLive(row)) R.drawable.ic_bookmark_filled else R.drawable.ic_bookmark) }
             if (!row.revealText) {
                 label.visibility = View.GONE
                 options.visibility = View.GONE

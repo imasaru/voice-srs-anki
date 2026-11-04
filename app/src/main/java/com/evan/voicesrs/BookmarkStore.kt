@@ -63,6 +63,21 @@ object BookmarkStore {
         return true
     }
 
+    /** h136: true when a live (turnId 0) bookmark already exists for this card+quote. */
+    fun isLiveMarked(dir: File, cardId: Long, quote: String): Boolean =
+        load(dir).any { it.turnId == 0L && it.cardId == cardId && it.quote == quote.trim() }
+
+    /** h136: add/remove the live bookmark for this card+quote; returns true when now marked. */
+    fun toggleLive(dir: File, cardId: Long, quote: String, at: Long): Boolean {
+        val q = quote.trim()
+        if (isLiveMarked(dir, cardId, q)) {
+            save(dir, load(dir).filterNot { it.turnId == 0L && it.cardId == cardId && it.quote == q })
+            return false
+        }
+        add(dir, Bookmark(id = 0L, at = at, turnId = 0L, cardId = cardId, label = "", quote = q))
+        return true
+    }
+
     /** h121e: bookmarked turn ids, cached until the next save (every row bind asks). */
     fun turnIds(dir: File): Set<Long> {
         val key = dir.absolutePath

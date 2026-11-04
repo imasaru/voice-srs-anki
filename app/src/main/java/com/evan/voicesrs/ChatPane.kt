@@ -54,14 +54,16 @@ class ChatPane(
             ).show()
         },
         onBookmarkLive = { row ->
-            BookmarkStore.add(list.context.filesDir, Bookmark(id = 0L, at = System.currentTimeMillis(), turnId = 0L, cardId = row.cardId, label = "", quote = BubbleModel.fullQuestion(row.front).ifBlank { row.front }.trim()))
-            android.widget.Toast.makeText(list.context, list.context.getString(R.string.bookmark_saved), android.widget.Toast.LENGTH_SHORT).show()
+            val marked = BookmarkStore.toggleLive(list.context.filesDir, row.cardId, liveQuote(row), System.currentTimeMillis())
+            android.widget.Toast.makeText(list.context, list.context.getString(if (marked) R.string.bookmark_saved else R.string.bookmark_removed), android.widget.Toast.LENGTH_SHORT).show()
         },
         onAskAbout = { text -> askAboutText(text) },
         onFlag = { turn -> flagCard(turn) },
         onOpenAnki = { turn -> openInAnki(turn) },
-        isBookmarked = { turn -> turn.turnId in BookmarkStore.turnIds(list.context.filesDir) }
+        isBookmarked = { turn -> turn.turnId in BookmarkStore.turnIds(list.context.filesDir) },
+        isBookmarkedLive = { row -> BookmarkStore.isLiveMarked(list.context.filesDir, row.cardId, liveQuote(row)) }
     )
+    private fun liveQuote(row: ChatRow.Live): String = BubbleModel.fullQuestion(row.front).ifBlank { row.front }.trim()
     private val tracker = ReadReceiptTracker(now = { SystemClock.elapsedRealtime() })
     private val follow = ChatFollow()
     private val handler = Handler(Looper.getMainLooper())
