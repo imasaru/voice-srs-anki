@@ -1086,7 +1086,7 @@ class SettingsActivity : AppCompatActivity() {
             )
             val button = it as Button
             button.isEnabled = false
-            aiTestResult.text = getString(R.string.settings_ai_testing)
+            showResult(aiTestResult, getString(R.string.settings_ai_testing), null)
             Thread {
                 val client = AiClient()
                 var allOk = true
@@ -1176,6 +1176,7 @@ class SettingsActivity : AppCompatActivity() {
             val deviceVoice = selectedDeviceVoice(voiceView)
             val neuralVoice = neuralVoiceView.text.toString().trim().ifBlank { NeuralTts.DEFAULT_VOICE }
             val neuralUrl = neuralUrlView.text.toString().trim()
+            if (engine == TtsEngines.NEURAL && neuralUrl.isBlank()) { testVoiceStatus.text = getString(R.string.settings_url_missing); return@setOnClickListener }
             val neuralToken = neuralTokenView.text.toString().trim().ifBlank { held.neuralToken }
             testing = true
             testVoiceButton.isEnabled = false
