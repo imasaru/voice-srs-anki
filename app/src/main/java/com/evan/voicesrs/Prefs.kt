@@ -159,16 +159,12 @@ object Prefs {
     private const val KEY_ASR_LANGUAGE = "asr_language"
     private const val KEY_PROMPT_CHIPS = "prompt_chips"
 
-    val DEFAULT_URL: String get() = BuildConfig.DEFAULT_ANKI_URL
     const val DEFAULT_DECK = "VoiceSRS-Test"
-    val DEFAULT_NEURAL_URL: String get() = BuildConfig.DEFAULT_NEURAL_URL
     const val DEFAULT_BATCH_SIZE = 20
     const val DEFAULT_GOAL_CARDS = 20
     const val DEFAULT_GOAL_MINUTES = 10
-    val DEFAULT_AI_URL: String get() = BuildConfig.DEFAULT_AI_URL
     const val DEFAULT_AI_MODEL = "scottlowry/Ornith-1.5-35B-A3B-oQ5e-mtp:precise"
     const val DEFAULT_AI_LOOKAHEAD = 2
-    val DEFAULT_DECISION_URL: String get() = BuildConfig.DEFAULT_DECISION_URL
     const val DEFAULT_DECISION_MODEL = ""
 
     /** Blank host with no baked default: Settings should ask for it. */
@@ -237,7 +233,7 @@ object Prefs {
             .putFloat(KEY_TTS_RATE, TtsRate.clamp(cfg.ttsRate))
             .putString(KEY_TTS_VOICE, cfg.ttsVoice)
             .putString(KEY_TTS_ENGINE, cfg.ttsEngine.ifBlank { TtsEngines.NEURAL })
-            .putString(KEY_NEURAL_URL, cfg.neuralUrl.ifBlank { DEFAULT_NEURAL_URL })
+            .putString(KEY_NEURAL_URL, cfg.neuralUrl)
             .putString(KEY_NEURAL_SERVERS, SavedUrls.encode(cfg.neuralServers))
             .putString(KEY_NEURAL_VOICE, cfg.neuralVoice.ifBlank { NeuralTts.DEFAULT_VOICE })
             .putBoolean(KEY_SPEED_MODE, cfg.speedMode)
@@ -259,7 +255,7 @@ object Prefs {
             .putInt(KEY_GOAL_CARDS, cfg.goalCards.coerceIn(1, 500))
             .putInt(KEY_GOAL_MINUTES, cfg.goalMinutes.coerceIn(1, 180))
             .putBoolean(KEY_AI_ENABLED, cfg.aiEnabled)
-            .putString(KEY_AI_URL, cfg.aiBaseUrl.ifBlank { DEFAULT_AI_URL })
+            .putString(KEY_AI_URL, cfg.aiBaseUrl)
             .putString(KEY_AI_BASE_SERVERS, SavedUrls.encode(cfg.aiBaseServers))
             .putString(KEY_AI_MODEL, cfg.aiModel.ifBlank { DEFAULT_AI_MODEL })
             .putInt(KEY_AI_LOOKAHEAD, cfg.aiLookahead.coerceIn(0, 5))
@@ -434,14 +430,14 @@ object Prefs {
 
     private fun readPlain(p: SharedPreferences): AnkiConfig {
         return AnkiConfig(
-            url = p.getString(KEY_URL, DEFAULT_URL).orEmpty().ifBlank { DEFAULT_URL },
+            url = p.getString(KEY_URL, "").orEmpty(),
             ankiServers = SavedUrls.decode(p.getString(KEY_ANKI_SERVERS, null)),
             apiKey = "",
             deck = p.getString(KEY_DECK, DEFAULT_DECK).orEmpty().ifBlank { DEFAULT_DECK },
             ttsRate = TtsRate.clamp(p.getFloat(KEY_TTS_RATE, TtsRate.DEFAULT)),
             ttsVoice = p.getString(KEY_TTS_VOICE, "").orEmpty(),
             ttsEngine = p.getString(KEY_TTS_ENGINE, TtsEngines.NEURAL).orEmpty().ifBlank { TtsEngines.NEURAL },
-            neuralUrl = p.getString(KEY_NEURAL_URL, DEFAULT_NEURAL_URL).orEmpty().ifBlank { DEFAULT_NEURAL_URL },
+            neuralUrl = p.getString(KEY_NEURAL_URL, "").orEmpty(),
             neuralServers = SavedUrls.decode(p.getString(KEY_NEURAL_SERVERS, null)),
             neuralToken = "",
             neuralVoice = p.getString(KEY_NEURAL_VOICE, NeuralTts.DEFAULT_VOICE).orEmpty()
@@ -478,7 +474,7 @@ object Prefs {
             goalCards = p.getInt(KEY_GOAL_CARDS, DEFAULT_GOAL_CARDS).coerceIn(1, 500),
             goalMinutes = p.getInt(KEY_GOAL_MINUTES, DEFAULT_GOAL_MINUTES).coerceIn(1, 180),
             aiEnabled = p.getBoolean(KEY_AI_ENABLED, false),
-            aiBaseUrl = p.getString(KEY_AI_URL, DEFAULT_AI_URL).orEmpty().ifBlank { DEFAULT_AI_URL },
+            aiBaseUrl = p.getString(KEY_AI_URL, "").orEmpty(),
             aiBaseServers = SavedUrls.decode(p.getString(KEY_AI_BASE_SERVERS, null)),
             aiModel = p.getString(KEY_AI_MODEL, DEFAULT_AI_MODEL).orEmpty().ifBlank { DEFAULT_AI_MODEL },
             aiLookahead = p.getInt(KEY_AI_LOOKAHEAD, DEFAULT_AI_LOOKAHEAD).coerceIn(0, 5),
@@ -489,8 +485,7 @@ object Prefs {
             ),
             decisionEnabled = p.getBoolean(KEY_DECISION_ENABLED, false),
             letterListen = p.getBoolean(KEY_LETTER_LISTEN, false),
-            decisionUrl = p.getString(KEY_DECISION_URL, DEFAULT_DECISION_URL).orEmpty()
-                .ifBlank { DEFAULT_DECISION_URL },
+            decisionUrl = p.getString(KEY_DECISION_URL, "").orEmpty(),
             decisionModel = p.getString(KEY_DECISION_MODEL, DEFAULT_DECISION_MODEL).orEmpty()
                 .ifBlank { DEFAULT_DECISION_MODEL },
             decisionServers = SavedUrls.decode(p.getString(KEY_DECISION_SERVERS, null)),

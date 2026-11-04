@@ -797,7 +797,7 @@ class SettingsActivity : AppCompatActivity() {
         val aiTestResult: TextView = findViewById(R.id.aiTestResult)
         aiEnabledSwitch.isChecked = held.aiEnabled
         generatedDeckInput.setText(held.generatedDeck.ifBlank { MakeCard.DEFAULT_DECK })
-        aiBaseUrlInput.setText(held.aiBaseUrl.ifBlank { Prefs.DEFAULT_AI_URL }, false)
+        aiBaseUrlInput.setText(held.aiBaseUrl, false)
         aiModelInput.setText(held.aiModel.ifBlank { Prefs.DEFAULT_AI_MODEL })
         aiKeyInput.setText("")
         aiKeyStatus.text = getString(
@@ -930,7 +930,7 @@ class SettingsActivity : AppCompatActivity() {
         track(decisionModelInput) { commitDecisionModel() }
         fun loadAiModels() {
             val raw = aiBaseUrlInput.text?.toString()?.trim().orEmpty()
-            val url = raw.ifBlank { Prefs.DEFAULT_AI_URL }
+            val url = raw
             if (!url.startsWith("http://") && !url.startsWith("https://")) return
             val key = aiKeyInput.text?.toString()?.trim().orEmpty().ifBlank { held.aiApiKey }
             val kept = aiModelInput.text?.toString().orEmpty()
@@ -1013,7 +1013,8 @@ class SettingsActivity : AppCompatActivity() {
             commitAiLookahead()
             commitDecisionModel()
             if (aiBaseUrlLayout.error != null || aiLookaheadLayout.error != null || decisionUrlLayout.error != null) return@setOnClickListener
-            val url = aiBaseUrlInput.text?.toString()?.trim().orEmpty().ifBlank { Prefs.DEFAULT_AI_URL }
+            val url = aiBaseUrlInput.text?.toString()?.trim().orEmpty()
+            if (url.isBlank()) return@setOnClickListener
             val model = aiModelInput.text?.toString()?.trim().orEmpty().ifBlank { Prefs.DEFAULT_AI_MODEL }
             val key = aiKeyInput.text?.toString()?.trim().orEmpty().ifBlank { held.aiApiKey }
             val targets = ModelTestTargets.build(
@@ -1096,7 +1097,8 @@ class SettingsActivity : AppCompatActivity() {
 
         testResultView = findViewById(R.id.testResultView)
         findViewById<Button>(R.id.testConnectionButton).setOnClickListener {
-            val url = urlView.text.toString().trim().ifBlank { Prefs.DEFAULT_URL }
+            val url = urlView.text.toString().trim()
+            if (url.isBlank()) { testResultView.text = getString(R.string.settings_url_missing); return@setOnClickListener }
             val key = keyView.text.toString().trim().ifBlank { held.apiKey }
             val deck = deckView.text.toString().trim().ifBlank { Prefs.DEFAULT_DECK }
             runConnectionCheck(url, key, deck)
@@ -1112,7 +1114,7 @@ class SettingsActivity : AppCompatActivity() {
             val engine = selectedEngine(engineView)
             val deviceVoice = selectedDeviceVoice(voiceView)
             val neuralVoice = neuralVoiceView.text.toString().trim().ifBlank { NeuralTts.DEFAULT_VOICE }
-            val neuralUrl = neuralUrlView.text.toString().trim().ifBlank { Prefs.DEFAULT_NEURAL_URL }
+            val neuralUrl = neuralUrlView.text.toString().trim()
             val neuralToken = neuralTokenView.text.toString().trim().ifBlank { held.neuralToken }
             testing = true
             testVoiceButton.isEnabled = false
@@ -1356,7 +1358,8 @@ class SettingsActivity : AppCompatActivity() {
         deckView: MaterialAutoCompleteTextView,
         deckStatus: TextView
     ) {
-        val url = urlView.text.toString().trim().ifBlank { Prefs.DEFAULT_URL }
+        val url = urlView.text.toString().trim()
+        if (url.isBlank()) { deckStatus.text = getString(R.string.settings_url_missing); return }
         val key = keyView.text.toString().trim().ifBlank { held.apiKey }
         val kept = deckView.text.toString()
         deckStatus.text = getString(R.string.settings_decks_loading)
@@ -1392,7 +1395,8 @@ class SettingsActivity : AppCompatActivity() {
         savedVoice: String
     ) {
         bindChoices(voiceView, NeuralTts.FALLBACK_VOICES, savedVoice)
-        val url = urlView.text.toString().trim().ifBlank { Prefs.DEFAULT_NEURAL_URL }
+        val url = urlView.text.toString().trim()
+        if (url.isBlank()) return
         val token = tokenView.text.toString().trim().ifBlank { held.neuralToken }
         Thread {
             val speaker = EdgeSpeaker(applicationContext)

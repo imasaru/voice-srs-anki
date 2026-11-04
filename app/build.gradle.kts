@@ -13,10 +13,6 @@ if (localPropsFile.isFile) {
     localPropsFile.inputStream().use { localProps.load(it) }
 }
 fun localProp(key: String): String = localProps.getProperty(key)?.trim().orEmpty()
-val defaultAnkiUrl = localProp("voicesrs.ankiUrl")
-val defaultNeuralUrl = localProp("voicesrs.neuralUrl")
-val defaultAiUrl = localProp("voicesrs.aiUrl")
-val defaultDecisionUrl = localProp("voicesrs.decisionUrl")
 
 /** Java string literal. Does not log [raw]. */
 fun javaStringLiteral(raw: String): String {
@@ -45,10 +41,6 @@ android {
         versionCode = 24
         versionName = "0.1.23"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "DEFAULT_ANKI_URL", javaStringLiteral(defaultAnkiUrl))
-        buildConfigField("String", "DEFAULT_NEURAL_URL", javaStringLiteral(defaultNeuralUrl))
-        buildConfigField("String", "DEFAULT_AI_URL", javaStringLiteral(defaultAiUrl))
-        buildConfigField("String", "DEFAULT_DECISION_URL", javaStringLiteral(defaultDecisionUrl))
     }
 
     buildFeatures {

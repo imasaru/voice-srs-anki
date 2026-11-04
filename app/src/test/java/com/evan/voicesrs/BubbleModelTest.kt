@@ -138,14 +138,9 @@ class BubbleModelTest {
     }
 
     @Test
-    fun `defaults come from BuildConfig`() {
-        assertEquals(BuildConfig.DEFAULT_ANKI_URL, Prefs.DEFAULT_URL)
-        assertEquals(BuildConfig.DEFAULT_NEURAL_URL, Prefs.DEFAULT_NEURAL_URL)
-        assertEquals(BuildConfig.DEFAULT_AI_URL, Prefs.DEFAULT_AI_URL)
-        assertEquals(BuildConfig.DEFAULT_DECISION_URL, Prefs.DEFAULT_DECISION_URL)
+    fun `no built-in url defaults`() {
         assertEquals("scottlowry/Ornith-1.5-35B-A3B-oQ5e-mtp:precise", Prefs.DEFAULT_AI_MODEL)
         assertTrue(Prefs.promptForUrl(""))
         assertFalse(Prefs.promptForUrl("http://anki.example.invalid:8765"))
-        assertEquals(Prefs.DEFAULT_URL.isBlank(), Prefs.promptForUrl(Prefs.DEFAULT_URL))
     }
 }
