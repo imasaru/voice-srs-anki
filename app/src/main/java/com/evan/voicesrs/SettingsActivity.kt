@@ -130,7 +130,7 @@ class SettingsActivity : AppCompatActivity() {
         val listenWaitView: MaterialAutoCompleteTextView = findViewById(R.id.listenWaitInput)
         val asrLanguageView: MaterialAutoCompleteTextView = findViewById(R.id.asrLanguageInput)
         val endSilenceView: MaterialAutoCompleteTextView = findViewById(R.id.endSilenceInput)
-        val answerSilenceLabel: TextView = findViewById(R.id.answerSilenceLabel)
+        val answerSilenceValue: TextView = findViewById(R.id.answerSilenceValue)
         val answerSilenceSlider: Slider = findViewById(R.id.answerSilenceSlider)
         val listenAttemptsView: MaterialAutoCompleteTextView = findViewById(R.id.listenAttemptsInput)
         val thinkTimeView: MaterialAutoCompleteTextView = findViewById(R.id.thinkTimeInput)
@@ -390,7 +390,7 @@ class SettingsActivity : AppCompatActivity() {
         val answerSilenceSeconds = ListenWindow.normalizeAnswerSilenceSec(held.answerSilenceSec)
         answerSilenceSlider.value = answerSilenceSeconds.toFloat()
         fun showAnswerSilence(sec: Int) {
-            answerSilenceLabel.text = getString(R.string.settings_answer_silence_value, sec)
+            answerSilenceValue.text = getString(R.string.settings_answer_silence_value, sec)
         }
         showAnswerSilence(answerSilenceSeconds)
         answerSilenceSlider.addOnChangeListener { _, value, _ ->

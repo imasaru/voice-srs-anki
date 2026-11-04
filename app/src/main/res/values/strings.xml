@@ -61,6 +61,7 @@
     <string name="settings_end_silence">End-of-speech silence</string>
     <string name="settings_answer_silence">Answer pause before cutoff</string>
     <string name="settings_answer_silence_value">%1$d s</string>
+    <string name="settings_answer_silence_help">Silence allowed while you think, mid-answer</string>
     <string name="settings_listen_attempts">Listen attempts</string>
     <string name="settings_listen_attempts_help">Missed listens allowed before switching to silent.</string>
     <string name="settings_think_time">Think time</string>
