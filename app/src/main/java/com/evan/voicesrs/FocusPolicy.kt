@@ -13,6 +13,7 @@ object FocusPolicy {
     const val LOSS_TRANSIENT = -2
     const val LOSS_TRANSIENT_CAN_DUCK = -3
     const val RESUME_DELAY_MS = 1000L
+    const val WAIT_CAP_MS = 20_000L
 
     enum class Phase { IDLE, SPEAKING, LISTENING }
     enum class Action { NONE, PAUSE_SPEAK, ABORT_LISTEN, RESUME }
@@ -57,6 +58,9 @@ object FocusPolicy {
             else -> return Action.NONE
         }
     }
+
+    /** h148: true once a focus wait that started at [startedAt] has lasted [WAIT_CAP_MS] or more. */
+    fun waitTimedOut(startedAt: Long, now: Long): Boolean = now - startedAt >= WAIT_CAP_MS
 
     /**
      * True when a listen result may be graded: no focus loss, or the loss landed

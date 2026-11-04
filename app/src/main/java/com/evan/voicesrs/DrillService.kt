@@ -1322,8 +1322,9 @@ class DrillService : Service(), VoiceIo {
         }
     }
 
-    /** Wait in 500 ms slices while focus stays lost. False when the drill stops. */
+    /** Wait in 500 ms slices while focus stays lost. False when the drill stops. h148: after FocusPolicy.WAIT_CAP_MS, take focus back. */
     private fun awaitFocusResume(): Boolean {
+        val startedAt = SystemClock.elapsedRealtime()
         while (focusPaused && !stopRequested.get() && !destroyed) {
             val latch = CountDownLatch(1)
             focusWake = latch
@@ -1336,6 +1337,14 @@ class DrillService : Service(), VoiceIo {
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
                 return false
+            }
+            if (focusPaused && FocusPolicy.waitTimedOut(startedAt, SystemClock.elapsedRealtime())) {
+                Log.i(TAG, "audiofocus wait cap hit; re-requesting focus")
+                focusWake = null
+                focusPaused = false
+                focusState.transientLoss = false
+                focusState.lostAt = 0L
+                return acquireFocus()
             }
         }
         return !stopRequested.get() && !destroyed
