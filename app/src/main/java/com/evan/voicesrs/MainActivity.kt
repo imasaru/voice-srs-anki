@@ -137,6 +137,7 @@ class MainActivity : AppCompatActivity() {
     private fun tickElapsed() {
         val chip = elapsedChip ?: return
         val state = DrillUi.state
+        renderStudyBlockChip()
         if (ElapsedChip.visible(state.drillRunning)) {
             val ms = ElapsedChip.elapsed(
                 state.elapsedStartMs,
@@ -172,6 +173,35 @@ class MainActivity : AppCompatActivity() {
     private fun stopElapsedTicker() {
         elapsedTicking = false
         elapsedHandler.removeCallbacks(elapsedRunnable)
+    }
+
+    /** h150b (item 63): slim study block chip above the timer row; gone when there is no block today. */
+    private fun renderStudyBlockChip() {
+        val chip = findViewById<Chip>(R.id.studyBlockChip) ?: return
+        val now = System.currentTimeMillis()
+        val s = runCatching { Prefs.loadStudyBlock(this) }.getOrNull()
+        val kind = StudyBlockChip.kind(s, now, ZoneId.systemDefault())
+        if (s == null || kind == null) {
+            chip.visibility = View.GONE
+            return
+        }
+        chip.text = StudyBlockChip.label(s, now, kind)
+        val icon = when (kind) {
+            StudyBlockChip.Kind.RUNNING -> R.drawable.ic_play_arrow
+            StudyBlockChip.Kind.PAUSED -> R.drawable.ic_drill_pause
+            StudyBlockChip.Kind.DONE -> R.drawable.ic_check_circle
+        }
+        chip.chipIcon = androidx.appcompat.content.res.AppCompatResources.getDrawable(this, icon)
+        val bgAttr = when (kind) {
+            StudyBlockChip.Kind.RUNNING -> com.google.android.material.R.attr.colorPrimaryContainer
+            StudyBlockChip.Kind.PAUSED -> com.google.android.material.R.attr.colorSurface
+            StudyBlockChip.Kind.DONE -> com.google.android.material.R.attr.colorTertiaryContainer
+        }
+        chip.chipBackgroundColor = ColorStateList.valueOf(com.google.android.material.color.MaterialColors.getColor(chip, bgAttr))
+        val body = StudyBlockChip.dialogBody(s, now)
+        chip.contentDescription = body
+        chip.setOnClickListener { Toast.makeText(this, body, Toast.LENGTH_SHORT).show() }
+        chip.visibility = View.VISIBLE
     }
 
     private val reviewListener: (List<ReviewTurn>) -> Unit = {

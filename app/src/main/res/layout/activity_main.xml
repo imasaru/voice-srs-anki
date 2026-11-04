@@ -70,6 +70,14 @@
             android:textAppearance="?attr/textAppearanceBodyMedium"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
+        <com.google.android.material.chip.Chip
+            android:id="@+id/studyBlockChip"
+            style="@style/Widget.Material3.Chip.Assist"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:visibility="gone" />
+
         <include
             android:id="@+id/timerRowInclude"
             layout="@layout/include_timer_row"
