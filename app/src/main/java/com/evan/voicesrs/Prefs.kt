@@ -28,6 +28,8 @@ data class AnkiConfig(
     val listenWaitSec: Int = ListenWindow.DEFAULT_WAIT_SEC,
     /** End-of-speech silence hint, in milliseconds. One of [ListenWindow.SILENCE_MS_CHOICES]. */
     val endSilenceMs: Int = ListenWindow.DEFAULT_SILENCE_MS,
+    /** h141: silence before an answer listen ends, in seconds. 1–10, default 4 (today's floor). */
+    val answerSilenceSec: Int = ListenWindow.DEFAULT_ANSWER_SILENCE_SEC,
     /** How many times to listen for an answer or a grade before auto-silent. 1–5, default 3. */
     val listenAttempts: Int = ListenWindow.DEFAULT_ATTEMPTS,
     /** Seconds to think before the answer is read. 0 is Off. Default 20. Not used in Silent mode. */
@@ -115,6 +117,7 @@ object Prefs {
     private const val KEY_SPEED_MODE = "speed_mode"
     private const val KEY_LISTEN_WAIT_SEC = "listen_wait_sec"
     private const val KEY_END_SILENCE_MS = "end_silence_ms"
+    private const val KEY_ANSWER_SILENCE_SEC = "answer_silence_sec"
     private const val KEY_RELISTEN_ONCE = "relisten_once"
     private const val KEY_LISTEN_ATTEMPTS = "listen_attempts"
     private const val KEY_THINK_TIME_SEC = "think_time_sec"
@@ -239,6 +242,7 @@ object Prefs {
             .putBoolean(KEY_SPEED_MODE, cfg.speedMode)
             .putInt(KEY_LISTEN_WAIT_SEC, ListenWindow.normalizeWaitSec(cfg.listenWaitSec))
             .putInt(KEY_END_SILENCE_MS, ListenWindow.normalizeSilenceMs(cfg.endSilenceMs))
+            .putInt(KEY_ANSWER_SILENCE_SEC, ListenWindow.normalizeAnswerSilenceSec(cfg.answerSilenceSec))
             .putInt(KEY_LISTEN_ATTEMPTS, ListenWindow.clampAttempts(cfg.listenAttempts))
             .putInt(KEY_THINK_TIME_SEC, ThinkTime.normalize(cfg.thinkTimeSec))
             .remove(KEY_RELISTEN_ONCE)
@@ -448,6 +452,9 @@ object Prefs {
             ),
             endSilenceMs = ListenWindow.normalizeSilenceMs(
                 p.getInt(KEY_END_SILENCE_MS, ListenWindow.DEFAULT_SILENCE_MS)
+            ),
+            answerSilenceSec = ListenWindow.normalizeAnswerSilenceSec(
+                p.getInt(KEY_ANSWER_SILENCE_SEC, ListenWindow.DEFAULT_ANSWER_SILENCE_SEC)
             ),
             listenAttempts = ListenWindow.migrateAttempts(
                 stored = if (p.contains(KEY_LISTEN_ATTEMPTS)) {

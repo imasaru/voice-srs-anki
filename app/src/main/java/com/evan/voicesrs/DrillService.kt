@@ -470,6 +470,8 @@ class DrillService : Service(), VoiceIo {
     private var listenExtrasLogged = false
     /** End-of-speech silence from the settings snapshot taken at session start. */
     @Volatile private var configuredSilenceMs = ListenWindow.DEFAULT_SILENCE_MS
+    /** h141: answer-listen silence cutoff (seconds) from the settings snapshot at session start. */
+    @Volatile private var answerSilenceSec = ListenWindow.DEFAULT_ANSWER_SILENCE_SEC
     /** h105b: the current listen is an answer listen (holds for the answer-listen
      *  floor). Set by [captureListen]; read by [beginListenOnMain]. */
     @Volatile private var answerListenNow = false
@@ -938,6 +940,7 @@ class DrillService : Service(), VoiceIo {
             blockStart(cfg)
             explainSession = ExplainSession.start(this, cfg)
             configuredSilenceMs = ListenWindow.normalizeSilenceMs(cfg.endSilenceMs)
+            answerSilenceSec = ListenWindow.normalizeAnswerSilenceSec(cfg.answerSilenceSec)
             refreshNeuralHealth(cfg, force = true)
             refreshAsr(cfg)
             DrillUi.update {
@@ -3962,9 +3965,10 @@ class DrillService : Service(), VoiceIo {
             return
         }
         val waitMs = listenWaitMs
-        // h105b: answer listens hold for the answer-listen floor (ANSWER_SILENCE_MS);
-        // rating/command listens keep the configured silence.
-        val listenSilence = if (answerListenNow) ListenWindow.silenceFor(configuredSilenceMs.toLong(), true) else listenSilenceMs.toLong()
+        // h105b/h141: answer listens hold for the user-configured answer-listen silence
+        // (answerSilenceSec, seconds, replaces the old floor); rating/command listens keep
+        // the configured silence.
+        val listenSilence = if (answerListenNow) ListenWindow.silenceFor(configuredSilenceMs.toLong(), true, answerSilenceSec) else listenSilenceMs.toLong()
         // h99: Google's recogniser reads this as Integer; a Long was ignored (default 0).
         val silenceMs = SpokenLetter.silenceExtra(listenSilence)
         if (activeKind == EngineKind.GOOGLE && !listenExtrasLogged) {

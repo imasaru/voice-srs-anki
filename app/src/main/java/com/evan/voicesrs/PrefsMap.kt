@@ -23,6 +23,7 @@ object PrefsMap {
         "speed_mode" to false,
         "listen_wait_sec" to 0,
         "end_silence_ms" to 0,
+        "answer_silence_sec" to 0,
         "listen_attempts" to 0,
         "think_time_sec" to 0,
         "show_card" to false,

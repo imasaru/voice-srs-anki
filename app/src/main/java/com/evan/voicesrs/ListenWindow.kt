@@ -31,6 +31,12 @@ object ListenWindow {
      * end-of-card listens). Rating and command listens keep the default. */
     const val ANSWER_SILENCE_MS = 4000L
 
+    /** h141: the answer-listen silence the user sets (seconds). Kept as the old floor for
+     *  callers/tests that don't take the slider. The slider now replaces this value. */
+    const val MIN_ANSWER_SILENCE_SEC = 1
+    const val MAX_ANSWER_SILENCE_SEC = 10
+    const val DEFAULT_ANSWER_SILENCE_SEC = 4
+
     const val MIN_ATTEMPTS = 1
     const val MAX_ATTEMPTS = 5
     const val DEFAULT_ATTEMPTS = 3
@@ -74,12 +80,19 @@ object ListenWindow {
 
     fun clampAttempts(n: Int): Int = n.coerceIn(MIN_ATTEMPTS, MAX_ATTEMPTS)
 
-    /** h105b: answer-listen silence floor. Answer listens wait longer (up to
-     *  [ANSWER_SILENCE_MS]) so a brief pause doesn't kill the mic mid-sentence; a
-     *  configured silence already longer than the floor is kept as-is. Non-answer
-     *  listens (rating/command) keep [configuredMs] unchanged. */
-    fun silenceFor(configuredMs: Long, answerListen: Boolean): Long =
-        if (answerListen) configuredMs.coerceAtLeast(ANSWER_SILENCE_MS) else configuredMs
+    /** h141: answer listens use the user-configured silence [answerSilenceSec] (seconds),
+     *  which now REPLACES the old floor so 1–3 s is honoured. Non-answer listens
+     *  (rating/command) keep [configuredMs] unchanged. */
+    fun silenceFor(
+        configuredMs: Long,
+        answerListen: Boolean,
+        answerSilenceSec: Int = DEFAULT_ANSWER_SILENCE_SEC
+    ): Long =
+        if (answerListen) normalizeAnswerSilenceSec(answerSilenceSec) * 1000L else configuredMs
+
+    /** h141: clamp the answer-listen silence from seconds to the 1–10 slider range. */
+    fun normalizeAnswerSilenceSec(s: Int): Int =
+        s.coerceIn(MIN_ANSWER_SILENCE_SEC, MAX_ANSWER_SILENCE_SEC)
 
     /**
      * The new int key wins. Otherwise the old "listen once more" switch maps

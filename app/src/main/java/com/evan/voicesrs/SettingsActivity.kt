@@ -130,6 +130,8 @@ class SettingsActivity : AppCompatActivity() {
         val listenWaitView: MaterialAutoCompleteTextView = findViewById(R.id.listenWaitInput)
         val asrLanguageView: MaterialAutoCompleteTextView = findViewById(R.id.asrLanguageInput)
         val endSilenceView: MaterialAutoCompleteTextView = findViewById(R.id.endSilenceInput)
+        val answerSilenceLabel: TextView = findViewById(R.id.answerSilenceLabel)
+        val answerSilenceSlider: Slider = findViewById(R.id.answerSilenceSlider)
         val listenAttemptsView: MaterialAutoCompleteTextView = findViewById(R.id.listenAttemptsInput)
         val thinkTimeView: MaterialAutoCompleteTextView = findViewById(R.id.thinkTimeInput)
 
@@ -384,6 +386,24 @@ class SettingsActivity : AppCompatActivity() {
         ) { label ->
             persist { it.copy(endSilenceMs = ListenWindow.silenceMsFromLabel(label)) }
         }
+        // h141: answer-listen silence cutoff slider (seconds, 1–10, default 4).
+        val answerSilenceSeconds = ListenWindow.normalizeAnswerSilenceSec(held.answerSilenceSec)
+        answerSilenceSlider.value = answerSilenceSeconds.toFloat()
+        fun showAnswerSilence(sec: Int) {
+            answerSilenceLabel.text = getString(R.string.settings_answer_silence_value, sec)
+        }
+        showAnswerSilence(answerSilenceSeconds)
+        answerSilenceSlider.addOnChangeListener { _, value, _ ->
+            showAnswerSilence(ListenWindow.normalizeAnswerSilenceSec(value.roundToInt()))
+        }
+        answerSilenceSlider.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
+            override fun onStartTrackingTouch(slider: Slider) { /* no-op */ }
+            override fun onStopTrackingTouch(slider: Slider) {
+                val sec = ListenWindow.normalizeAnswerSilenceSec(slider.value.roundToInt())
+                showAnswerSilence(sec)
+                persist { it.copy(answerSilenceSec = sec) }
+            }
+        })
         val attemptLabels = (ListenWindow.MIN_ATTEMPTS..ListenWindow.MAX_ATTEMPTS).map { it.toString() }
         bindChoices(
             listenAttemptsView,
