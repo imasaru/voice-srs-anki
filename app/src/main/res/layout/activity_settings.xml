@@ -707,9 +707,11 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="@string/settings_neural_url">
+                        android:hint="@string/settings_neural_url"
+                        android:id="@+id/neuralUrlLayout"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
-                        <com.google.android.material.textfield.TextInputEditText
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
                             android:id="@+id/neuralUrlInput"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"

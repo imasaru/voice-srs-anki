@@ -94,7 +94,8 @@ class SettingsActivity : AppCompatActivity() {
         val voiceStatus: TextView = findViewById(R.id.voiceStatus)
         val engineView: MaterialAutoCompleteTextView = findViewById(R.id.engineInput)
         val neuralVoiceView: MaterialAutoCompleteTextView = findViewById(R.id.neuralVoiceInput)
-        val neuralUrlView: TextInputEditText = findViewById(R.id.neuralUrlInput)
+        val neuralUrlView: MaterialAutoCompleteTextView = findViewById(R.id.neuralUrlInput)
+        val neuralUrlLayout: TextInputLayout = findViewById(R.id.neuralUrlLayout)
         val neuralTokenView: TextInputEditText = findViewById(R.id.neuralTokenInput)
         val asrUrlView: MaterialAutoCompleteTextView = findViewById(R.id.asrUrlInput)
         val asrUrlLayout: TextInputLayout = findViewById(R.id.asrUrlLayout)
@@ -761,12 +762,6 @@ class SettingsActivity : AppCompatActivity() {
                 goalAmountView.setText(stored.toString())
             }
         }
-        fun commitNeuralUrl() {
-            val url = neuralUrlView.text?.toString()?.trim().orEmpty().ifBlank { Prefs.DEFAULT_NEURAL_URL }
-            if (neuralUrlView.text?.toString() != url) neuralUrlView.setText(url)
-            if (!AutoSave.decide(held.neuralUrl, url).save) return
-            persist { it.copy(neuralUrl = url) }
-        }
         fun commitNeuralToken() {
             val typed = neuralTokenView.text?.toString()?.trim().orEmpty()
             if (typed.isEmpty()) return
@@ -793,7 +788,7 @@ class SettingsActivity : AppCompatActivity() {
         track(examTargetInput) { commitExamTarget() }
         track(batchSizeView) { commitBatch() }
         track(goalAmountView) { commitGoalAmount() }
-        track(neuralUrlView) { commitNeuralUrl() }
+        bindSavedUrlField(neuralUrlView, neuralUrlLayout, getString(R.string.settings_asr_add_server), { held.neuralUrl }, { held.neuralServers }) { raw -> persist { it.copy(neuralUrl = raw, neuralServers = SavedUrls.remember(it.neuralServers, raw)) } }
         bindSavedUrlField(asrUrlView, asrUrlLayout, getString(R.string.settings_asr_add_server), { held.asrUrl }, { held.asrServers }) { raw -> persist { it.copy(asrUrl = raw, asrServers = SavedUrls.remember(it.asrServers, raw)) } }
         track(neuralTokenView) { commitNeuralToken() }
         val aiEnabledSwitch: MaterialSwitch = findViewById(R.id.aiEnabledSwitch)
@@ -1019,7 +1014,6 @@ class SettingsActivity : AppCompatActivity() {
             commitExamTarget()
             commitBatch()
             commitGoalAmount()
-            commitNeuralUrl()
             commitNeuralToken()
             commitAiUrl()
             commitAiModel()
@@ -1406,7 +1400,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun loadNeural(
-        urlView: TextInputEditText,
+        urlView: MaterialAutoCompleteTextView,
         tokenView: TextInputEditText,
         voiceView: MaterialAutoCompleteTextView,
         status: TextView,

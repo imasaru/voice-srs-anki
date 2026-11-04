@@ -16,6 +16,7 @@ object PrefsMap {
         "tts_voice" to "",
         "tts_engine" to "",
         "neural_url" to "",
+        "neural_servers" to "",
         "neural_token" to "",
         "neural_voice" to "",
         "speed_mode" to false,

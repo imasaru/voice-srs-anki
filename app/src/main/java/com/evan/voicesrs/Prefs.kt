@@ -17,6 +17,8 @@ data class AnkiConfig(
     /** [TtsEngines.NEURAL] or [TtsEngines.DEVICE]. */
     val ttsEngine: String = TtsEngines.NEURAL,
     val neuralUrl: String = "",
+    /** Saved speech-server URLs shown in the [neuralUrl] dropdown. */
+    val neuralServers: List<String> = emptyList(),
     val neuralToken: String = "",
     val neuralVoice: String = NeuralTts.DEFAULT_VOICE,
     /** Skip spoken rating guides and the "I heard" readback. */
@@ -104,6 +106,7 @@ object Prefs {
     private const val KEY_TTS_VOICE = "tts_voice"
     private const val KEY_TTS_ENGINE = "tts_engine"
     private const val KEY_NEURAL_URL = "neural_url"
+    private const val KEY_NEURAL_SERVERS = "neural_servers"
     private const val KEY_NEURAL_TOKEN = "neural_token"
     private const val KEY_NEURAL_VOICE = "neural_voice"
     private const val KEY_SPEED_MODE = "speed_mode"
@@ -230,6 +233,7 @@ object Prefs {
             .putString(KEY_TTS_VOICE, cfg.ttsVoice)
             .putString(KEY_TTS_ENGINE, cfg.ttsEngine.ifBlank { TtsEngines.NEURAL })
             .putString(KEY_NEURAL_URL, cfg.neuralUrl.ifBlank { DEFAULT_NEURAL_URL })
+            .putString(KEY_NEURAL_SERVERS, SavedUrls.encode(cfg.neuralServers))
             .putString(KEY_NEURAL_VOICE, cfg.neuralVoice.ifBlank { NeuralTts.DEFAULT_VOICE })
             .putBoolean(KEY_SPEED_MODE, cfg.speedMode)
             .putInt(KEY_LISTEN_WAIT_SEC, ListenWindow.normalizeWaitSec(cfg.listenWaitSec))
@@ -431,6 +435,7 @@ object Prefs {
             ttsVoice = p.getString(KEY_TTS_VOICE, "").orEmpty(),
             ttsEngine = p.getString(KEY_TTS_ENGINE, TtsEngines.NEURAL).orEmpty().ifBlank { TtsEngines.NEURAL },
             neuralUrl = p.getString(KEY_NEURAL_URL, DEFAULT_NEURAL_URL).orEmpty().ifBlank { DEFAULT_NEURAL_URL },
+            neuralServers = SavedUrls.decode(p.getString(KEY_NEURAL_SERVERS, null)),
             neuralToken = "",
             neuralVoice = p.getString(KEY_NEURAL_VOICE, NeuralTts.DEFAULT_VOICE).orEmpty()
                 .ifBlank { NeuralTts.DEFAULT_VOICE },
