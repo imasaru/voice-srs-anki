@@ -53,6 +53,10 @@ class ChatPane(
                 android.widget.Toast.LENGTH_SHORT
             ).show()
         },
+        onBookmarkLive = { row ->
+            BookmarkStore.add(list.context.filesDir, Bookmark(id = 0L, at = System.currentTimeMillis(), turnId = 0L, cardId = row.cardId, label = "", quote = BubbleModel.fullQuestion(row.front).ifBlank { row.front }.trim()))
+            android.widget.Toast.makeText(list.context, list.context.getString(R.string.bookmark_saved), android.widget.Toast.LENGTH_SHORT).show()
+        },
         onAskAbout = { text -> askAboutText(text) },
         onFlag = { turn -> flagCard(turn) },
         onOpenAnki = { turn -> openInAnki(turn) },

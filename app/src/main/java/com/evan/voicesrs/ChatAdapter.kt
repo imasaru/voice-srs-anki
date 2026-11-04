@@ -26,6 +26,8 @@ class ChatAdapter(
     private val onThread: (Long) -> Unit,
     private val onSpeakSection: (Long, Int, String) -> Unit = { _, _, _ -> },
     private val onBookmark: (ReviewTurn) -> Unit = {},
+    /** h131: "Bookmark" on the live question card (add-only; no turn yet). */
+    private val onBookmarkLive: (ChatRow.Live) -> Unit = {},
     /** h121b: "Ask about this" — the bubble's quoted text dropped into the chat input. */
     private val onAskAbout: (String) -> Unit = {},
     /** h121b: "Flag card" — tag the note behind this turn's card for follow-up review. */
@@ -408,6 +410,8 @@ class ChatAdapter(
 
     inner class LiveHolder(view: View) : RecyclerView.ViewHolder(view) {
         private val label: TextView = view.findViewById(R.id.liveQuestionLabel)
+        private val liveBookmarkIcon: ImageButton = view.findViewById(R.id.liveBookmarkIcon)
+        private val livePlayIcon: ImageButton = view.findViewById(R.id.livePlayIcon)
         private val question: TextView = view.findViewById(R.id.liveQuestion)
         private val options: LinearLayout = view.findViewById(R.id.liveOptions)
         private val answer: TextView = view.findViewById(R.id.liveAnswer)
@@ -453,6 +457,9 @@ class ChatAdapter(
         }
 
         fun bind(row: ChatRow.Live) {
+            livePlayIcon.setOnClickListener { onSpeakSection(0L, SpeakSection.CARD, BubbleMenu.visibleText(itemView.findViewById(R.id.liveBubble))) }
+            liveBookmarkIcon.setImageResource(R.drawable.ic_bookmark)
+            liveBookmarkIcon.setOnClickListener { onBookmarkLive(row); liveBookmarkIcon.setImageResource(R.drawable.ic_bookmark_filled) }
             if (!row.revealText) {
                 label.visibility = View.GONE
                 options.visibility = View.GONE

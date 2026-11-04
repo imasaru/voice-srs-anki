@@ -18,11 +18,45 @@
         android:paddingEnd="14dp"
         android:paddingBottom="12dp">
 
+        <LinearLayout
+            android:id="@+id/liveCorner"
+            android:layout_width="wrap_content"
+            android:layout_height="24dp"
+            android:layout_gravity="end"
+            android:layout_marginEnd="-6dp"
+            android:layout_marginBottom="-22dp"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/liveBookmarkIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/corner_bookmark"
+                android:padding="3dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_bookmark"
+                app:tint="#99404943" />
+
+            <ImageButton
+                android:id="@+id/livePlayIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/corner_read_aloud"
+                android:layout_marginStart="6dp"
+                android:padding="3dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_volume_up"
+                app:tint="#99404943" />
+        </LinearLayout>
+
         <TextView
             android:id="@+id/liveQuestionLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:letterSpacing="0.08"
+            android:paddingEnd="64dp"
             android:textAllCaps="true"
             android:textAppearance="?attr/textAppearanceLabelSmall"
             android:textColor="?attr/colorOnSurfaceVariant"
