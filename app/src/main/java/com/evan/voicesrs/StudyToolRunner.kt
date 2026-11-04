@@ -152,7 +152,7 @@ class StudyToolRunner(
             } catch (_: Exception) {
                 emptyMap()
             }
-            val cards = ReportData.dumpCards(rows, fields, tz)
+            val cards = ReportData.dumpCards(rows, fields, tz, timeLog())
             val labels = cards.associate { it.cid to it.stem }
             val broke = if (threadsJson.isBlank()) "" else UnderstandingInsights.whereBroke(threadsJson, start, end, labels)
             val md = DailyReportBuilder.render(DailyReportBuilder.build(day, cards), issued, broke, StudyBlockStore.reportLines(blockHistory, day))
