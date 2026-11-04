@@ -1036,13 +1036,14 @@
                         android:textAppearance="?attr/textAppearanceTitleSmall" />
 
                     <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/aiBaseUrlLayout"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="@string/settings_ai_url">
+                        android:hint="@string/settings_ai_url"
+                        android:id="@+id/aiBaseUrlLayout"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
-                        <com.google.android.material.textfield.TextInputEditText
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
                             android:id="@+id/aiBaseUrlInput"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"

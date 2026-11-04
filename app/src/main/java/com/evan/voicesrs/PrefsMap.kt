@@ -37,6 +37,7 @@ object PrefsMap {
         "goal_minutes" to 0,
         "ai_enabled" to false,
         "ai_base_url" to "",
+        "ai_base_servers" to "",
         "ai_model" to "",
         "ai_api_key" to "",
         "ai_lookahead" to 0,

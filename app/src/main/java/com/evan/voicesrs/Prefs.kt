@@ -58,6 +58,7 @@ data class AnkiConfig(
     /** Master switch for AI explanations. Off until the user turns it on. */
     val aiEnabled: Boolean = false,
     val aiBaseUrl: String = "",
+    val aiBaseServers: List<String> = emptyList(),
     val aiModel: String = "scottlowry/Ornith-1.5-35B-A3B-oQ5e-mtp:precise",
     /** Optional. Stored only in encrypted prefs. Never logged. */
     val aiApiKey: String = "",
@@ -131,6 +132,7 @@ object Prefs {
     private const val KEY_GOAL_MINUTES = "goal_minutes"
     private const val KEY_AI_ENABLED = "ai_enabled"
     private const val KEY_AI_URL = "ai_base_url"
+    private const val KEY_AI_BASE_SERVERS = "ai_base_servers"
     private const val KEY_AI_MODEL = "ai_model"
     private const val KEY_AI_KEY = "ai_api_key"
     private const val KEY_AI_LOOKAHEAD = "ai_lookahead"
@@ -255,6 +257,7 @@ object Prefs {
             .putInt(KEY_GOAL_MINUTES, cfg.goalMinutes.coerceIn(1, 180))
             .putBoolean(KEY_AI_ENABLED, cfg.aiEnabled)
             .putString(KEY_AI_URL, cfg.aiBaseUrl.ifBlank { DEFAULT_AI_URL })
+            .putString(KEY_AI_BASE_SERVERS, SavedUrls.encode(cfg.aiBaseServers))
             .putString(KEY_AI_MODEL, cfg.aiModel.ifBlank { DEFAULT_AI_MODEL })
             .putInt(KEY_AI_LOOKAHEAD, cfg.aiLookahead.coerceIn(0, 5))
             .putBoolean(KEY_AI_BATCH, cfg.aiBatch)
@@ -472,6 +475,7 @@ object Prefs {
             goalMinutes = p.getInt(KEY_GOAL_MINUTES, DEFAULT_GOAL_MINUTES).coerceIn(1, 180),
             aiEnabled = p.getBoolean(KEY_AI_ENABLED, false),
             aiBaseUrl = p.getString(KEY_AI_URL, DEFAULT_AI_URL).orEmpty().ifBlank { DEFAULT_AI_URL },
+            aiBaseServers = SavedUrls.decode(p.getString(KEY_AI_BASE_SERVERS, null)),
             aiModel = p.getString(KEY_AI_MODEL, DEFAULT_AI_MODEL).orEmpty().ifBlank { DEFAULT_AI_MODEL },
             aiLookahead = p.getInt(KEY_AI_LOOKAHEAD, DEFAULT_AI_LOOKAHEAD).coerceIn(0, 5),
             aiBatch = p.getBoolean(KEY_AI_BATCH, false),

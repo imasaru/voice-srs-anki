@@ -794,7 +794,7 @@ class SettingsActivity : AppCompatActivity() {
         val aiEnabledSwitch: MaterialSwitch = findViewById(R.id.aiEnabledSwitch)
         val generatedDeckInput: TextInputEditText = findViewById(R.id.generatedDeckInput)
         val aiBaseUrlLayout: TextInputLayout = findViewById(R.id.aiBaseUrlLayout)
-        val aiBaseUrlInput: TextInputEditText = findViewById(R.id.aiBaseUrlInput)
+        val aiBaseUrlInput: MaterialAutoCompleteTextView = findViewById(R.id.aiBaseUrlInput)
         val aiModelInput: MaterialAutoCompleteTextView = findViewById(R.id.aiModelInput)
         val aiKeyInput: TextInputEditText = findViewById(R.id.aiKeyInput)
         val aiKeyStatus: TextView = findViewById(R.id.aiKeyStatus)
@@ -804,7 +804,7 @@ class SettingsActivity : AppCompatActivity() {
         val aiTestResult: TextView = findViewById(R.id.aiTestResult)
         aiEnabledSwitch.isChecked = held.aiEnabled
         generatedDeckInput.setText(held.generatedDeck.ifBlank { MakeCard.DEFAULT_DECK })
-        aiBaseUrlInput.setText(held.aiBaseUrl.ifBlank { Prefs.DEFAULT_AI_URL })
+        aiBaseUrlInput.setText(held.aiBaseUrl.ifBlank { Prefs.DEFAULT_AI_URL }, false)
         aiModelInput.setText(held.aiModel.ifBlank { Prefs.DEFAULT_AI_MODEL })
         aiKeyInput.setText("")
         aiKeyStatus.text = getString(
@@ -902,17 +902,6 @@ class SettingsActivity : AppCompatActivity() {
         aiBatchSwitch.setOnCheckedChangeListener { _, checked ->
             persist { it.copy(aiBatch = checked) }
         }
-        fun commitAiUrl() {
-            val raw = aiBaseUrlInput.text?.toString()?.trim().orEmpty()
-            val url = raw.ifBlank { Prefs.DEFAULT_AI_URL }
-            if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                aiBaseUrlLayout.error = getString(R.string.settings_ai_url_error)
-                return
-            }
-            aiBaseUrlLayout.error = null
-            if (aiBaseUrlInput.text?.toString() != url) aiBaseUrlInput.setText(url)
-            persist { it.copy(aiBaseUrl = url) }
-        }
         fun commitAiModel() {
             val raw = aiModelInput.text?.toString()?.trim().orEmpty()
             val model = raw.ifBlank { Prefs.DEFAULT_AI_MODEL }
@@ -940,7 +929,7 @@ class SettingsActivity : AppCompatActivity() {
             val model = decisionModelInput.text?.toString()?.trim().orEmpty()
             persist { it.copy(decisionModel = model) }
         }
-        track(aiBaseUrlInput) { commitAiUrl() }
+        bindSavedUrlField(aiBaseUrlInput, aiBaseUrlLayout, getString(R.string.settings_asr_add_server), { held.aiBaseUrl }, { held.aiBaseServers }) { raw -> persist { it.copy(aiBaseUrl = raw, aiBaseServers = SavedUrls.remember(it.aiBaseServers, raw)) } }
         track(aiModelInput) { commitAiModel() }
         track(aiKeyInput) { commitAiKey() }
         track(aiLookaheadInput) { commitAiLookahead() }
@@ -1015,7 +1004,6 @@ class SettingsActivity : AppCompatActivity() {
             commitBatch()
             commitGoalAmount()
             commitNeuralToken()
-            commitAiUrl()
             commitAiModel()
             commitAiKey()
             commitAiLookahead()
@@ -1023,7 +1011,6 @@ class SettingsActivity : AppCompatActivity() {
             if (rateCustomLayout.visibility == View.VISIBLE) commitCustomRate(hideOnSuccess = false)
         }
         findViewById<Button>(R.id.aiTestButton).setOnClickListener {
-            commitAiUrl()
             commitAiModel()
             commitAiKey()
             commitAiLookahead()
