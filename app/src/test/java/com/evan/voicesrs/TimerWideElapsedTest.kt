@@ -11,17 +11,13 @@ import com.google.android.material.button.MaterialButton
 import kotlin.math.ceil
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** h96a: in the 600dp+ drill pane the timer row is narrow; TimerWrapRow.fitLead caps elapsedChip.maxWidth
- *  so the chip shows "1:…" instead of "1:26:23". This asserts the chip is not capped/clipped on the wide rows.
- *  The fix is the NEXT round (h96b); ignored now so the suite stays green. */
-@Ignore("h96b: TimerWrapRow fix removes this")
+/** h122/h129: in the 600dp+ drill pane the two-row timer shows the full elapsed text ("1:26:23") on one line, never capped or ellipsized. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class TimerWideElapsedTest {

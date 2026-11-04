@@ -12,10 +12,7 @@
     <com.evan.voicesrs.TimerWrapRow
         android:id="@+id/timerLines"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:padding="12dp"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp">
+        android:layout_height="wrap_content">
 
         <LinearLayout
             android:id="@+id/timerLine1"
