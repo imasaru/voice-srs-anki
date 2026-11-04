@@ -1332,6 +1332,8 @@ class DrillService : Service(), VoiceIo {
     /** Wait in 500 ms slices while focus stays lost. False when the drill stops. h148: after FocusPolicy.WAIT_CAP_MS, take focus back. */
     private fun awaitFocusResume(): Boolean {
         val startedAt = SystemClock.elapsedRealtime()
+        val statusBefore = DrillUi.state.status
+        if (focusPaused) postStatusNotice(DrillNotice.OTHER_AUDIO)
         while (focusPaused && !stopRequested.get() && !destroyed) {
             val latch = CountDownLatch(1)
             focusWake = latch
@@ -1351,10 +1353,17 @@ class DrillService : Service(), VoiceIo {
                 focusPaused = false
                 focusState.transientLoss = false
                 focusState.lostAt = 0L
+                clearFocusNotice(statusBefore)
                 return acquireFocus()
             }
         }
+        clearFocusNotice(statusBefore)
         return !stopRequested.get() && !destroyed
+    }
+
+    /** h148b: take the "Paused for other audio" notice off the status line. */
+    private fun clearFocusNotice(before: String) {
+        runCatching { DrillUi.update { it.copy(status = DrillNotice.afterFocusWait(it.status, before)) } }
     }
 
     override fun speak(text: String) {

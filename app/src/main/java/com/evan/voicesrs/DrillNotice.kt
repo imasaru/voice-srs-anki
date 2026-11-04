@@ -19,6 +19,13 @@ object DrillNotice {
         "The microphone does not seem to be working. " +
             "Please check the microphone permission and your connection, then restart the drill."
 
+    /** h148b: status line while another app holds audio focus. */
+    const val OTHER_AUDIO = "Paused for other audio"
+
+    /** h148b: after a focus wait, drop our notice and restore [before]; any newer status stays. */
+    fun afterFocusWait(current: String, before: String): String =
+        if (current == OTHER_AUDIO) before else current
+
     enum class Sink { STATUS, CARD }
 
     fun blamesMic(error: Int?, recognizerUnavailable: Boolean): Boolean {
