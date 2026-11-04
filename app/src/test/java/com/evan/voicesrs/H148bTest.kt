@@ -29,7 +29,7 @@ class H148bTest {
         assertTrue("override fun speak( missing", speak > idx)
         val body = src.substring(idx, speak)
         assertTrue("missing postStatusNotice(OTHER_AUDIO)", body.contains("postStatusNotice(DrillNotice.OTHER_AUDIO)"))
-        assertTrue("missing clearFocusNotice(statusBefore) x2", body.count { it == 'c' } >= 0 && body.split("clearFocusNotice(statusBefore)").size - 1 >= 2)
+        assertTrue("missing clearFocusNotice(statusBefore) x2", body.split("clearFocusNotice(statusBefore)").size - 1 >= 2)
         assertTrue("missing afterFocusWait", body.contains("DrillNotice.afterFocusWait(it.status, before)"))
         val clearIdx = body.indexOf("clearFocusNotice(statusBefore)")
         val acquireIdx = body.indexOf("return acquireFocus()")
