@@ -107,6 +107,9 @@
 
             <TextView
                 android:id="@+id/promptEditInfo"
+                android:drawableStart="@drawable/ic_info_outline"
+                android:drawablePadding="6dp"
+                android:gravity="center_vertical"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"

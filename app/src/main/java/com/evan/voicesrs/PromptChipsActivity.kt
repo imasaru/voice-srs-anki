@@ -3,6 +3,7 @@ package com.evan.voicesrs
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -52,14 +53,14 @@ class PromptChipsActivity : AppCompatActivity() {
             val meta = getString(sourceLabel(chip.source))
             row.findViewById<TextView>(R.id.promptRowMeta).text =
                 if (chip.builtIn) meta + " · " + getString(R.string.prompt_chip_builtin) else meta
-            val up = row.findViewById<Button>(R.id.promptRowUp)
-            val down = row.findViewById<Button>(R.id.promptRowDown)
+            val up = row.findViewById<ImageButton>(R.id.promptRowUp)
+            val down = row.findViewById<ImageButton>(R.id.promptRowDown)
             up.isEnabled = i > 0
             down.isEnabled = i < chips.size - 1
             up.setOnClickListener { commit(PromptChipEdits.move(chips, i, i - 1)) }
             down.setOnClickListener { commit(PromptChipEdits.move(chips, i, i + 1)) }
-            row.findViewById<Button>(R.id.promptRowEdit).setOnClickListener { openEditor(chip.id) }
-            val del = row.findViewById<Button>(R.id.promptRowDelete)
+            row.findViewById<ImageButton>(R.id.promptRowEdit).setOnClickListener { openEditor(chip.id) }
+            val del = row.findViewById<ImageButton>(R.id.promptRowDelete)
             del.visibility = if (chip.builtIn) View.INVISIBLE else View.VISIBLE
             del.setOnClickListener {
                 MaterialAlertDialogBuilder(this)
@@ -74,7 +75,7 @@ class PromptChipsActivity : AppCompatActivity() {
         }
     }
 
-    /** ✎ (id = the chip) and ＋ Add prompt (id = null). */
+    /** Edit (id = the chip) and Add prompt (id = null). */
     private fun openEditor(id: String?) {
         val i = android.content.Intent(this, PromptChipEditActivity::class.java)
         if (id != null) i.putExtra(EXTRA_CHIP_ID, id)

@@ -26,39 +26,35 @@
             android:textAppearance="?attr/textAppearanceBodySmall" />
     </LinearLayout>
 
-    <Button
+    <ImageButton
         android:id="@+id/promptRowUp"
-        style="?android:attr/borderlessButtonStyle"
         android:layout_width="48dp"
         android:layout_height="48dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
         android:contentDescription="@string/prompt_move_up"
-        android:minWidth="48dp"
-        android:text="▲" />
+        android:src="@drawable/ic_arrow_upward" />
 
-    <Button
+    <ImageButton
         android:id="@+id/promptRowDown"
-        style="?android:attr/borderlessButtonStyle"
         android:layout_width="48dp"
         android:layout_height="48dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
         android:contentDescription="@string/prompt_move_down"
-        android:minWidth="48dp"
-        android:text="▼" />
+        android:src="@drawable/ic_arrow_downward" />
 
-    <Button
+    <ImageButton
         android:id="@+id/promptRowEdit"
-        style="?android:attr/borderlessButtonStyle"
         android:layout_width="48dp"
         android:layout_height="48dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
         android:contentDescription="@string/prompt_edit"
-        android:minWidth="48dp"
-        android:text="✎" />
+        android:src="@drawable/ic_edit" />
 
-    <Button
+    <ImageButton
         android:id="@+id/promptRowDelete"
-        style="?android:attr/borderlessButtonStyle"
         android:layout_width="48dp"
         android:layout_height="48dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
         android:contentDescription="@string/prompt_delete"
-        android:minWidth="48dp"
-        android:text="✕" />
+        android:src="@drawable/ic_close" />
 </LinearLayout>

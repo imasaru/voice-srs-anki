@@ -914,9 +914,9 @@ class MainActivity : AppCompatActivity() {
         RatingSuggest.apply(chipEasy, 4, sel, suggested, ringStep)
         startButton.isEnabled = true
         startButton.visibility = View.VISIBLE
-        startButton.setText(
-            if (PlaybackControl.drillButtonStops(state.drillRunning, DrillService.running)) R.string.app_stop else R.string.app_start
-        )
+        val stops = PlaybackControl.drillButtonStops(state.drillRunning, DrillService.running)
+        startButton.setText(if (stops) R.string.app_stop else R.string.app_start)
+        (startButton as? com.google.android.material.button.MaterialButton)?.icon = androidx.appcompat.content.res.AppCompatResources.getDrawable(this, if (stops) R.drawable.ic_drill_stop else R.drawable.ic_play_arrow)
         showAnswerButton?.visibility = if (controls.showAnswer) View.VISIBLE else View.GONE
         renderCue(state, drilling, silentOn)
         paintPlayback(PlaybackUi.state)
@@ -942,7 +942,7 @@ class MainActivity : AppCompatActivity() {
         if (pauseBaseTint == null) pauseBaseTint = pause.backgroundTintList
         if (pauseBaseText == null) pauseBaseText = pause.textColors
         if (PlaybackControl.pauseShowsDrillPause(snap, drilling, drillPaused)) {
-            mb?.icon = null
+            mb?.icon = androidx.appcompat.content.res.AppCompatResources.getDrawable(this, R.drawable.ic_drill_pause)
             pause.text = getString(R.string.drill_pause)
             pause.contentDescription = null
             pause.backgroundTintList = pauseBaseTint
@@ -950,7 +950,7 @@ class MainActivity : AppCompatActivity() {
         } else if (PlaybackControl.bottomShowsDrillResume(snap, drilling, drillPaused)) {
             val typed = TypedValue()
             pause.context.theme.resolveAttribute(com.google.android.material.R.attr.colorPrimary, typed, true)
-            mb?.icon = null
+            mb?.icon = androidx.appcompat.content.res.AppCompatResources.getDrawable(this, R.drawable.ic_play_arrow)
             pause.text = getString(R.string.drill_resume)
             pause.contentDescription = null
             pause.backgroundTintList = ColorStateList.valueOf(typed.data)
