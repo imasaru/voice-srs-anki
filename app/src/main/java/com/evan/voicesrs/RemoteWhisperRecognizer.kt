@@ -26,6 +26,14 @@ class RemoteWhisperRecognizer(
 ) : Recognizer {
     override val kind: EngineKind = EngineKind.WHISPER
 
+    /**
+     * h143: whether DrillService reported the comm route actually active (latch
+     * hit, not a timeout). Only when true do we pin the AudioRecord to the
+     * SCO/BLE device; otherwise leave default routing so a cleared/not-yet-active
+     * SCO link doesn't record silence.
+     */
+    @Volatile var commActive = false
+
     private val main = Handler(Looper.getMainLooper())
     private val state = AtomicInteger(IDLE)
     private var callbacks: RecognizerCallbacks? = null
@@ -76,7 +84,7 @@ class RemoteWhisperRecognizer(
         val started = SystemClock.elapsedRealtime()
         var began = false
         try {
-            ListenMic.preferred(context)?.let { rec.setPreferredDevice(it) }
+            ListenMic.preferWhen(commActive, ListenMic.preferred(context))?.let { rec.setPreferredDevice(it) }
             rec.startRecording()
             while (state.get() == RUNNING) {
                 if (maxMs > 0L && SystemClock.elapsedRealtime() - started >= maxMs) break

@@ -10,6 +10,10 @@ import android.media.AudioManager
  * Does not change [MicRoute] or [AudioRouteWatcher].
  */
 internal object ListenMic {
+    /** Only surface [dev] for setPreferredDevice when the comm route actually came up (latch hit, not timeout). */
+    fun <T> preferWhen(commActive: Boolean, dev: T?): T? =
+        if (commActive) dev else null
+
     fun preferred(context: Context): AudioDeviceInfo? {
         val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return null
         val inputs = am.getDevices(AudioManager.GET_DEVICES_INPUTS) ?: return null

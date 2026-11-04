@@ -1,11 +1,9 @@
 package com.evan.voicesrs
 
 import android.content.Context
-import android.annotation.SuppressLint
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -181,12 +179,9 @@ class AudioRouteWatcher(private val context: Context) {
         evaluate()
     }
 
-    /** Unregister the callback and clear any communication device. */
+    /** Unregister the callback. Comm-device teardown is handled by the service. */
     fun stop() {
         audioManager.unregisterAudioDeviceCallback(callback)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            audioManager.clearCommunicationDevice()
-        }
     }
 
     /** Returns whether a route change happened, and clears the flag. */
@@ -196,8 +191,7 @@ class AudioRouteWatcher(private val context: Context) {
         return did
     }
 
-    /** Android API check lives in [AudioRouteDecision.commAction], so silence NewApi here. */
-    @SuppressLint("NewApi")
+    /** Android API checks live in [AudioRouteDecision.commAction]; none remain here. */
     private fun evaluate() {
         val outputInfos =
             audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS) ?: emptyArray()
@@ -218,27 +212,6 @@ class AudioRouteWatcher(private val context: Context) {
 
         previousInput = result.chosen
         routeChanged = true
-
-        when (AudioRouteDecision.commAction(result.useCommunicationDevice, Build.VERSION.SDK_INT)) {
-            AudioRouteDecision.CommAction.SET ->
-                result.chosen?.let { matchingOutput(it, outputInfos, channel) }?.let {
-                    audioManager.setCommunicationDevice(it)
-                }
-            AudioRouteDecision.CommAction.CLEAR -> audioManager.clearCommunicationDevice()
-            AudioRouteDecision.CommAction.NONE -> Unit
-        }
     }
 
-    /**
-     * The output device matching [chosen] by type (only when it is a communication
-     * output for [channel], or in CALL mode), else any external communication output.
-     */
-    private fun matchingOutput(
-        chosen: MicRoute.AudioDev,
-        outputs: Array<AudioDeviceInfo>,
-        channel: String,
-    ): AudioDeviceInfo? =
-        outputs.firstOrNull { MicRoute.typeOf(it.type) == chosen.type &&
-            (AudioRouteDecision.isCommunicationOutput(MicRoute.typeOf(it.type), channel) || channel == Prefs.READ_ALOUD_CALL) }
-            ?: outputs.firstOrNull { AudioRouteDecision.isCommunicationOutput(MicRoute.typeOf(it.type), channel) }
 }

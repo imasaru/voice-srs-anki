@@ -481,6 +481,8 @@ class DrillService : Service(), VoiceIo {
     @Volatile private var answerListenNow = false
     // h105c: comm-device route state for answer/rating listens.
     @Volatile private var commRouteActive = false
+    /** True only when the comm-device callback acked within the wait window (not a timeout). */
+    @Volatile private var commRouteHitLatch = false
     private val commLock = Any()
     private var commActiveLatch: CountDownLatch? = null
     @Volatile private var commActiveStartedAt = 0L
@@ -1656,7 +1658,9 @@ class DrillService : Service(), VoiceIo {
             }
         }
         var reopens = 0
+        var routeReopened = false
         while (true) {
+            commRouteHitLatch = false
             if (focusPaused && !awaitFocusResume()) return null
             if (!acquireFocus()) return null
             routeMic()
@@ -1686,6 +1690,22 @@ class DrillService : Service(), VoiceIo {
             val lostInWindow = focusState.lostAt > listenStartedAt &&
                 !FocusPolicy.shouldGrade(focusState.lostAt, SystemClock.elapsedRealtime())
             if (!focusPaused && !lostInWindow) {
+                val routeChanged = routeWatcher?.consumeChange() == true
+                if (!result.isNullOrBlank() && !routeChanged) {
+                    return maybeGrade(result)
+                }
+                // A mid-listen audio-device change (e.g. a BT headset plugged in) can leave
+                // this answer/rating listen on a stale or absent route so it hears nothing.
+                // Discard the empty result and reopen once so routeMic re-routes on the new
+                // device set.
+                if (result.isNullOrBlank() &&
+                    RouteRebuild.reopenOnRouteChange(routeKind, routeChanged, routeReopened)
+                ) {
+                    routeReopened = true
+                    Log.i(TAG, "mic route: reopen after device change")
+                    finishListen(null)
+                    continue
+                }
                 return maybeGrade(result)
             }
             // A focus loss hit the answer window: drop the result, do NOT count a miss, and reopen.
@@ -1829,7 +1849,9 @@ class DrillService : Service(), VoiceIo {
             }
             Log.i(TAG, "mic route: setCommunicationDevice ON t=${SystemClock.elapsedRealtime()}")
         }
-        if (latch?.await(MicRouteTiming.TIMEOUT_MS, TimeUnit.MILLISECONDS) != true) {
+        val hit = latch?.await(MicRouteTiming.TIMEOUT_MS, TimeUnit.MILLISECONDS) == true
+        commRouteHitLatch = hit
+        if (!hit) {
             Log.i(TAG, "mic route: active timeout")
         }
         commRouteActive = true
@@ -4005,6 +4027,9 @@ class DrillService : Service(), VoiceIo {
             return
         }
         val callbacks = SpeechListener(session, recognizerGen, epoch, started)
+        // Only pin the Whisper AudioRecord to the SCO/BLE device when the comm route
+        // actually came up (latch hit, not a timeout); otherwise leave default routing.
+        if (started is RemoteWhisperRecognizer) started.commActive = commRouteHitLatch
         try {
             started.start(callbacks, listenWaitMs, listenSilence)
             Log.i(TAG, "startListening")
