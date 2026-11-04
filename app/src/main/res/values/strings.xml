@@ -63,6 +63,9 @@
     <string name="settings_answer_silence_value">%1$d s</string>
     <string name="settings_answer_silence_help">Silence allowed while you think, mid-answer</string>
     <string name="heard_noise_listening">Heard noise, still listening</string>
+    <string name="settings_ignore_fillers">Ignore filler words</string>
+    <string name="settings_ignore_fillers_summary">Treat a reply that is only one of these words as silence</string>
+    <string name="settings_filler_add_hint">Add a word or phrase</string>
     <string name="settings_listen_attempts">Listen attempts</string>
     <string name="settings_listen_attempts_help">Missed listens allowed before switching to silent.</string>
     <string name="settings_think_time">Think time</string>

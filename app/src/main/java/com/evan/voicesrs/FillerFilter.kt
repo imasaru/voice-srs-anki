@@ -39,4 +39,14 @@ object FillerFilter {
         }
         return if (seen.isEmpty()) DEFAULT_PHRASES else seen.toList()
     }
+
+    fun add(phrases: List<String>, phrase: String): List<String> {
+        val n = normalize(phrase)
+        if (n.isEmpty() || n in phrases.map(::normalize)) return phrases
+        return phrases + n
+    }
+    fun remove(phrases: List<String>, phrase: String): List<String> {
+        val n = normalize(phrase)
+        return phrases.filter { normalize(it) != n }
+    }
 }

@@ -132,6 +132,9 @@ class SettingsActivity : AppCompatActivity() {
         val endSilenceView: MaterialAutoCompleteTextView = findViewById(R.id.endSilenceInput)
         val answerSilenceValue: TextView = findViewById(R.id.answerSilenceValue)
         val answerSilenceSlider: Slider = findViewById(R.id.answerSilenceSlider)
+        val ignoreFillersSwitch: MaterialSwitch = findViewById(R.id.ignoreFillersSwitch)
+        val fillerChips: ChipGroup = findViewById(R.id.fillerChips)
+        val fillerAddInput: TextInputEditText = findViewById(R.id.fillerAddInput)
         val listenAttemptsView: MaterialAutoCompleteTextView = findViewById(R.id.listenAttemptsInput)
         val thinkTimeView: MaterialAutoCompleteTextView = findViewById(R.id.thinkTimeInput)
 
@@ -404,6 +407,42 @@ class SettingsActivity : AppCompatActivity() {
                 persist { it.copy(answerSilenceSec = sec) }
             }
         })
+        // h142u: filler words that count as silence on an answer listen.
+        var fillerPhrases = held.fillerPhrases
+        ignoreFillersSwitch.isChecked = held.ignoreFillers
+        fun showFillers() {
+            val on = ignoreFillersSwitch.isChecked
+            fillerChips.removeAllViews()
+            for (p in fillerPhrases) {
+                fillerChips.addView(Chip(this).apply {
+                    text = p
+                    isCloseIconVisible = true
+                    isEnabled = on
+                    setOnCloseIconClickListener {
+                        fillerPhrases = FillerFilter.remove(fillerPhrases, p)
+                        persist { it.copy(fillerPhrases = fillerPhrases) }
+                        showFillers()
+                    }
+                })
+            }
+            fillerAddInput.isEnabled = on
+        }
+        showFillers()
+        ignoreFillersSwitch.setOnCheckedChangeListener { _, checked ->
+            persist { it.copy(ignoreFillers = checked) }
+            showFillers()
+        }
+        fillerAddInput.setOnEditorActionListener { v, actionId, _ ->
+            if (actionId != EditorInfo.IME_ACTION_DONE) return@setOnEditorActionListener false
+            val next = FillerFilter.add(fillerPhrases, v.text?.toString().orEmpty())
+            if (next != fillerPhrases) {
+                fillerPhrases = next
+                persist { it.copy(fillerPhrases = fillerPhrases) }
+                showFillers()
+            }
+            fillerAddInput.setText("")
+            true
+        }
         val attemptLabels = (ListenWindow.MIN_ATTEMPTS..ListenWindow.MAX_ATTEMPTS).map { it.toString() }
         bindChoices(
             listenAttemptsView,
