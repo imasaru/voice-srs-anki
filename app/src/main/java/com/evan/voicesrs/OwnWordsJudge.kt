@@ -356,7 +356,7 @@ object OwnWordsJudge {
     }
 
     /** h107b2: fillers and drill commands are not answers, so the judge never sees them. */
-    private val NON_ANSWERS = setOf("um", "uh", "hmm", "er", "again", "repeat", "skip", "pass")
+    private val NON_ANSWERS = FillerFilter.HESITATIONS + setOf("again", "repeat", "skip", "pass")
 
     fun isNonAnswer(transcript: String): Boolean {
         val t = transcript.trim().lowercase().replace(Regex("[.!?,]+"), "").replace(Regex("\\s+"), " ")

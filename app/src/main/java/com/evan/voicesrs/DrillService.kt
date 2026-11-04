@@ -472,6 +472,10 @@ class DrillService : Service(), VoiceIo {
     @Volatile private var configuredSilenceMs = ListenWindow.DEFAULT_SILENCE_MS
     /** h141: answer-listen silence cutoff (seconds) from the settings snapshot at session start. */
     @Volatile private var answerSilenceSec = ListenWindow.DEFAULT_ANSWER_SILENCE_SEC
+    /** h142a: whether a filler-only answer transcript ("huh", configured phrases) is ignored. */
+    @Volatile private var ignoreFillers = true
+    /** h142a: transcripts treated as noise when [ignoreFillers] is on. */
+    @Volatile private var fillerPhrases: List<String> = FillerFilter.DEFAULT_PHRASES
     /** h105b: the current listen is an answer listen (holds for the answer-listen
      *  floor). Set by [captureListen]; read by [beginListenOnMain]. */
     @Volatile private var answerListenNow = false
@@ -941,6 +945,8 @@ class DrillService : Service(), VoiceIo {
             explainSession = ExplainSession.start(this, cfg)
             configuredSilenceMs = ListenWindow.normalizeSilenceMs(cfg.endSilenceMs)
             answerSilenceSec = ListenWindow.normalizeAnswerSilenceSec(cfg.answerSilenceSec)
+            ignoreFillers = cfg.ignoreFillers
+            fillerPhrases = cfg.fillerPhrases
             refreshNeuralHealth(cfg, force = true)
             refreshAsr(cfg)
             DrillUi.update {
@@ -4259,6 +4265,14 @@ class DrillService : Service(), VoiceIo {
             if (!current()) return
             if (!errorGate.compareAndSet(false, true)) return
             logGoogleNBest("final", nbest)
+            // h142a: a filler-only answer ("huh") is noise; listen again like a silence restart (no attempt charged).
+            if (answerListenNow && nbest.any { it.isNotBlank() } &&
+                nbest.filter { it.isNotBlank() }.all { FillerFilter.isFiller(it, ignoreFillers, fillerPhrases) }) {
+                Log.i(TAG, "Filler ignored")
+                postStatusNotice(getString(R.string.heard_noise_listening))
+                restartSilenceListen(session)
+                return
+            }
             val raw = nbest
             lastFinals = raw.map { it.trim() }.filter { it.isNotEmpty() }
             ownListen?.let { ow ->

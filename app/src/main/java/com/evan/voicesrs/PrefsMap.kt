@@ -24,6 +24,8 @@ object PrefsMap {
         "listen_wait_sec" to 0,
         "end_silence_ms" to 0,
         "answer_silence_sec" to 0,
+        "ignore_fillers" to false,
+        "filler_phrases" to "",
         "listen_attempts" to 0,
         "think_time_sec" to 0,
         "show_card" to false,

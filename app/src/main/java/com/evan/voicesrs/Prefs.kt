@@ -30,6 +30,12 @@ data class AnkiConfig(
     val endSilenceMs: Int = ListenWindow.DEFAULT_SILENCE_MS,
     /** h141: silence before an answer listen ends, in seconds. 1–10, default 4 (today's floor). */
     val answerSilenceSec: Int = ListenWindow.DEFAULT_ANSWER_SILENCE_SEC,
+    /** h142a: when true, a filler-only answer transcript ("huh", configured phrases) is ignored
+     *  and the answer listen restarts, like a silence restart, with no attempt charged. */
+    val ignoreFillers: Boolean = true,
+    /** h142a: transcripts that match one of these (whole-transcript) are treated as noise when
+     *  [ignoreFillers] is on. Encoded with newline separators in [Prefs.write]. */
+    val fillerPhrases: List<String> = FillerFilter.DEFAULT_PHRASES,
     /** How many times to listen for an answer or a grade before auto-silent. 1–5, default 3. */
     val listenAttempts: Int = ListenWindow.DEFAULT_ATTEMPTS,
     /** Seconds to think before the answer is read. 0 is Off. Default 20. Not used in Silent mode. */
@@ -118,6 +124,8 @@ object Prefs {
     private const val KEY_LISTEN_WAIT_SEC = "listen_wait_sec"
     private const val KEY_END_SILENCE_MS = "end_silence_ms"
     private const val KEY_ANSWER_SILENCE_SEC = "answer_silence_sec"
+    private const val KEY_IGNORE_FILLERS = "ignore_fillers"
+    private const val KEY_FILLER_PHRASES = "filler_phrases"
     private const val KEY_RELISTEN_ONCE = "relisten_once"
     private const val KEY_LISTEN_ATTEMPTS = "listen_attempts"
     private const val KEY_THINK_TIME_SEC = "think_time_sec"
@@ -243,6 +251,8 @@ object Prefs {
             .putInt(KEY_LISTEN_WAIT_SEC, ListenWindow.normalizeWaitSec(cfg.listenWaitSec))
             .putInt(KEY_END_SILENCE_MS, ListenWindow.normalizeSilenceMs(cfg.endSilenceMs))
             .putInt(KEY_ANSWER_SILENCE_SEC, ListenWindow.normalizeAnswerSilenceSec(cfg.answerSilenceSec))
+            .putBoolean(KEY_IGNORE_FILLERS, cfg.ignoreFillers)
+            .putString(KEY_FILLER_PHRASES, FillerFilter.encode(cfg.fillerPhrases))
             .putInt(KEY_LISTEN_ATTEMPTS, ListenWindow.clampAttempts(cfg.listenAttempts))
             .putInt(KEY_THINK_TIME_SEC, ThinkTime.normalize(cfg.thinkTimeSec))
             .remove(KEY_RELISTEN_ONCE)
@@ -456,6 +466,8 @@ object Prefs {
             answerSilenceSec = ListenWindow.normalizeAnswerSilenceSec(
                 p.getInt(KEY_ANSWER_SILENCE_SEC, ListenWindow.DEFAULT_ANSWER_SILENCE_SEC)
             ),
+            ignoreFillers = p.getBoolean(KEY_IGNORE_FILLERS, true),
+            fillerPhrases = FillerFilter.decode(p.getString(KEY_FILLER_PHRASES, null)),
             listenAttempts = ListenWindow.migrateAttempts(
                 stored = if (p.contains(KEY_LISTEN_ATTEMPTS)) {
                     p.getInt(KEY_LISTEN_ATTEMPTS, ListenWindow.DEFAULT_ATTEMPTS)

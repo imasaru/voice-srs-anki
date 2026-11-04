@@ -62,9 +62,9 @@ object GradeMapper {
         "a", "an", "the", "that", "this", "was", "is", "it", "its", "it's",
         "please", "pretty", "very", "so", "really", "just", "i", "id", "i'd",
         "think", "mark", "rate", "give", "me", "my", "to", "for", "of", "and",
-        "too", "kinda", "kind", "um", "uh", "card", "say", "like", "well", "got",
+        "too", "kinda", "kind", "card", "say", "like", "well", "got",
         "ive", "i've", "yeah"
-    )
+    ) + FillerFilter.HESITATIONS
 
     private val EASE = mapOf(
         "again" to 1, "agen" to 1, "agin" to 1,
