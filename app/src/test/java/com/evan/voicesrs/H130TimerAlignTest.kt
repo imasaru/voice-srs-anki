@@ -75,4 +75,15 @@ class H130TimerAlignTest {
             assertEquals(lift, (label.layoutParams as ViewGroup.MarginLayoutParams).topMargin)
         }
     }
+
+    /** h134: with iconGravity start + padding 11dp the Fold3 drew the icon ~6dp right of the 28dp circle
+     *  centre; textStart + zero padding centres it on a text-less button. */
+    @Test fun `toggle icons are centred in their circles`() {
+        val r = row()
+        for (id in listOf(R.id.timerGoalChip, R.id.voiceChip)) {
+            val b = r.findViewById<com.google.android.material.button.MaterialButton>(id)
+            assertEquals(com.google.android.material.button.MaterialButton.ICON_GRAVITY_TEXT_START, b.iconGravity)
+            assertEquals(b.paddingLeft, b.paddingRight); assertEquals(0, b.iconPadding)
+        }
+    }
 }
