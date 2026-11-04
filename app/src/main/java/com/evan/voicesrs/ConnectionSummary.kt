@@ -14,16 +14,16 @@ object ConnectionSummary {
 
     fun ankiOk(version: Int, deckCount: Int, deck: String, label: String): String {
         val leaf = DeckName.split(deck).second.ifBlank { deck.trim() }
-        return "✓ Connected · AnkiConnect v$version · $deckCount decks · '$leaf': $label"
+        return "Connected · AnkiConnect v$version · $deckCount decks · '$leaf': $label"
     }
 
     fun aiOk(model: String, elapsedMs: Long, reply: String): String {
         val seconds = String.format(Locale.US, "%.1f", elapsedMs / 1000.0)
         val shown = reply.trim().replace(Regex("\\s+"), " ")
-        return "✓ $model replied in $seconds s: \"$shown\""
+        return "$model replied in $seconds s: \"$shown\""
     }
 
-    fun failure(error: Throwable): String = "✗ ${shortReason(error)}"
+    fun failure(error: Throwable): String = "Failed: ${shortReason(error)}"
 
     fun shortReason(error: Throwable): String {
         if (error is AiHttpException) return "HTTP ${error.code}"
@@ -36,5 +36,12 @@ object ConnectionSummary {
             .substringBefore("\tat")
             .trim()
         return line.take(160).ifBlank { "Connection failed" }
+    }
+
+    /** Start icon for a test result: check on success, error on failure, none (0) while testing. */
+    fun icon(ok: Boolean?): Int = when (ok) {
+        true -> R.drawable.ic_check_circle
+        false -> R.drawable.ic_error
+        null -> 0
     }
 }

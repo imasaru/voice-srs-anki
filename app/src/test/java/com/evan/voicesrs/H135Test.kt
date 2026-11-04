@@ -31,7 +31,7 @@ class H135Test {
         }
         assertTrue(
             "SettingsActivity.kt should short-circuit a blank connection URL",
-            settings.contains("if (url.isBlank()) { testResultView.text = getString(R.string.settings_url_missing)")
+            settings.contains("if (url.isBlank()) { showResult(testResultView, getString(R.string.settings_url_missing), false)")
         )
     }
 }

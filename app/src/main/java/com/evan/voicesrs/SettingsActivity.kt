@@ -1089,6 +1089,7 @@ class SettingsActivity : AppCompatActivity() {
             aiTestResult.text = getString(R.string.settings_ai_testing)
             Thread {
                 val client = AiClient()
+                var allOk = true
                 val lines = targets.map { t ->
                     val body = try {
                         when (t.kind) {
@@ -1121,6 +1122,7 @@ class SettingsActivity : AppCompatActivity() {
                             }
                         }
                     } catch (e: Exception) {
+                        allOk = false
                         ConnectionSummary.failure(e)
                     }
                     ModelTestTargets.line(t.kind, body)
@@ -1129,7 +1131,7 @@ class SettingsActivity : AppCompatActivity() {
                 runOnUiThread {
                     if (destroyed) return@runOnUiThread
                     button.isEnabled = true
-                    aiTestResult.text = message
+                    showResult(aiTestResult, message, allOk)
                 }
             }.start()
         }
@@ -1157,7 +1159,7 @@ class SettingsActivity : AppCompatActivity() {
         testResultView = findViewById(R.id.testResultView)
         findViewById<Button>(R.id.testConnectionButton).setOnClickListener {
             val url = urlView.text.toString().trim()
-            if (url.isBlank()) { testResultView.text = getString(R.string.settings_url_missing); return@setOnClickListener }
+            if (url.isBlank()) { showResult(testResultView, getString(R.string.settings_url_missing), false); return@setOnClickListener }
             val key = keyView.text.toString().trim().ifBlank { held.apiKey }
             val deck = deckView.text.toString().trim().ifBlank { Prefs.DEFAULT_DECK }
             runConnectionCheck(url, key, deck)
@@ -1346,15 +1348,22 @@ class SettingsActivity : AppCompatActivity() {
         Snackbar.make(root, R.string.settings_saved, Snackbar.LENGTH_SHORT).show()
     }
 
+    private fun showResult(view: TextView, text: CharSequence, ok: Boolean?) {
+        view.text = text
+        view.setCompoundDrawablesRelativeWithIntrinsicBounds(ConnectionSummary.icon(ok), 0, 0, 0)
+        view.compoundDrawablePadding = (6 * resources.displayMetrics.density).toInt()
+    }
+
     private fun runConnectionCheck(url: String, key: String, deck: String) {
         if (destroyed || !::testResultView.isInitialized) return
         val gen = ++checkGen
-        testResultView.text = "Testing…"
+        showResult(testResultView, "Testing…", null)
         if (key.isBlank()) {
-            testResultView.text = getString(R.string.settings_key_missing)
+            showResult(testResultView, getString(R.string.settings_key_missing), false)
             return
         }
         Thread {
+            var ok = true
             val text = try {
                 val anki = AnkiConnect(url, key)
                 val version = anki.version()
@@ -1362,11 +1371,12 @@ class SettingsActivity : AppCompatActivity() {
                 val counts = anki.dueCounts(deck)
                 ConnectionSummary.ankiOk(version, decks.size, deck, DueSplit.label(counts))
             } catch (e: Exception) {
+                ok = false
                 ConnectionSummary.failure(e)
             }
             runOnUiThread {
                 if (destroyed || gen != checkGen) return@runOnUiThread
-                testResultView.text = text
+                showResult(testResultView, text, ok)
             }
         }.start()
     }
