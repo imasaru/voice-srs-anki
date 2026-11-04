@@ -79,9 +79,10 @@ object ReviewLog {
 
     /**
      * Append after a grade. [ease] null means the card was not graded, and
-     * nothing is recorded. A cache hit is [ExplState.Ready] with unread false.
-     * A miss is [ExplState.Queued], also unread false: the badge arrives only
-     * when a fresh generation finishes.
+     * nothing is recorded. A grade outside the auto-explain set is [ExplState.None]
+     * even on a cache hit (h140). Otherwise a cache hit is [ExplState.Ready] with
+     * unread false; a miss is [ExplState.Queued], also unread false: the badge
+     * arrives only when a fresh generation finishes.
      */
     fun appendAfterGrade(
         ease: Int?,
@@ -101,9 +102,9 @@ object ReviewLog {
         if (ease == null) return null
         val explanation = when {
             !aiEnabled -> ExplState.None
+            !autoExplain -> ExplState.None
             cachedText != null -> ExplState.Ready(cachedText, cached = true)
-            autoExplain -> ExplState.Queued
-            else -> ExplState.None
+            else -> ExplState.Queued
         }
         val judgeReason = JudgeNote.take(cardId, ease)
         val turn = synchronized(lock) {

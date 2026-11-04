@@ -143,7 +143,7 @@ class ExplainSession private constructor(
         attachThread(turn)
         mergeLiveAsks(turn)
         if (!cfg.aiEnabled) return
-        if (cached != null) {
+        if (cached != null && auto) {
             ExplainLog.ready(turn.turnId, cached = true)
             return
         }
