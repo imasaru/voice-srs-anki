@@ -163,7 +163,7 @@ class AudioRouteWatcher(private val context: Context) {
 
     /** Set true when [evaluate] decides the route changed; cleared by [consumeChange]. */
     @Volatile
-    @Volatile var routeChanged = false
+    var routeChanged = false
         private set
 
     private var previousInput: MicRoute.AudioDev? = null
