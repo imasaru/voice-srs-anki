@@ -20,8 +20,7 @@ object AiDiag {
     /** "Class: message", message one line, Bearer/key values redacted, clipped to MSG_MAX. */
     fun error(e: Throwable): String {
         val oneLine = (e.message ?: "").replace('\r', ' ').replace('\n', ' ')
-        val redacted =
-            Regex("(?i)(bearer\\s+|api[_-]?key[=:]\\s*|key=)\\S+").replace(oneLine) { "$1***" }
+        val redacted = LogMask.mask(oneLine)
         val clipped = redacted.take(MSG_MAX)
         return if (clipped.isEmpty()) e.javaClass.simpleName else "${e.javaClass.simpleName}: $clipped"
     }

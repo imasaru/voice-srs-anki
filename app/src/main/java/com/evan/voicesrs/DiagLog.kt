@@ -25,7 +25,7 @@ object DiagLog {
         for ((k, v) in kv) {
             sb.append(' ').append(k).append('=').append(value(v))
         }
-        return sb.toString()
+        return LogMask.mask(sb.toString())
     }
 
     /** null -> NONE. Escape \ as \\, newline as \n, carriage return as \r, " as \". Wrap in double quotes if the escaped text is empty or contains a space or a double quote. */
