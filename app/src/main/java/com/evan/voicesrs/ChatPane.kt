@@ -276,7 +276,7 @@ class ChatPane(
             embedControls,
             liveFollows,
             asks = GeneralChat.snapshot(),
-            notice = GeneralChat.notice(),
+            notice = DrillNotice.chatNotice(GeneralChat.notice(), DrillUi.state),
             history = ChatHistoryStore.snapshot()
         ).map { row ->
             if (row is ChatRow.Live && !showCard) row.copy(revealText = false) else row

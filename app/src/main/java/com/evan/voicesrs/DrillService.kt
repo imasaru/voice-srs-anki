@@ -2026,6 +2026,7 @@ class DrillService : Service(), VoiceIo {
         val say = SkipQueue.say(n, speedMode)
         speak(say)
         postStatusNotice(say)
+        runCatching { DrillUi.update { it.copy(skipNotice = say, skipNoticeOrdinal = it.questionOrdinal) } }
         runCatching { anki.guiShowAnswer() }
         if (card.cardId <= 0L) return
         val skipped = store.readSkipped().toMutableList()
@@ -2275,6 +2276,7 @@ class DrillService : Service(), VoiceIo {
                     val say = SkipQueue.say(n, cfg.speedMode)
                     speak(say)
                     postStatusNotice(say)
+                    runCatching { DrillUi.update { it.copy(skipNotice = say, skipNoticeOrdinal = it.questionOrdinal) } }
                     val drop = n > SkipQueue.MAX_SKIPS_PER_CARD + 1
                     if (!drop) queue.add(if (n <= SkipQueue.MAX_SKIPS_PER_CARD) SkipQueue.insertAt(index + 1, queue.size) else queue.size, card)
                     queue.removeAt(index)
