@@ -477,6 +477,14 @@ class SettingsActivity : AppCompatActivity() {
             }
             persist { it.copy(speechEngine = choice) }
         }
+        // h156a: Read aloud over Media / Call (Prefs.readAloudChannel)
+        val readAloudGroup: MaterialButtonToggleGroup = findViewById(R.id.readAloudChannelGroup)
+        readAloudGroup.check(if (held.readAloudChannel == Prefs.READ_ALOUD_CALL) R.id.readAloudCall else R.id.readAloudMedia)
+        readAloudGroup.addOnButtonCheckedListener { _, id, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            val ch = if (id == R.id.readAloudCall) Prefs.READ_ALOUD_CALL else Prefs.READ_ALOUD_MEDIA
+            persist { it.copy(readAloudChannel = ch) }
+        }
         offlineSwitch.isChecked = held.offlineBatch
         batchSizeView.setText(held.offlineBatchSize.toString())
         val goalLabels = listOf(

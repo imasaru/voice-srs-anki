@@ -46,6 +46,10 @@
     <string name="settings_engine_vosk">Vosk</string>
     <string name="settings_engine_google">Google</string>
     <string name="settings_speech_engine_help">Auto uses the speech server when set and reachable, then offline Vosk, then Google.</string>
+    <string name="settings_read_aloud_over">Read aloud over</string>
+    <string name="settings_read_aloud_media">Media</string>
+    <string name="settings_read_aloud_call">Call</string>
+    <string name="settings_read_aloud_help">Classic Bluetooth only. Media plays read-aloud as media audio and listens on the phone mic. Call uses hands-free call audio and the car or headset mic.</string>
     <string name="settings_asr_url">Speech server URL</string>
     <string name="settings_asr_url_help">Whisper server for Auto and Whisper. Blank = none: Auto uses Vosk if its model is already downloaded, else Google. Uses the Neural token.</string>
     <string name="settings_asr_add_server">+ Add server…</string>
