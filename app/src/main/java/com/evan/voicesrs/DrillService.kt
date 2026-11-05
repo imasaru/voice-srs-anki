@@ -2619,16 +2619,31 @@ class DrillService : Service(), VoiceIo {
                         speakAnswer = true
                         continue
                     } catch (_: ListenGaveUp) {
-                        if (!askSilentFirst(listenWaitMs)) {
-                            // Item 36: "no" keeps voice; listen for the rating again.
-                            if (!stopRequested.get() && !destroyed) speak(SilentAsk.KEEP_VOICE)
-                            speakAnswer = false
-                            continue
+                        when (askSilentFirst(listenWaitMs)) {
+                            SilentAsk.Action.KEEP_VOICE -> {
+                                // Item 36: "no" keeps voice; listen for the rating again.
+                                if (!stopRequested.get() && !destroyed) speak(SilentAsk.KEEP_VOICE)
+                                speakAnswer = false
+                                continue
+                            }
+                            SilentAsk.Action.RATE_AGAIN -> {
+                                // Item 62: "rate again" grades the card Again (ease 1).
+                                if (!stopRequested.get() && !destroyed) speak(SilentAsk.MARKED_AGAIN)
+                                return CardStep.Graded(
+                                    1,
+                                    ThinkTime.answerDurationMs(presentedAt, SystemClock.elapsedRealtime()),
+                                    transcript,
+                                    answerHtml,
+                                    questionForGrade
+                                )
+                            }
+                            SilentAsk.Action.GO_SILENT -> {
+                                // No ease. Silent stays on this card with the rating buttons.
+                                giveUpToSilent()
+                                speakAnswer = true
+                                continue
+                            }
                         }
-                        // No ease. Silent stays on this card with the rating buttons.
-                        giveUpToSilent()
-                        speakAnswer = true
-                        continue
                     } catch (_: SkipRequested) {
                         return CardStep.Skipped
                     } catch (_: PauseRequested) {
@@ -3546,11 +3561,11 @@ class DrillService : Service(), VoiceIo {
         }
     }
 
-    /** Item 36: ask aloud before auto-silent. True = go silent (yes, no reply, or not understood). */
-    private fun askSilentFirst(listenWaitMs: Long): Boolean {
-        if (stopRequested.get() || destroyed || sessionSilent) return true
+    /** Item 36 + item 62: ask aloud before auto-silent. Returns what to do (go silent, keep voice, or rate Again). */
+    private fun askSilentFirst(listenWaitMs: Long): SilentAsk.Action {
+        if (stopRequested.get() || destroyed || sessionSilent) return SilentAsk.Action.GO_SILENT
         speak(SilentAsk.QUESTION)
-        if (stopRequested.get() || destroyed) return true
+        if (stopRequested.get() || destroyed) return SilentAsk.Action.GO_SILENT
         val heard = try {
             captureListen(listenWaitMs)
         } catch (e: InterruptedException) {
@@ -3561,7 +3576,7 @@ class DrillService : Service(), VoiceIo {
         }
         val reply = SilentAsk.parse(heard)
         Log.i(TAG, "silent ask reply=$reply")
-        return SilentAsk.goSilent(reply)
+        return SilentAsk.action(reply)
     }
 
     /**
