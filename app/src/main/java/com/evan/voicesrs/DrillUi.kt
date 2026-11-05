@@ -46,6 +46,10 @@ data class DrillUiState(
     val questionOrdinal: Int = 0,
     /** Anki card id of the live question. Zero when no card is up. */
     val cardId: Long = 0L,
+    /** h155a: last skip notice ("Skipped." etc.); blank when none. */
+    val skipNotice: String = "",
+    /** h155a: questionOrdinal of the card that was skipped. */
+    val skipNoticeOrdinal: Int = 0,
     /** Wall clock when this drill session started. Shuffle seeds use it. */
     val sessionStartedMs: Long = 0L,
     /** Goal-clock base for the elapsed chip; mirrors the service's [started] (SystemClock.elapsedRealtime). */

@@ -41,4 +41,17 @@ object DrillNotice {
     fun route(@Suppress("UNUSED_PARAMETER") notice: String): Sink = Sink.STATUS
 
     fun sink(): Sink = Sink.STATUS
+
+    /**
+     * h155a: text for the chat notice row. A general chat notice wins. Otherwise the
+     * skip notice shows while the drill runs, on the skipped card and the next one.
+     */
+    fun chatNotice(general: String?, state: DrillUiState): String? {
+        val g = general?.trim().orEmpty()
+        if (g.isNotEmpty()) return g
+        val skip = state.skipNotice.trim()
+        if (!state.drillRunning || skip.isEmpty()) return null
+        val ord = state.questionOrdinal
+        return if (ord >= state.skipNoticeOrdinal && ord <= state.skipNoticeOrdinal + 1) skip else null
+    }
 }
