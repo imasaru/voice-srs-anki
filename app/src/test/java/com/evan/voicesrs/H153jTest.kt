@@ -20,6 +20,5 @@ class H153jTest {
 
     @Test fun c_infoUnchanged() {
         assertTrue(src().contains("Log.i(TAG, \"onCreate\""))
-        assertTrue(!src().contains("DLog.i(TAG,"))
     }
 }

@@ -145,7 +145,7 @@ class DrillService : Service(), VoiceIo {
             synchronized(gradeGate) {
                 val claimed = gradeGate.tryClaim(ease)
                 if (!claimed) {
-                    Log.i(TAG, "TEST_GRADE ignored: no open card or already graded")
+                    DLog.i(TAG, "TEST_GRADE ignored: no open card or already graded")
                     return
                 }
                 runCatching { DrillUi.update { it.copy(selectedEase = ease) } }
@@ -157,14 +157,14 @@ class DrillService : Service(), VoiceIo {
             // Voice and silent: a rating tap cuts TTS and the open microphone, then grades.
             val svc = active
             svc?.interruptSpeech()
-            Log.i(TAG, "tap interrupt speech")
+            DLog.i(TAG, "tap interrupt speech")
             svc?.releaseSilentGradeWait()
             if (svc != null && svc.deliverQueuedTap(word)) {
-                Log.i(TAG, "TEST_GRADE delivered: $word")
+                DLog.i(TAG, "TEST_GRADE delivered: $word")
                 return
             }
             svc?.finishListen(null)
-            Log.i(TAG, "TEST_GRADE queued: $word")
+            DLog.i(TAG, "TEST_GRADE queued: $word")
         }
 
         /** Card tap: cut TTS without grading. */
@@ -177,16 +177,16 @@ class DrillService : Service(), VoiceIo {
         fun submitShowAnswer() {
             val svc = active
             if (svc == null || gradeGate.isRevealed()) {
-                Log.i(TAG, "show answer ignored")
+                DLog.i(TAG, "show answer ignored")
                 return
             }
             if (svc.chatPaused.get()) {
-                Log.i(TAG, "show answer ignored: paused for chat")
+                DLog.i(TAG, "show answer ignored: paused for chat")
                 return
             }
             // The next question is held above the fold. Do not reveal it until it is on screen.
             if (svc.screenAttached && svc.shownOrdinal > 0 && svc.screenReadyOrdinal != svc.shownOrdinal) {
-                Log.i(TAG, "show answer ignored: next question held")
+                DLog.i(TAG, "show answer ignored: next question held")
                 return
             }
             svc.releaseShowAnswer()
@@ -507,7 +507,7 @@ class DrillService : Service(), VoiceIo {
 
     override fun onCreate() {
         super.onCreate()
-        Log.i(TAG, "onCreate")
+        DLog.i(TAG, "onCreate")
         runCatching { AnswerTimeLog.init(filesDir) }
         pendingGrades.clear()
         active = this
@@ -585,7 +585,7 @@ class DrillService : Service(), VoiceIo {
         engine.setSpeechRate(rate)
         val voiceName = cfg.ttsVoice.trim()
         if (voiceName.isEmpty()) {
-            Log.i(TAG, "TTS rate=$rate voice=system default")
+            DLog.i(TAG, "TTS rate=$rate voice=system default")
             return
         }
         val match = try {
@@ -596,7 +596,7 @@ class DrillService : Service(), VoiceIo {
         }
         if (match == null) {
             DLog.w(TAG, "TTS voice not in engine; using system default")
-            Log.i(TAG, "TTS rate=$rate voice=system default")
+            DLog.i(TAG, "TTS rate=$rate voice=system default")
             return
         }
         val rc = try {
@@ -605,11 +605,11 @@ class DrillService : Service(), VoiceIo {
             DLog.w(TAG, "TTS setVoice failed", e)
             TextToSpeech.ERROR
         }
-        Log.i(TAG, "TTS rate=$rate voiceSet=$rc")
+        DLog.i(TAG, "TTS rate=$rate voiceSet=$rc")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.i(TAG, "onStartCommand action=" + intent?.action)
+        DLog.i(TAG, "onStartCommand action=" + intent?.action)
         if (intent?.action == ACTION_STOP) {
             pendingRestart.set(false)
             requestStop()
@@ -625,14 +625,14 @@ class DrillService : Service(), VoiceIo {
                     speakLatch?.countDown()
                     try { tts?.stop() } catch (_: Exception) {}
                     sessionThread?.interrupt()
-                    Log.i(TAG, "retry: restarting session")
+                    DLog.i(TAG, "retry: restarting session")
                     true
                 } else {
                     false
                 }
             }
             if (restarting) return START_NOT_STICKY
-            Log.i(TAG, "retry: no session, starting")
+            DLog.i(TAG, "retry: no session, starting")
         }
         // Main-thread service starts are serialized. Snapshot only when a new session will start,
         // so a settings change during a running drill waits until the next session.
@@ -746,7 +746,7 @@ class DrillService : Service(), VoiceIo {
         }
         val notif = notifBuilder.build()
         val mode = SilentPolicy.of(sessionSilent)
-        Log.i(TAG, "fgs type=${mode.fgsType.logName}")
+        DLog.i(TAG, "fgs type=${mode.fgsType.logName}")
         if (mode.fgsType == FgsType.MEDIA_PLAYBACK && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         } else if (Build.VERSION.SDK_INT >= 34) {
@@ -907,9 +907,9 @@ class DrillService : Service(), VoiceIo {
         neuralHealthKnown = true
         neuralBlocked = !ok
         if (NeuralTts.sessionEngine(preferred, ok) == EngineChoice.NEURAL) {
-            Log.i(TAG, "neural health ok")
+            DLog.i(TAG, "neural health ok")
         } else {
-            Log.i(TAG, "neural health fail")
+            DLog.i(TAG, "neural health fail")
         }
     }
 
@@ -925,12 +925,12 @@ class DrillService : Service(), VoiceIo {
             pendingRestart.set(false)
             runSessionOnce()
             if (!pendingRestart.get() || destroyed) break
-            Log.i(TAG, "retry: new session")
+            DLog.i(TAG, "retry: new session")
         }
     }
 
     private fun runSessionOnce() {
-        Log.i(TAG, "runSession start")
+        DLog.i(TAG, "runSession start")
         micWarned = false
         listenHealth.reset()
         listenFault = false
@@ -943,7 +943,7 @@ class DrillService : Service(), VoiceIo {
         sessionStartedMs = System.currentTimeMillis()
         cardCid.newSession()
         DiagLog.log("DRILL", "SESSION start", listOf("cid" to cardCid.current()))
-        if (sessionSilent) Log.i(TAG, "silent mode: mic disabled")
+        if (sessionSilent) DLog.i(TAG, "silent mode: mic disabled")
         if (stopRequested.get()) return
         if (!sessionSilent) initRecognizerOnMain()
         publishDrillRunning(true)
@@ -990,12 +990,12 @@ class DrillService : Service(), VoiceIo {
             val report = anki.preflight(cfg.deck)
             if (!report.ok) {
                 if (cfg.offlineBatch && store.hasBatch()) {
-                    Log.i(TAG, "preflight failed; drilling saved batch")
+                    DLog.i(TAG, "preflight failed; drilling saved batch")
                     announceRecognition()
                     speak("Anki is offline. Drilling saved cards.")
                     runOffline(cfg, anki, store, store.readBatch(), ankiUp = false)
                 } else {
-                    Log.i(TAG, "preflight failed")
+                    DLog.i(TAG, "preflight failed")
                     showFailure(report.message)
                     speak(report.message)
                 }
@@ -1028,7 +1028,7 @@ class DrillService : Service(), VoiceIo {
                 runOnline(cfg, anki, store)
             }
         } catch (e: InterruptedException) {
-            Log.i(TAG, "session interrupted")
+            DLog.i(TAG, "session interrupted")
             Thread.currentThread().interrupt()
         } catch (e: MicDeadException) {
             // Silence and no-match do not throw this. If it still surfaces, do not
@@ -1272,12 +1272,12 @@ class DrillService : Service(), VoiceIo {
                 false
             }
             if (granted) {
-                Log.i(TAG, "audiofocus granted")
+                DLog.i(TAG, "audiofocus granted")
                 // h90 review: we hold focus again, so an old loss must not poison later listens.
                 if (!focusPaused) { focusState.transientLoss = false; focusState.lostAt = 0L }
                 return true
             }
-            Log.i(TAG, "audiofocus refused; retry")
+            DLog.i(TAG, "audiofocus refused; retry")
             if (!sleepQuiet(FocusPolicy.RESUME_DELAY_MS)) return false
         }
         return false
@@ -1352,7 +1352,7 @@ class DrillService : Service(), VoiceIo {
                 return false
             }
             if (focusPaused && FocusPolicy.waitTimedOut(startedAt, SystemClock.elapsedRealtime())) {
-                Log.i(TAG, "audiofocus wait cap hit; re-requesting focus")
+                DLog.i(TAG, "audiofocus wait cap hit; re-requesting focus")
                 focusWake = null
                 focusPaused = false
                 focusState.transientLoss = false
@@ -1386,7 +1386,7 @@ class DrillService : Service(), VoiceIo {
             if (!commRouteActive) {
                 rawOutputs.firstOrNull { it.id == keep.id }?.let { setCommDevice(it) }
             }
-            Log.i(TAG, "tts route: CALL keeps SCO comm device")
+            DLog.i(TAG, "tts route: CALL keeps SCO comm device")
         } else {
             clearCommRoute()
         }
@@ -1398,8 +1398,8 @@ class DrillService : Service(), VoiceIo {
         if (!acquireFocus()) return
         focusPhase = FocusPolicy.Phase.SPEAKING
         when (spoken) {
-            RatingGuides.LONG, RatingGuides.SHORT -> Log.i(TAG, "rating prompt spoken")
-            RatingGuides.REPROMPT -> Log.i(TAG, "rating reprompt")
+            RatingGuides.LONG, RatingGuides.SHORT -> DLog.i(TAG, "rating prompt spoken")
+            RatingGuides.REPROMPT -> DLog.i(TAG, "rating reprompt")
         }
         val parts = TtsFallback.onDeviceParts(spoken)
         try {
@@ -1412,7 +1412,7 @@ class DrillService : Service(), VoiceIo {
                 neuralBlocked = TtsFallback.blockedAfter(neuralBlocked, ok = false, stopped = stoppedNow)
                 if (neuralBlocked && !was) {
                     lastNeuralHealthAt = SystemClock.elapsedRealtime()
-                    Log.i(TAG, "neural blocked after card fail; on-device until health ok")
+                    DLog.i(TAG, "neural blocked after card fail; on-device until health ok")
                 }
             }
             if (stopRequested.get() || speechInterrupted || speechSkipped || sessionSilent) return
@@ -1422,7 +1422,7 @@ class DrillService : Service(), VoiceIo {
                 DrillUi.update(SentenceReading.at(i, part))
                 if (neuralCard) {
                     val spoke = speakOnDevice(part)
-                    if (spoke == TtsFallback.Spoke.DONE) Log.i(TAG, "TTS engine=neural card fail; fallback on-device ok")
+                    if (spoke == TtsFallback.Spoke.DONE) DLog.i(TAG, "TTS engine=neural card fail; fallback on-device ok")
                     if (spoke == TtsFallback.Spoke.STOPPED) break
                 } else {
                     speakOne(part)
@@ -1436,7 +1436,7 @@ class DrillService : Service(), VoiceIo {
         // sentence that was playing (not the whole card); at most 3 re-speaks so a stuck focus can't loop.
         while (focusPaused && reSpeaks++ < 3 && awaitFocusResume()) {
             val rest = SentenceReading.resumeText(spoken, readingIndex)
-            Log.i(TAG, "tts resume from sentence ${readingIndex.coerceAtLeast(0)}")
+            DLog.i(TAG, "tts resume from sentence ${readingIndex.coerceAtLeast(0)}")
             speak(rest)
         }
     }
@@ -1470,7 +1470,7 @@ class DrillService : Service(), VoiceIo {
             false
         }
         if (ok) {
-            Log.i(TAG, "TTS engine=neural card ok marks=${timed.size}")
+            DLog.i(TAG, "TTS engine=neural card ok marks=${timed.size}")
             return true
         }
         return stopRequested.get() || speechInterrupted || speechSkipped
@@ -1483,7 +1483,7 @@ class DrillService : Service(), VoiceIo {
         } catch (e: Exception) {
             DLog.w(TAG, "prefs load failed during speak", e)
             if (speakOnDevice(spoken) == TtsFallback.Spoke.DONE) {
-                Log.i(TAG, "TTS engine=on-device ok")
+                DLog.i(TAG, "TTS engine=on-device ok")
             }
             return
         }
@@ -1503,20 +1503,20 @@ class DrillService : Service(), VoiceIo {
                 false
             }
             if (ok) {
-                Log.i(TAG, "TTS engine=neural ok")
+                DLog.i(TAG, "TTS engine=neural ok")
                 return
             }
             // A tap or Stop already ended this utterance. Do not replay it on-device.
             if (stopRequested.get() || speechInterrupted) return
             if (speakOnDevice(spoken) == TtsFallback.Spoke.DONE) {
-                Log.i(TAG, "TTS engine=neural fail; fallback on-device ok")
+                DLog.i(TAG, "TTS engine=neural fail; fallback on-device ok")
             } else {
                 DLog.w(TAG, "TTS engine=neural fail; fallback on-device failed")
             }
             return
         }
         if (speakOnDevice(spoken) == TtsFallback.Spoke.DONE) {
-            Log.i(TAG, "TTS engine=on-device ok")
+            DLog.i(TAG, "TTS engine=on-device ok")
         } else {
             DLog.w(TAG, "TTS engine=on-device failed")
         }
@@ -1549,7 +1549,7 @@ class DrillService : Service(), VoiceIo {
                 DLog.w(TAG, "on-device speak still running at cap")
             }
             val r = TtsFallback.spokeResult(true, speechInterrupted || stopRequested.get())
-            if (r == TtsFallback.Spoke.STOPPED && showAnswerEarly.get()) Log.i(TAG, "show answer during question read")
+            if (r == TtsFallback.Spoke.STOPPED && showAnswerEarly.get()) DLog.i(TAG, "show answer during question read")
             return r
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
@@ -1638,7 +1638,7 @@ class DrillService : Service(), VoiceIo {
                         }
                         runCatching { DrillUi.update { it.copy(heard = decision.heard) } }
                         completed = step.attempts
-                        Log.i(TAG, "answer unmatched $completed/$max")
+                        DLog.i(TAG, "answer unmatched $completed/$max")
                         if (step.giveUp ||
                             !ListenWindow.openAnother(completed, max, lastMissed = true, stopped = false)
                         ) {
@@ -1677,7 +1677,7 @@ class DrillService : Service(), VoiceIo {
 
     /** Cue and beep before another answer listen. False when the card is leaving this phase. */
     private fun relistenAnswer(completed: Int, max: Int, speedMode: Boolean): Boolean {
-        Log.i(TAG, "relisten answer $completed/$max")
+        DLog.i(TAG, "relisten answer $completed/$max")
         if (!speedMode) speak(ListenWindow.ANSWER_RELISTEN_CUE)
         if (stopped() || sessionSilent || showAnswerEarly.get()) return false
         if (chatPaused.get()) return true
@@ -1703,7 +1703,7 @@ class DrillService : Service(), VoiceIo {
                 devs, Prefs.READ_ALOUD_MEDIA
             )
             if (picked != null && MicRouteTiming.shouldRoute(routeKind, picked)) {
-                Log.i(TAG, MicRouteTiming.routeLog(picked, true, Prefs.READ_ALOUD_MEDIA))
+                DLog.i(TAG, MicRouteTiming.routeLog(picked, true, Prefs.READ_ALOUD_MEDIA))
                 raw.firstOrNull { it.id == picked.id }?.let { setCommDevice(it) }
             }
         }
@@ -1729,9 +1729,9 @@ class DrillService : Service(), VoiceIo {
                     val left = deadline - SystemClock.elapsedRealtime()
                     if (left <= 0) break
                     text = scripted.poll(minOf(left, 250L))
-                    if (text != null) Log.i(TAG, "listen ok: SCRIPT $currentListenTag")
+                    if (text != null) DLog.i(TAG, "listen ok: SCRIPT $currentListenTag")
                 }
-                if (text == null) Log.i(TAG, "listen ok: SCRIPT_EMPTY $currentListenTag")
+                if (text == null) DLog.i(TAG, "listen ok: SCRIPT_EMPTY $currentListenTag")
                 text
             } else {
                 consumeQueuedGrade() ?: listenWithRecognizer(timeoutMs)
@@ -1752,7 +1752,7 @@ class DrillService : Service(), VoiceIo {
                     RouteRebuild.reopenOnRouteChange(routeKind, routeChanged, routeReopened)
                 ) {
                     routeReopened = true
-                    Log.i(TAG, "mic route: reopen after device change")
+                    DLog.i(TAG, "mic route: reopen after device change")
                     finishListen(null)
                     continue
                 }
@@ -1760,7 +1760,7 @@ class DrillService : Service(), VoiceIo {
             }
             // A focus loss hit the answer window: drop the result, do NOT count a miss, and reopen.
             if (reopens++ >= 3 || stopped() || chatPaused.get()) {
-                if (focusState.lostAt > listenStartedAt) Log.i(TAG, "listen dropped: focus lost during answer window")
+                if (focusState.lostAt > listenStartedAt) DLog.i(TAG, "listen dropped: focus lost during answer window")
                 return null
             }
             awaitFocusResume()
@@ -1776,13 +1776,13 @@ class DrillService : Service(), VoiceIo {
                 // Voice grade: claim the card and highlight its chip. A tap that came first wins.
                 val used = gradeGate.resolveVoice(action.ease)
                 if (used == null) {
-                    Log.i(TAG, "voice grade ignored: answer not revealed")
+                    DLog.i(TAG, "voice grade ignored: answer not revealed")
                     return result
                 }
                 runCatching { DrillUi.update { it.copy(selectedEase = used) } }
-                Log.i(TAG, "grade chip highlighted ease=$used $currentListenTag")
+                DLog.i(TAG, "grade chip highlighted ease=$used $currentListenTag")
                 if (used != action.ease) {
-                    Log.i(TAG, "voice grade ease=${action.ease} ignored; tapped ease=$used wins")
+                    DLog.i(TAG, "voice grade ease=${action.ease} ignored; tapped ease=$used wins")
                     pendingGrades.clear()
                     return GradeGate.wordOf(used)
                 }
@@ -1799,13 +1799,13 @@ class DrillService : Service(), VoiceIo {
             VoiceAction.Pause -> "pause"
             VoiceAction.None -> "none"
         }
-        Log.i(TAG, "voice action: $name $currentListenTag")
+        DLog.i(TAG, "voice action: $name $currentListenTag")
     }
 
     private fun announceRecognition() {
         if (sessionSilent) return
         val scripted = SpeechHooks.scripted?.enabled() == true
-        if (scripted) Log.i(TAG, "scripted recognizer enabled")
+        if (scripted) DLog.i(TAG, "scripted recognizer enabled")
         val haveEngine = scripted || recognitionAvailable ||
             engineOrder().any { it != EngineKind.GOOGLE }
         if (haveEngine) {
@@ -1871,7 +1871,7 @@ class DrillService : Service(), VoiceIo {
                             val latch = commActiveLatch
                             if (latch != null) {
                                 val ms = MicRouteTiming.delayMs(commActiveStartedAt, SystemClock.elapsedRealtime())
-                                Log.i(TAG, "mic route: active $type after $ms ms")
+                                DLog.i(TAG, "mic route: active $type after $ms ms")
                                 latch.countDown()
                             }
                         }
@@ -1879,7 +1879,7 @@ class DrillService : Service(), VoiceIo {
                 }
             )
             commListenerRegistered = true
-            Log.i(TAG, "mic route: comm listener registered")
+            DLog.i(TAG, "mic route: comm listener registered")
         } catch (e: Exception) {
             DLog.w(TAG, "comm listener register failed", e)
         }
@@ -1897,12 +1897,12 @@ class DrillService : Service(), VoiceIo {
                 val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
                 am?.setCommunicationDevice(info)
             }
-            Log.i(TAG, "mic route: setCommunicationDevice ON t=${SystemClock.elapsedRealtime()}")
+            DLog.i(TAG, "mic route: setCommunicationDevice ON t=${SystemClock.elapsedRealtime()}")
         }
         val hit = latch?.await(MicRouteTiming.TIMEOUT_MS, TimeUnit.MILLISECONDS) == true
         commRouteHitLatch = hit
         if (!hit) {
-            Log.i(TAG, "mic route: active timeout")
+            DLog.i(TAG, "mic route: active timeout")
         }
         commRouteActive = true
     }
@@ -1915,7 +1915,7 @@ class DrillService : Service(), VoiceIo {
                 val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
                 am?.clearCommunicationDevice()
             }
-            Log.i(TAG, "mic route: clearCommunicationDevice OFF t=${SystemClock.elapsedRealtime()}")
+            DLog.i(TAG, "mic route: clearCommunicationDevice OFF t=${SystemClock.elapsedRealtime()}")
         }
     }
 
@@ -1975,7 +1975,7 @@ class DrillService : Service(), VoiceIo {
 
     private fun finishGoal(progress: SessionProgress, startedElapsed: Long) {
         val summary = StudyBlockPrompt.withBlock(progress.spokenSummary(SystemClock.elapsedRealtime() - startedElapsed), block, System.currentTimeMillis())
-        Log.i(TAG, "goal reached")
+        DLog.i(TAG, "goal reached")
         showStatus("Goal reached")
         speak(summary)
     }
@@ -1993,7 +1993,7 @@ class DrillService : Service(), VoiceIo {
         }
         val cards = anki.cardsInfo(ids)
         store.writeBatch(cards)
-        Log.i(TAG, "offline batch ${cards.size}")
+        DLog.i(TAG, "offline batch ${cards.size}")
         return cards
     }
 
@@ -2003,7 +2003,7 @@ class DrillService : Service(), VoiceIo {
         try {
             anki.unsuspendCards(ids)
             store.writeSkipped(emptyList())
-            Log.i(TAG, "unsuspended skipped cards: ${ids.size}")
+            DLog.i(TAG, "unsuspended skipped cards: ${ids.size}")
         } catch (e: Exception) {
             DLog.w(TAG, "unsuspend failed: ${e.javaClass.simpleName}")
         }
@@ -2020,7 +2020,7 @@ class DrillService : Service(), VoiceIo {
 
     /** Reveal with guiShowAnswer, then leave the card ungraded and move on. */
     private fun skipOnline(anki: AnkiConnect, deck: String, card: AnkiCard, store: LocalQueueStore, done: Int, speedMode: Boolean) {
-        Log.i(TAG, "skip card id=${card.cardId}")
+        DLog.i(TAG, "skip card id=${card.cardId}")
         val n = (skipCounts[card.cardId] ?: 0) + 1
         skipCounts[card.cardId] = n
         val say = SkipQueue.say(n, speedMode)
@@ -2177,7 +2177,7 @@ class DrillService : Service(), VoiceIo {
                         progress.recordGrade(step.ease, step.elapsedMs)
                         returnDueSkips(anki, store, progress.done)
                         publish(progress, store)
-                        Log.i(TAG, "graded ease=${step.ease} $currentListenTag")
+                        DLog.i(TAG, "graded ease=${step.ease} $currentListenTag")
                         runCatching { explainSession?.prefetchOnline(anki) }
                         afterGradePause(cfg)
                     }
@@ -2269,7 +2269,7 @@ class DrillService : Service(), VoiceIo {
                     }
                 }
                 CardStep.Skipped -> {
-                    Log.i(TAG, "offline skip id=${card.cardId}")
+                    DLog.i(TAG, "offline skip id=${card.cardId}")
                     val n = (skipCounts[card.cardId] ?: 0) + 1
                     skipCounts[card.cardId] = n
                     val say = SkipQueue.say(n, cfg.speedMode)
@@ -2303,7 +2303,7 @@ class DrillService : Service(), VoiceIo {
                     )
                     progress.recordGrade(step.ease, step.elapsedMs)
                     publish(progress, store)
-                    Log.i(TAG, "queued ease=${step.ease} $currentListenTag")
+                    DLog.i(TAG, "queued ease=${step.ease} $currentListenTag")
                     showStatus(GradeConfirm.queuedStatus(store.readGrades().size))
                     runCatching { explainSession?.prefetchOffline(queue, index) }
                     afterGradePause(cfg)
@@ -2355,7 +2355,7 @@ class DrillService : Service(), VoiceIo {
         currentListenTag = DrillLog.tag(cardIndex + 1, cardId)
         cardCid.nextCard()
         DiagLog.log("DRILL", "CARD", listOf("cid" to cardCid.current(), "cardId" to cardId))
-        Log.i(TAG, DrillLog.card(cardIndex + 1, cardId, noteId ?: 0L, sessionDeck))
+        DLog.i(TAG, DrillLog.card(cardIndex + 1, cardId, noteId ?: 0L, sessionDeck))
         val screenCard = CardImages.waitForTap(questionHtml)
         val question = spokenQuestion(questionHtml, cardId)
         if (question.isBlank() && !screenCard) return CardStep.Blank
@@ -2409,7 +2409,7 @@ class DrillService : Service(), VoiceIo {
             if (!awaitChatResume()) return CardStep.Paused
             if (showAnswerEarly.getAndSet(false)) {
                 if (transcript.isBlank()) chosenLetter?.let { transcript = it }
-                if (questionCut && !sessionSilent) { Log.i(TAG, "show answer: announce"); speak(TtsFallback.SHOWING_ANSWER) }
+                if (questionCut && !sessionSilent) { DLog.i(TAG, "show answer: announce"); speak(TtsFallback.SHOWING_ANSWER) }
                 break
             }
             when (AudioGate.resume(sessionSilent, cardUp = true, answerShown = false)) {
@@ -2557,12 +2557,12 @@ class DrillService : Service(), VoiceIo {
                     val autoOn = try { Prefs.load(this).autoAcceptRating } catch (_: Exception) { true }
                     if (auto != null && !screenCard && !autoOn) {
                         runCatching { DrillUi.update { it.copy(selectedEase = GradeMapper.toAvailableEase(auto, gradeButtons)) } }
-                        Log.i(TAG, "auto-accept off: suggested chip lit, waiting for a rating $currentListenTag")
+                        DLog.i(TAG, "auto-accept off: suggested chip lit, waiting for a rating $currentListenTag")
                     }
                     if (auto != null && !screenCard && autoOn) {
                         val mapped = GradeMapper.toAvailableEase(auto, gradeButtons)
                         runCatching { DrillUi.update { it.copy(selectedEase = mapped) } }
-                        Log.i(TAG, "grade chip highlighted ease=$mapped $currentListenTag")
+                        DLog.i(TAG, "grade chip highlighted ease=$mapped $currentListenTag")
                         showStatus(GradeConfirm.ratedStatus(mapped))
                         val holdUntil = SystemClock.elapsedRealtime() + GradeConfirm.AUTO_ACCEPT_MS
                         var shownLeft = -1
@@ -2812,7 +2812,7 @@ class DrillService : Service(), VoiceIo {
                         if (buffer.isEmpty()) settling = false
                         restarts++
                         if (restarts > ThinkTime.MAX_RESTARTS) SystemClock.sleep(300L)
-                        if (ThinkTime.capJustReached(restarts)) Log.i(TAG, "think: mic restart cap reached, slowing restarts")
+                        if (ThinkTime.capJustReached(restarts)) DLog.i(TAG, "think: mic restart cap reached, slowing restarts")
                         quietListen = true
                         continue
                     }
@@ -3011,8 +3011,8 @@ class DrillService : Service(), VoiceIo {
             AiClient().postDecision(decisionBase, cfg.aiApiKey, body) { stopRequested.get() || destroyed }
         }
         val verdict = OwnWordsJudge.guardVerdict(attempt.verdict, correctAnswer, judgeInput)
-        if (verdict !== attempt.verdict) Log.i(TAG, "own-words judge rubber-stamp ignored $currentListenTag")
-        Log.i(TAG, "own-words judge tries=${attempt.tries} content=${OwnWordsJudge.contentForLog(attempt.raw)}")
+        if (verdict !== attempt.verdict) DLog.i(TAG, "own-words judge rubber-stamp ignored $currentListenTag")
+        DLog.i(TAG, "own-words judge tries=${attempt.tries} content=${OwnWordsJudge.contentForLog(attempt.raw)}")
         when (verdict) {
             is OwnWordsJudge.Verdict.Graded -> {
                 val startedAfter = if (answerWindowStartMs > 0L && answerSpeechStartMs >= answerWindowStartMs) {
@@ -3021,7 +3021,7 @@ class DrillService : Service(), VoiceIo {
                 val rating = OwnWordsJudge.applyTiming(verdict.rating, startedAfter, answerWindowMs)
                 judgedEase = rating.ease
                 JudgeNote.put(cardId, GradeMapper.toAvailableEase(rating.ease, buttons), verdict.reason)
-                Log.i(TAG, OwnWordsJudge.verdictLog(verdict.rating, rating, verdict.reason, strictness,
+                DLog.i(TAG, OwnWordsJudge.verdictLog(verdict.rating, rating, verdict.reason, strictness,
                     startedAfter, answerWindowMs, judgeInput) + " $currentListenTag")
                 DiagLog.log("JUDGE", "graded", listOf("cid" to cardCid.current(), "tries" to attempt.tries, "ease" to rating.ease))
                 val line = getString(OwnWordsJudge.spokenLine(rating))
@@ -3031,7 +3031,7 @@ class DrillService : Service(), VoiceIo {
             OwnWordsJudge.Verdict.Fallback -> {
                 val reason = attempt.reason
                 if (reason != null) DLog.w(TAG, "own-words judge fallback: $reason")
-                Log.i(TAG, "own-words judge rating=fallback strictness=${strictness.key} input=$judgeInput $currentListenTag")
+                DLog.i(TAG, "own-words judge rating=fallback strictness=${strictness.key} input=$judgeInput $currentListenTag")
                 DiagLog.log("JUDGE", "fallback", listOf("cid" to cardCid.current(), "tries" to attempt.tries, "reason" to reason))
                 val line = getString(attempt.failLine ?: R.string.own_words_fallback)
                 showStatus(line)
@@ -3068,9 +3068,9 @@ class DrillService : Service(), VoiceIo {
         }
         val step = SpokenLetter.advance(decision, attempts, max)
         if (decision is SpokenLetter.Decision.Unmatched) {
-            Log.i(TAG, "think spoke; unmatched ${step.attempts}/$max")
+            DLog.i(TAG, "think spoke; unmatched ${step.attempts}/$max")
         } else {
-            Log.i(TAG, "think silence; mic restart")
+            DLog.i(TAG, "think silence; mic restart")
         }
         return step
     }
@@ -3083,7 +3083,7 @@ class DrillService : Service(), VoiceIo {
         val correct = QuestionCard.correctLetter(answer, QuestionCard.parse(plain).options) ?: return
         val result = TapAnswer.letterResult(letter, correct)
         judgedEase = result.ease
-        Log.i(TAG, "letter result ease=${result.ease} $currentListenTag")
+        DLog.i(TAG, "letter result ease=${result.ease} $currentListenTag")
         showStatus(result.line)
         if (!sessionSilent) speak(result.line)
     }
@@ -3373,7 +3373,7 @@ class DrillService : Service(), VoiceIo {
                     continue
                 }
                 if (showAnswerEarly.get()) {
-                    Log.i(TAG, "show answer already tapped")
+                    DLog.i(TAG, "show answer already tapped")
                     return ShowWait.SHOWN
                 }
                 if (!hold()) return ShowWait.RESUME_VOICE
@@ -3382,12 +3382,12 @@ class DrillService : Service(), VoiceIo {
                 try {
                     if (chatPaused.get()) continue
                     if (showAnswerEarly.get()) {
-                        Log.i(TAG, "show answer already tapped")
+                        DLog.i(TAG, "show answer already tapped")
                         return ShowWait.SHOWN
                     }
                     if (!hold()) return ShowWait.RESUME_VOICE
                     if (startedAt == 0L) startedAt = SystemClock.elapsedRealtime()
-                    Log.i(TAG, "waiting for show answer")
+                    DLog.i(TAG, "waiting for show answer")
                     runCatching {
                         DrillUi.update {
                             val notice = it.status == ListenWindow.SILENT_NOTICE ||
@@ -3458,7 +3458,7 @@ class DrillService : Service(), VoiceIo {
                 if (already != null) return GradeWait.Ease(already)
                 if (chatPaused.get()) continue
                 if (!hold()) return GradeWait.ResumeVoice
-                Log.i(TAG, "waiting for grade")
+                DLog.i(TAG, "waiting for grade")
                 var paused = false
                 while (!stopRequested.get() && !destroyed) {
                     if (chatPaused.get()) {
@@ -3498,7 +3498,7 @@ class DrillService : Service(), VoiceIo {
     private fun releaseShowAnswer() {
         showAnswerEarly.set(true)
         val latch = showAnswerLatch.get()
-        Log.i(TAG, if (latch == null) "show answer armed" else "show answer")
+        DLog.i(TAG, if (latch == null) "show answer armed" else "show answer")
         latch?.countDown()
         stopPlaybackNow()
         finishListen(null)
@@ -3544,7 +3544,7 @@ class DrillService : Service(), VoiceIo {
             cardUp = DrillUi.state.frontHtml.isNotBlank(),
             answerShown = DrillUi.state.showBack
         )
-        Log.i(TAG, "silent live=$on resume=$face reveal=${plan.revealAnswer}")
+        DLog.i(TAG, "silent live=$on resume=$face reveal=${plan.revealAnswer}")
         // Publish before cancel so a snapshot taken inside finishListen is already Silent.
         publishSilentUi(next)
         if (plan.cancelMic) {
@@ -3584,7 +3584,7 @@ class DrillService : Service(), VoiceIo {
             null
         }
         val reply = SilentAsk.parse(heard)
-        Log.i(TAG, "silent ask reply=$reply")
+        DLog.i(TAG, "silent ask reply=$reply")
         return SilentAsk.action(reply)
     }
 
@@ -3595,7 +3595,7 @@ class DrillService : Service(), VoiceIo {
      */
     private fun giveUpToSilent() {
         if (stopRequested.get() || destroyed) return
-        Log.i(TAG, "missed listens; switching to silent")
+        DLog.i(TAG, "missed listens; switching to silent")
         applySilent(true)
         try {
             val cfg = Prefs.load(this)
@@ -3639,7 +3639,7 @@ class DrillService : Service(), VoiceIo {
         questionHtml: String = ""
     ): CardStep.Graded {
         val ease = GradeMapper.toAvailableEase(rawEase, buttons)
-        Log.i(TAG, "graded by tap ease=$ease")
+        DLog.i(TAG, "graded by tap ease=$ease")
         tapGrade = false
         synchronized(gradeGate) {
             synchronized(injectLock) { pendingGrades.clear() }
@@ -3716,7 +3716,7 @@ class DrillService : Service(), VoiceIo {
     /** Mark [word] as a tap so [listen] does not hear it back or touch the dead-mic streak. */
     private fun noteTapTranscript(word: String): String {
         tapTranscript = true
-        Log.i(TAG, "listen ok: TEST_GRADE $currentListenTag")
+        DLog.i(TAG, "listen ok: TEST_GRADE $currentListenTag")
         return word
     }
 
@@ -3884,7 +3884,7 @@ class DrillService : Service(), VoiceIo {
         val text = ListenWindow.cutoffText(own, sessionPartials)
         if (own == null && text != null) {
             lastFinals = sessionPartials.map { it.trim() }.filter { it.isNotEmpty() }
-            Log.i(TAG, "listen ok: CUTOFF kept partial $currentListenTag")
+            DLog.i(TAG, "listen ok: CUTOFF kept partial $currentListenTag")
         }
         return text
     }
@@ -3912,7 +3912,7 @@ class DrillService : Service(), VoiceIo {
     private fun awaitBackoff(): Boolean {
         val wait = backoffUntilElapsed - SystemClock.elapsedRealtime()
         if (wait <= 0L) return true
-        Log.i(TAG, "backing off ${wait}ms before listen")
+        DLog.i(TAG, "backing off ${wait}ms before listen")
         return sleepQuiet(wait)
     }
 
@@ -4101,7 +4101,7 @@ class DrillService : Service(), VoiceIo {
         if (started is RemoteWhisperRecognizer) started.commActive = commRouteHitLatch
         try {
             started.start(callbacks, listenWaitMs, listenSilence)
-            Log.i(TAG, "startListening")
+            DLog.i(TAG, "startListening")
             // startListening can pump the looper, so the Silent tap may already have run.
             if (!listenEpochOpen(epoch)) {
                 abandonRecognizer(started)
@@ -4206,7 +4206,7 @@ class DrillService : Service(), VoiceIo {
             false
         }
         if (recognitionAvailable) {
-            Log.i(TAG, "SpeechRecognizer available")
+            DLog.i(TAG, "SpeechRecognizer available")
         } else {
             DLog.w(TAG, "SpeechRecognizer not available on this device")
         }
@@ -4235,8 +4235,8 @@ class DrillService : Service(), VoiceIo {
             engine = created
             recognizerUnavailable = false
             if (created.kind == EngineKind.GOOGLE) {
-                Log.i(TAG, "recognizer created")
-                Log.i(TAG, "SpeechRecognizer created for listen session")
+                DLog.i(TAG, "recognizer created")
+                DLog.i(TAG, "SpeechRecognizer created for listen session")
             }
             true
         } catch (e: Exception) {
@@ -4263,7 +4263,7 @@ class DrillService : Service(), VoiceIo {
         val dying = engine ?: return
         engine = null
         try { dying.destroy() } catch (_: Exception) {}
-        if (dying.kind == EngineKind.GOOGLE) Log.i(TAG, "SpeechRecognizer destroyed")
+        if (dying.kind == EngineKind.GOOGLE) DLog.i(TAG, "SpeechRecognizer destroyed")
     }
 
     /** Raw n-best, including blanks, at debug. Google only; other engines have no bundle. */
@@ -4315,7 +4315,7 @@ class DrillService : Service(), VoiceIo {
             if (closeIfSilent()) return
             // The cue already finished before startListening. Do not play it here.
             if (!current()) return
-            Log.i(TAG, "listen ready")
+            DLog.i(TAG, "listen ready")
         }
         override fun onSpeechBegin() {
             if (closeIfSilent()) return
@@ -4362,7 +4362,7 @@ class DrillService : Service(), VoiceIo {
             // h142a: a filler-only answer ("huh") is noise; listen again like a silence restart (no attempt charged).
             if (answerListenNow && nbest.any { it.isNotBlank() } &&
                 nbest.filter { it.isNotBlank() }.all { FillerFilter.isFiller(it, ignoreFillers, fillerPhrases) }) {
-                Log.i(TAG, "Filler ignored")
+                DLog.i(TAG, "Filler ignored")
                 postStatusNotice(getString(R.string.heard_noise_listening))
                 restartSilenceListen(session)
                 return
@@ -4385,8 +4385,8 @@ class DrillService : Service(), VoiceIo {
             val text = ListenWindow.finalOrPartial(raw, partials)
             if (usedPartial) {
                 lastFinals = partials.map { it.trim() }.filter { it.isNotEmpty() }
-                Log.i(TAG, "listen ok: EMPTY_FINAL kept partial $currentListenTag")
-            } else Log.i(TAG, "listen ok: RESULT $currentListenTag")
+                DLog.i(TAG, "listen ok: EMPTY_FINAL kept partial $currentListenTag")
+            } else DLog.i(TAG, "listen ok: RESULT $currentListenTag")
             Log.d(TAG, "heard: $text")
             complete(text)
         }
@@ -4409,13 +4409,13 @@ class DrillService : Service(), VoiceIo {
             if (!allowUnmatched && decision !is SpokenLetter.Decision.Match) return false
             when (decision) {
                 is SpokenLetter.Decision.Match -> {
-                    Log.i(TAG, "spoken letter ${decision.letter}")
-                    Log.i(TAG, "listen ok: RESULT $currentListenTag")
+                    DLog.i(TAG, "spoken letter ${decision.letter}")
+                    DLog.i(TAG, "listen ok: RESULT $currentListenTag")
                     Log.d(TAG, "heard letter: ${decision.letter}")
                     complete(decision.letter)
                 }
                 is SpokenLetter.Decision.Unmatched -> {
-                    Log.i(TAG, "listen ok: UNMATCHED $currentListenTag")
+                    DLog.i(TAG, "listen ok: UNMATCHED $currentListenTag")
                     if (decision.heard.isNotBlank()) {
                         Log.d(TAG, "heard: ${decision.heard}")
                         complete(decision.heard)
@@ -4445,7 +4445,7 @@ class DrillService : Service(), VoiceIo {
                 if (activeKind == EngineKind.WHISPER) {
                     whisperDownUntilMs = SystemClock.elapsedRealtime() + WHISPER_DOWN_MS
                 }
-                Log.i(TAG, "engine fallback from=$activeKind error=$error")
+                DLog.i(TAG, "engine fallback from=$activeKind error=$error")
                 try { instance.detach() } catch (_: Exception) {}
                 finishListen(null, tone = false)
                 return
@@ -4472,7 +4472,7 @@ class DrillService : Service(), VoiceIo {
             // that used to look like silence and reopen the mic in a loop.
             if (absorbAnswer(emptyList(), allowUnmatched = normalEnd)) return
             ListenWindow.noMatchPartial(error, speechBegan || listenSpeechDetected, partials)?.let {
-                Log.i(TAG, "listen ok: NO_MATCH kept partial $currentListenTag")
+                DLog.i(TAG, "listen ok: NO_MATCH kept partial $currentListenTag")
                 Log.d(TAG, "heard: $it")
                 complete(it)
                 return
@@ -4480,12 +4480,12 @@ class DrillService : Service(), VoiceIo {
             when (val p = SilenceRestart.onError(error, restartRecognizer, restartBusyRetries, SystemClock.elapsedRealtime(), listenDeadlineMs)) {
                 is SilenceRestart.Plan.Retry -> {
                     restartBusyRetries += 1
-                    Log.i(TAG, "restart busy: $error retry in ${p.delayMs}ms")
+                    DLog.i(TAG, "restart busy: $error retry in ${p.delayMs}ms")
                     restartSilenceListenAfter(session, p.delayMs)
                     return
                 }
                 SilenceRestart.Plan.EndQuiet -> {
-                    Log.i(TAG, "listen ok: restart busy $error $currentListenTag")
+                    DLog.i(TAG, "listen ok: restart busy $error $currentListenTag")
                     complete(null)
                     return
                 }
@@ -4493,14 +4493,14 @@ class DrillService : Service(), VoiceIo {
             }
             if (retryable && !clientRetryUsed && sessionOpen(session) && listenEpochOpen(epoch)) {
                 clientRetryUsed = true
-                Log.i(TAG, "recognizer backoff: $error")
+                DLog.i(TAG, "recognizer backoff: $error")
                 val retryEpoch = epoch
                 mainHandler.post {
                     if (!listenEpochOpen(retryEpoch) || !sessionOpen(session)) return@post
                     destroyRecognizerOnMain()
                     mainHandler.postDelayed({
                         if (!listenEpochOpen(retryEpoch) || !sessionOpen(session)) return@postDelayed
-                        Log.i(TAG, "recreate recognizer after backoff")
+                        DLog.i(TAG, "recreate recognizer after backoff")
                         beginListenOnMain(session, retryEpoch)
                     }, CLIENT_BACKOFF_MS)
                 }
@@ -4514,7 +4514,7 @@ class DrillService : Service(), VoiceIo {
             ) {
                 silenceRestarts += 1
                 val remaining = listenDeadlineMs - now
-                Log.i(TAG, "listen restart: silence n=$silenceRestarts remainingMs=$remaining")
+                DLog.i(TAG, "listen restart: silence n=$silenceRestarts remainingMs=$remaining")
                 restartSilenceListen(session)
                 return
             }
@@ -4527,7 +4527,7 @@ class DrillService : Service(), VoiceIo {
                 DLog.w(TAG, "recognizer error: $error")
             } else if (normalEnd) {
                 val name = if (error == SpeechRecognizer.ERROR_NO_MATCH) "NO_MATCH" else "SPEECH_TIMEOUT"
-                Log.i(TAG, "listen ok: $name $currentListenTag")
+                DLog.i(TAG, "listen ok: $name $currentListenTag")
             } else {
                 DLog.w(TAG, "recognizer error: $error")
             }
