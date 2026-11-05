@@ -315,6 +315,8 @@ class DrillService : Service(), VoiceIo {
     @Volatile private var voskReady = false
     /** Card tag for the speech-engine log, "n= id=". */
     @Volatile private var currentListenTag = "n=0 id=0"
+    /** h89: correlation id for diag lines; drill-session thread only. */
+    private val cardCid = CardCid()
     @Volatile private var sessionDeck = ""
     private var mediaSession: MediaSessionCompat? = null
     private var lastMediaToggleMs = 0L
@@ -939,6 +941,8 @@ class DrillService : Service(), VoiceIo {
         shownOrdinal = 0
         screenReadyOrdinal = 0
         sessionStartedMs = System.currentTimeMillis()
+        cardCid.newSession()
+        DiagLog.log("DRILL", "SESSION start", listOf("cid" to cardCid.current()))
         if (sessionSilent) Log.i(TAG, "silent mode: mic disabled")
         if (stopRequested.get()) return
         if (!sessionSilent) initRecognizerOnMain()
@@ -1683,6 +1687,7 @@ class DrillService : Service(), VoiceIo {
     }
 
     private fun captureListen(timeoutMs: Long, answerListen: Boolean = false): String? {
+        DiagLog.log("DRILL", "LISTEN", listOf("cid" to cardCid.nextListen(), "answer" to answerListen))
         answerListenNow = answerListen
         // h105c: route answer/rating listens to a headset mic before the start cue.
         val routeKind = if (grading) MicRouteTiming.Kind.RATING else if (answerListen) MicRouteTiming.Kind.ANSWER else MicRouteTiming.Kind.COMMAND
@@ -2348,6 +2353,8 @@ class DrillService : Service(), VoiceIo {
     ): CardStep {
         activeQuestionHtml = questionHtml
         currentListenTag = DrillLog.tag(cardIndex + 1, cardId)
+        cardCid.nextCard()
+        DiagLog.log("DRILL", "CARD", listOf("cid" to cardCid.current(), "cardId" to cardId))
         Log.i(TAG, DrillLog.card(cardIndex + 1, cardId, noteId ?: 0L, sessionDeck))
         val screenCard = CardImages.waitForTap(questionHtml)
         val question = spokenQuestion(questionHtml, cardId)
