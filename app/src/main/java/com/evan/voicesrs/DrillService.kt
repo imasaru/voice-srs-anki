@@ -294,6 +294,21 @@ class DrillService : Service(), VoiceIo {
             svc.pendingVoiceReply.set(spoken)
             svc.chatPauseLatch.get()?.countDown()
         }
+
+        /** h157b: card corner read-aloud while a drill runs (tracker 14B). */
+        @Volatile private var cardReplayWasDrilling = false
+
+        fun onCardReplayStarting() {
+            val plan = ReplayPause.starting(running)
+            cardReplayWasDrilling = running
+            if (plan.pauseListening || plan.stopMic) active?.holdListenForReplay()
+        }
+
+        fun onCardReplayFinished() {
+            val plan = ReplayPause.finished(cardReplayWasDrilling)
+            cardReplayWasDrilling = false
+            if (plan.resumeListening) active?.releaseListenAfterReplay(resetMiss = plan.resetMissCount)
+        }
     }
 
     private lateinit var worker: HandlerThread
@@ -449,6 +464,10 @@ class DrillService : Service(), VoiceIo {
     private val listenResult = AtomicReference<String?>(null)
     @Volatile private var listenToken = 0
     @Volatile private var listenActive = false
+    /** h157b: card replay aborted the open listen; do not charge a miss. */
+    private val replayAborted = AtomicBoolean(false)
+    /** h157b: next answer-listen loop should zero its completed miss count. */
+    private val replayResetMiss = AtomicBoolean(false)
     /** True while [grader] is inside grade(); TEST_GRADE applies only then. */
     @Volatile private var grading = false
     /** A TEST_GRADE already claimed the in-flight grade listen. */
@@ -1615,6 +1634,8 @@ class DrillService : Service(), VoiceIo {
             if (sessionSilent || showAnswerEarly.get() || stopped()) return null
             val heard = captureListen(timeoutMs, answerListen = true)
             if (chatPaused.get()) continue
+            if (replayAborted.getAndSet(false)) continue
+            if (replayResetMiss.getAndSet(false)) completed = 0
             consumeMicFault()
             if (stopped()) return null
             if (showAnswerEarly.get() || sessionSilent) return null
@@ -3998,6 +4019,17 @@ class DrillService : Service(), VoiceIo {
         if (tone && !dictating) toneListenEnd()
         runCatching { DrillUi.update { it.copy(ratingMicOpen = false) } }
         clearCommRoute()
+    }
+
+    /** h157b: stop the open mic for a card corner replay without counting a miss. */
+    private fun holdListenForReplay() {
+        replayAborted.set(true)
+        finishListen(null, tone = false)
+    }
+
+    /** h157b: after card replay ends, optionally reset the answer miss count. */
+    private fun releaseListenAfterReplay(resetMiss: Boolean) {
+        if (resetMiss) replayResetMiss.set(true)
     }
 
     /**

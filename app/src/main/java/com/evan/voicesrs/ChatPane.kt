@@ -29,7 +29,15 @@ class ChatPane(
         onRetry = { id -> ExplainQueue.retry(list.context, id) },
         onThread = { id -> openThread(id) },
         onSpeakSection = { turnId, index, text ->
-            PlaybackSpeaker.play(list.context, turnId, index, SpeechStrip.clean(text))
+            val cleaned = SpeechStrip.clean(text)
+            if (index == SpeakSection.CARD) {
+                DrillService.onCardReplayStarting()
+                PlaybackSpeaker.play(list.context, turnId, index, cleaned) {
+                    DrillService.onCardReplayFinished()
+                }
+            } else {
+                PlaybackSpeaker.play(list.context, turnId, index, cleaned)
+            }
         },
         onBookmark = { turn ->
             val quote = when (val expl = turn.explanation) {

@@ -15,7 +15,7 @@ object PlaybackSpeaker {
     @Volatile private var lastTurn = 0L
     @Volatile private var lastSection = -1
 
-    fun play(context: Context, turnId: Long, section: Int, text: String) {
+    fun play(context: Context, turnId: Long, section: Int, text: String, onEnded: () -> Unit = {}) {
         val spoken = text.trim()
         if (spoken.isEmpty()) return
         val gen = ++generation
@@ -55,7 +55,10 @@ object PlaybackSpeaker {
                 runCatching { EdgeSpeaker.stopActive() }
             }
             if (generation == gen) {
-                main.post { PlaybackUi.update { PlaybackControl.stop(it) } }
+                main.post {
+                    PlaybackUi.update { PlaybackControl.stop(it) }
+                    onEnded()
+                }
             }
         }, "section-playback").start()
     }
