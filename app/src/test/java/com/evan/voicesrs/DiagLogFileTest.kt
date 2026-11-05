@@ -2,6 +2,7 @@ package com.evan.voicesrs
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -37,5 +38,29 @@ class DiagLogFileTest {
         val f = DiagLogFile(notDir)
         f.appendNow("x")
         assertEquals(1, f.failures)
+    }
+
+    @Test fun e_fullQueueDropsAndCounts() {
+        val f = DiagLogFile(tmp.newFolder("e"), maxQueue = 2)
+        synchronized(f) {
+            // writer thread takes x0 and blocks on the appendNow lock; x1, x2 fill the queue; x3..x9 are dropped
+            for (n in 0..9) f.append("x$n")
+            assertEquals(7, f.dropped)
+        }
+        val end = System.currentTimeMillis() + 3000
+        while (System.currentTimeMillis() < end && !(f.file(0).exists() && f.file(0).readText() == "x0\nx1\nx2\n")) Thread.sleep(20)
+        assertEquals("x0\nx1\nx2\n", f.file(0).readText())
+        assertEquals(0, f.failures)
+    }
+
+    @Test fun f_defaultQueueWritesInBackground() {
+        val f = DiagLogFile(tmp.newFolder("f"))
+        f.append("bg")
+        val end = System.currentTimeMillis() + 3000
+        while (System.currentTimeMillis() < end && !f.file(0).exists()) Thread.sleep(20)
+        Thread.sleep(50)
+        assertEquals("bg\n", f.file(0).readText())
+        assertEquals(0, f.dropped)
+        assertTrue(DiagLogFile.MAX_QUEUE >= 1000)
     }
 }
