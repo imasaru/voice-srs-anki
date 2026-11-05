@@ -48,7 +48,7 @@ object GradeFix {
                     )
                 )
             } catch (e: Exception) {
-                Log.w(TAG, "past grade thread save failed: ${e.javaClass.simpleName}")
+                DLog.w(TAG, "past grade thread save failed: ${e.javaClass.simpleName}")
             }
             try {
                 val store = LocalQueueStore(app.filesDir)
@@ -63,7 +63,7 @@ object GradeFix {
                     )
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "past grade sync failed: ${e.javaClass.simpleName}")
+                DLog.w(TAG, "past grade sync failed: ${e.javaClass.simpleName}")
             }
         }, "past-grade").start()
         if (commit.regenerate) {

@@ -172,7 +172,7 @@ object LiveThread {
                     DrillService.offerChatReply(shown, byVoice)
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "live reply failed: ${e.javaClass.simpleName}")
+                DLog.w(TAG, "live reply failed: ${e.javaClass.simpleName}")
                 mark(
                     shot.screen,
                     shot.index,

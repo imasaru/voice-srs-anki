@@ -34,7 +34,7 @@ object GradeSync {
                 store.writeGrades(left)
                 if (left.isEmpty()) return 0
             } catch (e: Exception) {
-                Log.w(TAG, "sync attempt failed: ${e.javaClass.simpleName}")
+                DLog.w(TAG, "sync attempt failed: ${e.javaClass.simpleName}")
                 attempt++
             }
         }

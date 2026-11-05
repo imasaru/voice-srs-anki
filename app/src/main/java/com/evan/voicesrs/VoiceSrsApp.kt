@@ -64,7 +64,7 @@ object CrashReporter {
                 ?.forEach { runCatching { it.delete() } }
             f
         } catch (e: Exception) {
-            Log.e(TAG, "failed to write crash report", e)
+            DLog.e(TAG, "failed to write crash report", e)
             null
         }
     }

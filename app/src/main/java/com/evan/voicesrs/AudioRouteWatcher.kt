@@ -223,7 +223,7 @@ class AudioRouteWatcher(private val context: Context) {
 
         val channel = runCatching { Prefs.load(context).readAloudChannel }.getOrDefault(Prefs.READ_ALOUD_MEDIA)
         val result = AudioRouteDecision.decide(previousInput, outputDevs, inputDevs, channel)
-        Log.i(
+        DLog.i(
             "MicRoute",
             "outs=${outputDevs.map { it.type }} ins=${inputDevs.map { it.type }} " +
                 "chosen=${result.chosen?.type} changed=${result.changed} comm=${result.useCommunicationDevice} ch=$channel"

@@ -360,7 +360,7 @@ class AnkiConnect(private val baseUrl: String, private val apiKey: String) : Stu
             ) {
                 throw e
             }
-            Log.w(TAG, "answerCards rejected time; retrying without duration")
+            DLog.w(TAG, "answerCards rejected time; retrying without duration")
             postAnswerCards(AnswerCardsRequest.body(grades, includeTime = false), grades.size)
         }
     }

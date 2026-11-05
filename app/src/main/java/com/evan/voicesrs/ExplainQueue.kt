@@ -105,7 +105,7 @@ object ExplainQueue {
                 Thread.currentThread().interrupt()
                 break
             } catch (e: Exception) {
-                Log.w(TAG, "explain worker error: ${e.javaClass.simpleName}")
+                DLog.w(TAG, "explain worker error: ${e.javaClass.simpleName}")
             }
         }
     }
@@ -124,7 +124,7 @@ object ExplainQueue {
         val cfg = try {
             Prefs.load(context)
         } catch (e: Exception) {
-            Log.w(TAG, "explain prefs unavailable: ${e.javaClass.simpleName}")
+            DLog.w(TAG, "explain prefs unavailable: ${e.javaClass.simpleName}")
             logic.abandon(job)
             return
         }

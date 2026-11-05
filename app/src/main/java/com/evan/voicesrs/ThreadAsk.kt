@@ -87,7 +87,7 @@ object ThreadAsk {
                     DrillService.offerChatReply(shown, byVoice)
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "thread reply failed: ${e.javaClass.simpleName}")
+                DLog.w(TAG, "thread reply failed: ${e.javaClass.simpleName}")
                 ReviewLog.markFollowFailed(turnId, index, ChatSend.askAgain(ChatSend.kindOf(e)))
             }
             persist(app, turnId)
@@ -107,7 +107,7 @@ object ThreadAsk {
                 )
             )
         } catch (e: Exception) {
-            Log.w(TAG, "thread save failed: ${e.javaClass.simpleName}")
+            DLog.w(TAG, "thread save failed: ${e.javaClass.simpleName}")
         }
     }
 }

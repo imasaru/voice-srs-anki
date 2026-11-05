@@ -52,7 +52,7 @@ class VoskRecognizer(private val context: Context) : Recognizer {
                 }
 
                 override fun onError(e: Exception?) {
-                    Log.w(TAG, "vosk error")
+                    DLog.w(TAG, "vosk error")
                     main.post { if (!cancelled) cb.onError(SpeechRecognizer.ERROR_CLIENT) }
                 }
 
@@ -61,11 +61,11 @@ class VoskRecognizer(private val context: Context) : Recognizer {
                 }
             })
             if (!ok) {
-                Log.w(TAG, "vosk start failed")
+                DLog.w(TAG, "vosk start failed")
                 main.post { if (!cancelled) cb.onError(SpeechRecognizer.ERROR_CLIENT) }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "vosk start failed", e)
+            DLog.w(TAG, "vosk start failed", e)
             main.post { if (!cancelled) cb.onError(SpeechRecognizer.ERROR_CLIENT) }
         }
     }

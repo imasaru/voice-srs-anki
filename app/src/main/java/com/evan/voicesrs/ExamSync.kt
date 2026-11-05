@@ -63,7 +63,7 @@ object ExamSync {
             val cov = try {
                 coverage(anki, deck, days)
             } catch (e: Exception) {
-                Log.w(TAG, "coverage failed: ${e.javaClass.simpleName}")
+                DLog.w(TAG, "coverage failed: ${e.javaClass.simpleName}")
                 ExamPlan.Coverage(0, state.coverage ?: 0)
             }
             configId = try {
@@ -72,7 +72,7 @@ object ExamSync {
                 val id = cfgJson.optLong("id", 0L)
                 if (id == 0L) null else id
             } catch (e: Exception) {
-                Log.w(TAG, "getDeckConfig failed: ${e.javaClass.simpleName}")
+                DLog.w(TAG, "getDeckConfig failed: ${e.javaClass.simpleName}")
                 null
             }
             cov.percent
@@ -237,11 +237,11 @@ object ExamSync {
         val decision = try {
             ExamRestore.decide(anki.setDeckConfigId(listOf(deck), orig))
         } catch (e: Exception) {
-            Log.w(TAG, "restore setDeckConfigId failed: ${e.javaClass.simpleName}")
+            DLog.w(TAG, "restore setDeckConfigId failed: ${e.javaClass.simpleName}")
             ExamRestore.decide(false)
         }
         if (decision.reportError) {
-            Log.w(TAG, "exam restore did not complete for $deck; keeping saved config to retry")
+            DLog.w(TAG, "exam restore did not complete for $deck; keeping saved config to retry")
         }
         try {
             Prefs.saveExam(ctx, deck, ExamRestore.newState(state, decision))

@@ -228,7 +228,7 @@ object GeneralChat {
                             onDelta = paint
                         )
                     } catch (e: ToolsRejected) {
-                        Log.w(TAG, "study tools rejected")
+                        DLog.w(TAG, "study tools rejected")
                         showNotice(app.getString(R.string.today_report_fallback))
                         client.completeChat(
                             baseUrl = cfg.aiBaseUrl,
@@ -242,7 +242,7 @@ object GeneralChat {
                     } catch (e: Exception) {
                         if (AiRetry.autoRetry(ChatSend.kindOf(e), autoDone, false)) {
                             autoDone++
-                            Log.w(TAG, "auto retry after drop: ${AiDiag.error(e)}")
+                            DLog.w(TAG, "auto retry after drop: ${AiDiag.error(e)}")
                             continue
                         }
                         throw e
@@ -265,7 +265,7 @@ object GeneralChat {
                     ))
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "general ask failed: ${AiDiag.error(e)} report=$injectReport chip=${chip?.id ?: "none"} blobChars=$blobChars")
+                DLog.w(TAG, "general ask failed: ${AiDiag.error(e)} report=$injectReport chip=${chip?.id ?: "none"} blobChars=$blobChars")
                 mark(id, ExplState.Error(
                     AiRetry.keptText(
                         if (injectReport && lastPartial.isNotBlank()) withHeader(issuedAt, lastPartial) else lastPartial,
@@ -315,7 +315,7 @@ object GeneralChat {
         StudyToolRunner(anki, cfg.deck, pending = { LocalQueueStore(app.filesDir).readGrades() })
             .dailyReport(cfg.deck, issuedAt, threads, Prefs.loadBlockHistory(app))
     } catch (e: Exception) {
-        Log.w(TAG, "today report failed: ${AiDiag.error(e)}")
+        DLog.w(TAG, "today report failed: ${AiDiag.error(e)}")
         "Error: could not build today's report (${e.javaClass.simpleName})."
     }
 
@@ -328,7 +328,7 @@ object GeneralChat {
             examDate = { Prefs.loadExam(app, cfg.deck).date }
         ).readinessJson()
     } catch (e: Exception) {
-        Log.w(TAG, "exam readiness failed: ${AiDiag.error(e)}")
+        DLog.w(TAG, "exam readiness failed: ${AiDiag.error(e)}")
         "Error: could not build exam readiness (${e.javaClass.simpleName})."
     }
 

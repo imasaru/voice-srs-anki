@@ -199,7 +199,7 @@ class SettingsActivity : AppCompatActivity() {
             val before = try {
                 Prefs.loadExam(this, deck)
             } catch (e: Exception) {
-                Log.w("VoiceSRS", "loadExam failed for $deck", e)
+                DLog.w("VoiceSRS", "loadExam failed for $deck", e)
                 setExamStatus(getString(R.string.settings_exam_save_failed, e.message ?: e.javaClass.simpleName))
                 return
             }
@@ -208,7 +208,7 @@ class SettingsActivity : AppCompatActivity() {
             try {
                 Prefs.saveExam(this, deck, next)
             } catch (e: Exception) {
-                Log.w("VoiceSRS", "saveExam failed for $deck", e)
+                DLog.w("VoiceSRS", "saveExam failed for $deck", e)
                 setExamStatus(getString(R.string.settings_exam_save_failed, e.message ?: e.javaClass.simpleName))
                 return
             }
@@ -228,13 +228,13 @@ class SettingsActivity : AppCompatActivity() {
                     if (orig != null) {
                         val decision = ExamRestore.decide(anki.setDeckConfigId(listOf(deck), orig))
                         if (decision.reportError) {
-                            Log.w("SettingsActivity", "exam restore did not complete for $deck; keeping saved config to retry")
+                            DLog.w("SettingsActivity", "exam restore did not complete for $deck; keeping saved config to retry")
                         }
                         Prefs.saveExam(this, deck, ExamRestore.newState(state, decision))
                         done = !decision.reportError
                     }
                 } catch (e: Exception) {
-                    Log.w("SettingsActivity", "exam restore failed: ${e.javaClass.simpleName}")
+                    DLog.w("SettingsActivity", "exam restore failed: ${e.javaClass.simpleName}")
                 }
                 runOnUiThread {
                     if (!destroyed && done) showExam()

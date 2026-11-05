@@ -428,7 +428,7 @@ object Prefs {
         write(plain, cfg)
         val secrets = openSecrets(ctx)
         if (secrets == null) {
-            Log.e(TAG, "encrypted prefs unavailable; secrets not written")
+            DLog.e(TAG, "encrypted prefs unavailable; secrets not written")
         } else {
             secrets.edit()
                 .putString(KEY_API_KEY, cfg.apiKey.trim())
@@ -542,7 +542,7 @@ object Prefs {
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
         } catch (e: Exception) {
-            Log.e(TAG, "encrypted prefs unavailable", e)
+            DLog.e(TAG, "encrypted prefs unavailable", e)
             null
         }
     }

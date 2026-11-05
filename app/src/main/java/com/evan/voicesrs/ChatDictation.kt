@@ -28,7 +28,7 @@ class ChatDictation(private val context: Context) {
         val created = try {
             SpeechRecognizer.createSpeechRecognizer(context)
         } catch (e: Exception) {
-            Log.w(TAG, "dictation unavailable")
+            DLog.w(TAG, "dictation unavailable")
             onMiss()
             return
         }
@@ -54,7 +54,7 @@ class ChatDictation(private val context: Context) {
             }
 
             override fun onError(error: Int) {
-                Log.i(TAG, "dictation error $error")
+                DLog.i(TAG, "dictation error $error")
                 deliver(DictationGate.result(null, latest, error = true))
             }
 
@@ -89,7 +89,7 @@ class ChatDictation(private val context: Context) {
         try {
             created.startListening(intent)
         } catch (e: Exception) {
-            Log.w(TAG, "dictation start failed")
+            DLog.w(TAG, "dictation start failed")
             stop()
             onMiss()
         }

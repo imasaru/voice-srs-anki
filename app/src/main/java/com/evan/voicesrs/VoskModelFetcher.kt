@@ -29,18 +29,18 @@ object VoskModelFetcher {
         if (base.isBlank()) return false
         val zip = File(context.cacheDir, "${VoskModelStore.MODEL_NAME}.zip")
         val url = base.trimEnd('/') + "/asr/${VoskModelStore.MODEL_NAME}.zip"
-        Log.i(TAG, "download start")
+        DLog.i(TAG, "download start")
         if (!AsrHttp.download(url, token, zip)) {
-            Log.i(TAG, "download failed")
+            DLog.i(TAG, "download failed")
             return false
         }
         return try {
             unzip(zip, File(context.filesDir, "vosk"))
             val ready = VoskModelStore.isReady(dest)
-            Log.i(TAG, if (ready) "download ok" else "download unpacked but model files missing")
+            DLog.i(TAG, if (ready) "download ok" else "download unpacked but model files missing")
             ready
         } catch (_: Exception) {
-            Log.i(TAG, "download unpack failed")
+            DLog.i(TAG, "download unpack failed")
             false
         } finally {
             zip.delete()

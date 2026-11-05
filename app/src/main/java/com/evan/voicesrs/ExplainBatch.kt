@@ -20,7 +20,7 @@ object ExplainBatchSchedule {
         val wm = try {
             WorkManager.getInstance(context)
         } catch (e: Exception) {
-            Log.w(TAG, "work manager unavailable: ${e.javaClass.simpleName}")
+            DLog.w(TAG, "work manager unavailable: ${e.javaClass.simpleName}")
             return
         }
         if (cfg.aiEnabled && cfg.aiBatch) {
@@ -58,7 +58,7 @@ class ExplainBatchWorker(context: Context, params: WorkerParameters) : Worker(co
         val ids = try {
             anki.deckCardIds(cfg.deck)
         } catch (e: Exception) {
-            Log.w(ExplainLog.TAG, "batch deck list failed: ${e.javaClass.simpleName}")
+            DLog.w(ExplainLog.TAG, "batch deck list failed: ${e.javaClass.simpleName}")
             return Result.retry()
         }
         val client = AiClient()
@@ -68,7 +68,7 @@ class ExplainBatchWorker(context: Context, params: WorkerParameters) : Worker(co
             val cards = try {
                 anki.cardsInfo(chunk)
             } catch (e: Exception) {
-                Log.w(ExplainLog.TAG, "batch cardsInfo failed: ${e.javaClass.simpleName}")
+                DLog.w(ExplainLog.TAG, "batch cardsInfo failed: ${e.javaClass.simpleName}")
                 return Result.retry()
             }
             for (card in cards) {
@@ -111,7 +111,7 @@ class ExplainBatchWorker(context: Context, params: WorkerParameters) : Worker(co
                     return Result.success()
                 } catch (e: Exception) {
                     val kind = AiClient.classify(e)
-                    Log.w(ExplainLog.TAG, "batch card failed: ${e.javaClass.simpleName}")
+                    DLog.w(ExplainLog.TAG, "batch card failed: ${e.javaClass.simpleName}")
                     if (!ExplainBackoff.retries(kind)) continue
                     consecutive += 1
                     if (consecutive >= 3) return Result.retry()

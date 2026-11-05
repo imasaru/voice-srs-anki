@@ -1333,7 +1333,7 @@ class MainActivity : AppCompatActivity() {
                 val intent = Intent(this, DrillService::class.java).setAction(DrillService.ACTION_RETRY)
                 ContextCompat.startForegroundService(this, intent)
             } catch (e: Exception) {
-                Log.e("MainActivity", "retry failed", e)
+                DLog.e("MainActivity", "retry failed", e)
                 Toast.makeText(this, "Could not retry: ${e.message}", Toast.LENGTH_LONG).show()
             }
         } else {
@@ -1400,7 +1400,7 @@ class MainActivity : AppCompatActivity() {
             drillDeck = Prefs.load(this).deck
             Toast.makeText(this, "Drill starting…", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            Log.e("MainActivity", "startForegroundService failed", e)
+            DLog.e("MainActivity", "startForegroundService failed", e)
             Toast.makeText(this, "Could not start drill: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
