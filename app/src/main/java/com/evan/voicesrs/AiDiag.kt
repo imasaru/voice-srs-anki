@@ -25,12 +25,14 @@ object AiDiag {
         return if (clipped.isEmpty()) e.javaClass.simpleName else "${e.javaClass.simpleName}: $clipped"
     }
 
-    fun success(p: Probe, nowMs: Long, baseUrl: String, model: String, chars: Int): String =
-        "ai ok totalMs=${nowMs - p.startedMs} firstByteMs=${rel(p, p.firstByteMs)} firstTokenMs=${rel(p, p.firstTokenMs)} stream=${p.streaming} host=${host(baseUrl)} model=$model chars=$chars"
+    fun success(p: Probe, nowMs: Long, baseUrl: String, model: String, chars: Int, cid: String? = null): String =
+        "ai ok totalMs=${nowMs - p.startedMs} firstByteMs=${rel(p, p.firstByteMs)} firstTokenMs=${rel(p, p.firstTokenMs)} stream=${p.streaming} host=${host(baseUrl)} model=$model chars=$chars" + cidPart(cid)
 
-    fun failure(e: Throwable, p: Probe, nowMs: Long, baseUrl: String, model: String, chars: Int): String =
-        "ai fail err=${error(e)} elapsedMs=${nowMs - p.startedMs} firstByteMs=${rel(p, p.firstByteMs)} firstTokenMs=${rel(p, p.firstTokenMs)} stream=${p.streaming} host=${host(baseUrl)} model=$model chars=$chars"
+    fun failure(e: Throwable, p: Probe, nowMs: Long, baseUrl: String, model: String, chars: Int, cid: String? = null): String =
+        "ai fail err=${error(e)} elapsedMs=${nowMs - p.startedMs} firstByteMs=${rel(p, p.firstByteMs)} firstTokenMs=${rel(p, p.firstTokenMs)} stream=${p.streaming} host=${host(baseUrl)} model=$model chars=$chars" + cidPart(cid)
 
     /** ms field relative to the probe's startedMs; null -> NONE. */
     private fun rel(p: Probe, t: Long?): String = t?.let { (it - p.startedMs).toString() } ?: NONE
+
+    private fun cidPart(cid: String?): String = if (cid == null) "" else " cid=$cid"
 }

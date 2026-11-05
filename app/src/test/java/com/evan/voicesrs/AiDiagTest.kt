@@ -65,4 +65,20 @@ class AiDiagTest {
     fun `e bad url gives question mark host`() {
         assertEquals("?", AiDiag.host("not a url"))
     }
+
+    @Test
+    fun `f includes cid when given`() {
+        val line = AiDiag.success(AiDiag.Probe(1000, false), 2000, "https://api.test/v1", "m", 5, cid = "s0a1b2c3d-c1-l1")
+        assertTrue(line.endsWith(" cid=s0a1b2c3d-c1-l1"))
+        val f = AiDiag.failure(RuntimeException("x"), AiDiag.Probe(1000, false), 2000, "https://api.test/v1", "m", 5, cid = "s0a1b2c3d-c1-l1")
+        assertTrue(f.endsWith(" cid=s0a1b2c3d-c1-l1"))
+    }
+
+    @Test
+    fun `g omits cid when null`() {
+        val line = AiDiag.success(AiDiag.Probe(1000, false), 2000, "https://api.test/v1", "m", 5)
+        assertFalse(line.contains("cid="))
+        val f = AiDiag.failure(RuntimeException("x"), AiDiag.Probe(1000, false), 2000, "https://api.test/v1", "m", 5)
+        assertFalse(f.contains("cid="))
+    }
 }
