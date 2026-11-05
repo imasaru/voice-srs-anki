@@ -337,6 +337,17 @@
     <string name="prompt_edit_reset_message">This replaces the name and prompt fields with the built-in ones.</string>
     <string name="prompt_edit_reset_confirm">Reset</string>
     <!-- h82 narrow-v2 Timer B / Bubble A -->
+    <string name="settings_diag_log_clear">Clear</string>
+    <string name="settings_diag_log_footer">Showing last %d lines</string>
+    <string name="settings_diag_log_header_time">Time</string>
+    <string name="settings_diag_log_header_level">Level</string>
+    <string name="settings_diag_log_header_message">Message</string>
+    <!-- Visible chip level labels (mockup). -->
+    <string name="settings_diag_log_level_trace">TRACE</string>
+    <string name="settings_diag_log_level_debug">DEBUG</string>
+    <string name="settings_diag_log_level_info">INFO</string>
+    <string name="settings_diag_log_level_warning">WARNING</string>
+    <string name="settings_diag_log_level_error">ERROR</string>
     <string name="timer_switch_label">End drill at goal</string>
     <!-- Visible switch text: one line now, fits above 400dp too. -->
     <string name="timer_switch_text">End at goal</string>
