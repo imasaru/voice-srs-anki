@@ -1365,7 +1365,10 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val now = System.currentTimeMillis()
-        val s = Prefs.loadStudyBlock(this) ?: return
+        val s = Prefs.loadStudyBlock(this) ?: run {
+            launchDrillService(newBlock = false)
+            return
+        }
         val view = layoutInflater.inflate(R.layout.dialog_study_block, null)
         view.findViewById<TextView>(R.id.studyBlockDialogBody).text = StudyBlockChip.dialogBody(s, now)
         val continueBtn = view.findViewById<MaterialButton>(R.id.studyBlockDialogContinue)
