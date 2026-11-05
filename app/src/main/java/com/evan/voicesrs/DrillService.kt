@@ -3023,6 +3023,7 @@ class DrillService : Service(), VoiceIo {
                 JudgeNote.put(cardId, GradeMapper.toAvailableEase(rating.ease, buttons), verdict.reason)
                 Log.i(TAG, OwnWordsJudge.verdictLog(verdict.rating, rating, verdict.reason, strictness,
                     startedAfter, answerWindowMs, judgeInput) + " $currentListenTag")
+                DiagLog.log("JUDGE", "graded", listOf("cid" to cardCid.current(), "tries" to attempt.tries, "ease" to rating.ease))
                 val line = getString(OwnWordsJudge.spokenLine(rating))
                 showStatus(line)
                 speak(line)
@@ -3031,6 +3032,7 @@ class DrillService : Service(), VoiceIo {
                 val reason = attempt.reason
                 if (reason != null) Log.w(TAG, "own-words judge fallback: $reason")
                 Log.i(TAG, "own-words judge rating=fallback strictness=${strictness.key} input=$judgeInput $currentListenTag")
+                DiagLog.log("JUDGE", "fallback", listOf("cid" to cardCid.current(), "tries" to attempt.tries, "reason" to reason))
                 val line = getString(attempt.failLine ?: R.string.own_words_fallback)
                 showStatus(line)
                 speak(line)
