@@ -151,13 +151,14 @@ class AiClient {
         maxTokens: Int = AiTimeouts.MAX_TOKENS,
         cancelled: () -> Boolean = { false },
         onThinking: () -> Unit = {},
+        cid: String? = null,
         onDelta: (String) -> Unit = {}
     ): String {
         if (cancelled()) throw AiCancelled()
         val messages = JSONArray()
             .put(JSONObject().put("role", "system").put("content", system))
             .put(JSONObject().put("role", "user").put("content", user))
-        return completeMessages(baseUrl, apiKey, model, messages, maxTokens, cancelled, onThinking, onDelta)
+        return completeMessages(baseUrl, apiKey, model, messages, maxTokens, cancelled, onThinking, onDelta, cid = cid)
     }
 
     /**
@@ -177,6 +178,7 @@ class AiClient {
         onTool: ((name: String, args: String) -> String)? = null,
         maxToolRounds: Int = StudyTools.MAX_ROUNDS,
         timeouts: AiTimeoutProfile = AiTimeoutProfile.DEFAULT,
+        cid: String? = null,
         onDelta: (String) -> Unit = {}
     ): String {
         if (cancelled()) throw AiCancelled()
@@ -190,7 +192,7 @@ class AiClient {
                 baseUrl, apiKey, model, array, maxTokens, tools, onTool, maxToolRounds, cancelled, onThinking, onDelta
             )
         }
-        return completeMessages(baseUrl, apiKey, model, array, maxTokens, cancelled, onThinking, onDelta, timeouts)
+        return completeMessages(baseUrl, apiKey, model, array, maxTokens, cancelled, onThinking, onDelta, timeouts, cid)
     }
 
     /**
@@ -353,18 +355,19 @@ class AiClient {
         cancelled: () -> Boolean,
         onThinking: () -> Unit,
         onDelta: (String) -> Unit,
-        timeouts: AiTimeoutProfile = AiTimeoutProfile.DEFAULT
+        timeouts: AiTimeoutProfile = AiTimeoutProfile.DEFAULT,
+        cid: String? = null
     ): String {
         val budget = AiTimeouts.budget(maxTokens)
         return try {
             TextToolCalls.stripLeftover(
-                completeOnce(baseUrl, apiKey, model, messages, budget, stream = true, cancelled, onThinking, onDelta, timeouts)
+                completeOnce(baseUrl, apiKey, model, messages, budget, stream = true, cancelled, onThinking, onDelta, timeouts, cid)
             )
         } catch (e: Exception) {
             if (e !is StreamRejected && e !is EmptyStream) throw e
             if (cancelled()) throw AiCancelled()
             TextToolCalls.stripLeftover(
-                completeOnce(baseUrl, apiKey, model, messages, budget, stream = false, cancelled, onThinking, onDelta, timeouts)
+                completeOnce(baseUrl, apiKey, model, messages, budget, stream = false, cancelled, onThinking, onDelta, timeouts, cid)
             )
         }
     }
@@ -379,7 +382,8 @@ class AiClient {
         cancelled: () -> Boolean,
         onThinking: () -> Unit,
         onDelta: (String) -> Unit,
-        timeouts: AiTimeoutProfile = AiTimeoutProfile.DEFAULT
+        timeouts: AiTimeoutProfile = AiTimeoutProfile.DEFAULT,
+        cid: String? = null
     ): String {
         val started = System.currentTimeMillis()
         val probe = AiDiag.Probe(started, stream)
@@ -415,10 +419,10 @@ class AiClient {
             }
             val clipped = SelfTalk.clip(text)
             sink(clipped)
-            diag(AiDiag.success(probe, System.currentTimeMillis(), baseUrl, model, chars))
+            diag(AiDiag.success(probe, System.currentTimeMillis(), baseUrl, model, chars, cid))
             return clipped
         } catch (e: Exception) {
-            diag(AiDiag.failure(e, probe, System.currentTimeMillis(), baseUrl, model, chars))
+            diag(AiDiag.failure(e, probe, System.currentTimeMillis(), baseUrl, model, chars, cid))
             throw e
         } finally {
             conn.disconnect()
