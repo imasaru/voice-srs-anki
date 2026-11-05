@@ -1,125 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fitsSystemWindows="true"
-    android:orientation="vertical">
-
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:fitsSystemWindows="true" android:orientation="vertical">
     <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/diagLogToolbar"
-        android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:background="?attr/colorSurface"
-        app:navigationIcon="?attr/homeAsUpIndicator"
-        app:menu="@menu/activity_diag_log_menu"
-        app:title="@string/settings_diag_log_title"
+        android:id="@+id/diagLogToolbar" android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize" android:background="?attr/colorSurface"
+        app:navigationIcon="?attr/homeAsUpIndicator" app:title="@string/settings_diag_log_title"
         app:titleTextAppearance="?attr/textAppearanceTitleLarge" />
-
-    <com.google.android.material.chip.ChipGroup
-        android:id="@+id/diagLogLevelChips"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:padding="8dp"
-        app:singleLine="false"
-        app:singleSelection="false">
-
-        <com.google.android.material.chip.Chip
-            android:id="@+id/diagLogChipTrace"
-            style="@style/Widget.Material3.Chip.Filter"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:checkable="true"
-            android:checked="false"
-            android:text="TRACE" />
-
-        <com.google.android.material.chip.Chip
-            android:id="@+id/diagLogChipDebug"
-            style="@style/Widget.Material3.Chip.Filter"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:checkable="true"
-            android:checked="false"
-            android:text="DEBUG" />
-
-        <com.google.android.material.chip.Chip
-            android:id="@+id/diagLogChipInfo"
-            style="@style/Widget.Material3.Chip.Filter"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:checkable="true"
-            android:checked="true"
-            android:text="INFO" />
-
-        <com.google.android.material.chip.Chip
-            android:id="@+id/diagLogChipWarning"
-            style="@style/Widget.Material3.Chip.Filter"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:checkable="true"
-            android:checked="false"
-            android:text="WARNING" />
-
-        <com.google.android.material.chip.Chip
-            android:id="@+id/diagLogChipError"
-            style="@style/Widget.Material3.Chip.Filter"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:checkable="true"
-            android:checked="false"
-            android:text="ERROR" />
-    </com.google.android.material.chip.ChipGroup>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="?attr/colorSurfaceVariant"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:padding="8dp">
-
-        <TextView
-            android:id="@+id/diagLogHeaderTime"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="0.3"
-            android:text="@string/settings_diag_log_header_time"
-            android:textAppearance="?attr/textAppearanceBodySmall"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/diagLogHeaderLevel"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_weight="0.2"
-            android:text="@string/settings_diag_log_header_level"
-            android:textAppearance="?attr/textAppearanceBodySmall"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/diagLogHeaderMessage"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_weight="0.5"
-            android:text="@string/settings_diag_log_header_message"
-            android:textAppearance="?attr/textAppearanceBodySmall"
-            android:textStyle="bold" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:gravity="end|center_vertical" android:orientation="horizontal" android:padding="8dp">
+        <ImageView android:id="@+id/diagLogClear" android:layout_width="32dp" android:layout_height="32dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/settings_diag_log_clear" android:src="@drawable/ic_delete" />
     </LinearLayout>
-
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/diagLogList"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:clipToPadding="false"
-        android:paddingBottom="4dp" />
-
-    <TextView
-        android:id="@+id/diagLogFooter"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:padding="8dp"
-        android:textAppearance="?attr/textAppearanceBodySmall" />
+    <com.google.android.material.chip.ChipGroup
+        android:id="@+id/diagLogLevelChips" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:padding="8dp"
+        app:singleLine="false" app:singleSelection="false">
+        <com.google.android.material.chip.Chip android:id="@+id/diagLogChipTrace"
+            style="@style/Widget.Material3.Chip.Filter" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:checkable="true" android:checked="false" android:text="TRACE" />
+        <com.google.android.material.chip.Chip android:id="@+id/diagLogChipDebug"
+            style="@style/Widget.Material3.Chip.Filter" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:checkable="true" android:checked="false" android:text="DEBUG" />
+        <com.google.android.material.chip.Chip android:id="@+id/diagLogChipInfo"
+            style="@style/Widget.Material3.Chip.Filter" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:checkable="true" android:checked="true" android:text="INFO" />
+        <com.google.android.material.chip.Chip android:id="@+id/diagLogChipWarning"
+            style="@style/Widget.Material3.Chip.Filter" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:checkable="true" android:checked="false" android:text="WARNING" />
+        <com.google.android.material.chip.Chip android:id="@+id/diagLogChipError"
+            style="@style/Widget.Material3.Chip.Filter" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:checkable="true" android:checked="false" android:text="ERROR" />
+    </com.google.android.material.chip.ChipGroup>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:background="?attr/colorSurfaceVariant" android:gravity="center_vertical"
+        android:orientation="horizontal" android:padding="8dp">
+        <TextView android:id="@+id/diagLogHeaderTime" android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="0.3" android:text="Time" android:textStyle="bold" />
+        <TextView android:id="@+id/diagLogHeaderLevel" android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_marginStart="8dp" android:layout_weight="0.2" android:text="Level" android:textStyle="bold" />
+        <TextView android:id="@+id/diagLogHeaderMessage" android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_marginStart="8dp" android:layout_weight="0.5" android:text="Message" android:textStyle="bold" />
+    </LinearLayout>
+    <androidx.recyclerview.widget.RecyclerView android:id="@+id/diagLogList"
+        android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:clipToPadding="false" android:paddingBottom="4dp" />
+    <TextView android:id="@+id/diagLogFooter" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:padding="8dp" />
 </LinearLayout>
