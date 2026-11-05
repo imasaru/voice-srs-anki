@@ -1364,12 +1364,30 @@ class MainActivity : AppCompatActivity() {
             launchDrillService(newBlock = false)
             return
         }
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Study block")
-            .setPositiveButton(offer.continueLabel) { _, _ -> launchDrillService(newBlock = false) }
-            .setNegativeButton(offer.newLabel) { _, _ -> launchDrillService(newBlock = true) }
-            .setNeutralButton("Cancel", null)
-            .show()
+        val now = System.currentTimeMillis()
+        val s = Prefs.loadStudyBlock(this) ?: return
+        val view = layoutInflater.inflate(R.layout.dialog_study_block, null)
+        view.findViewById<TextView>(R.id.studyBlockDialogBody).text = StudyBlockChip.dialogBody(s, now)
+        val continueBtn = view.findViewById<MaterialButton>(R.id.studyBlockDialogContinue)
+        continueBtn.text = StudyBlockChip.continueLabel(s, now)
+        val newBtn = view.findViewById<MaterialButton>(R.id.studyBlockDialogNew)
+        newBtn.text = StudyBlockChip.NEW_LABEL
+        val indicator = view.findViewById<LinearProgressIndicator>(R.id.studyBlockDialogProgress)
+        val p = StudyBlockChip.progress(s, now)
+        if (s.goalMin > 0) {
+            indicator.visibility = View.VISIBLE
+            indicator.progress = p
+        } else {
+            indicator.visibility = View.GONE
+        }
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(StudyBlockChip.DIALOG_TITLE)
+            .setView(view)
+            .create()
+        continueBtn.setOnClickListener { dialog.dismiss(); launchDrillService(newBlock = false) }
+        newBtn.setOnClickListener { dialog.dismiss(); launchDrillService(newBlock = true) }
+        view.findViewById<MaterialButton>(R.id.studyBlockDialogCancel).setOnClickListener { dialog.dismiss() }
+        dialog.show()
     }
 
     private fun launchDrillService(newBlock: Boolean) {
