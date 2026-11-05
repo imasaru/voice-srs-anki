@@ -29,11 +29,12 @@ class SilentAskTest {
         assertTrue(SilentAsk.goSilent(SilentAsk.Reply.YES))
         assertTrue(SilentAsk.goSilent(SilentAsk.Reply.NONE))
         assertFalse(SilentAsk.goSilent(SilentAsk.Reply.NO))
+        assertFalse(SilentAsk.goSilent(SilentAsk.Reply.RATE_AGAIN))
     }
 
     @Test
     fun e_questionText() {
-        assertEquals("Do you want to go into silent mode?", SilentAsk.QUESTION)
+        assertEquals("No rating heard. Go silent, or say rate again?", SilentAsk.QUESTION)
     }
 
     @Test
@@ -45,5 +46,24 @@ class SilentAskTest {
     @Test
     fun g_keepVoiceText() {
         assertEquals("Okay, staying in voice. Your rating?", SilentAsk.KEEP_VOICE)
+    }
+
+    @Test
+    fun h_rateAgainVariants() {
+        for (s in listOf("rate again", "Rate again.", "mark again", "again", "rated again"))
+            assertEquals(s, SilentAsk.Reply.RATE_AGAIN, SilentAsk.parse(s))
+    }
+
+    @Test
+    fun i_markedAgainText() {
+        assertEquals("No rating, marked Again.", SilentAsk.MARKED_AGAIN)
+    }
+
+    @Test
+    fun j_actionMapping() {
+        assertEquals(SilentAsk.Action.GO_SILENT, SilentAsk.action(SilentAsk.Reply.YES))
+        assertEquals(SilentAsk.Action.GO_SILENT, SilentAsk.action(SilentAsk.Reply.NONE))
+        assertEquals(SilentAsk.Action.KEEP_VOICE, SilentAsk.action(SilentAsk.Reply.NO))
+        assertEquals(SilentAsk.Action.RATE_AGAIN, SilentAsk.action(SilentAsk.Reply.RATE_AGAIN))
     }
 }
