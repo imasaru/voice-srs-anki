@@ -1225,6 +1225,35 @@ class SettingsActivity : AppCompatActivity() {
             if (ready) flushTexts()
             importDoc.launch(arrayOf("application/json", "text/plain", "*/*"))
         }
+        findViewById<Button>(R.id.exportLogsButton).setOnClickListener {
+            try {
+                val dir = java.io.File(filesDir, "logs")
+                val outDir = java.io.File(cacheDir, "diag-export").apply { mkdirs() }
+                val out = java.io.File(outDir, "voice-srs-diag.zip")
+                val ver = try {
+                    packageManager.getPackageInfo(packageName, 0).versionName ?: "?"
+                } catch (_: Exception) { "?" }
+                val ok = LogExport.zipTo(dir, out, ver, android.os.Build.MODEL)
+                if (!ok) {
+                    Toast.makeText(this, R.string.settings_export_logs_failed, Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    this, "$packageName.fileprovider", out
+                )
+                val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "application/zip"
+                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(android.content.Intent.createChooser(send, getString(R.string.settings_export_logs)))
+            } catch (_: Throwable) {
+                Toast.makeText(this, R.string.settings_export_logs_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+        findViewById<Button>(R.id.viewLogsButton).setOnClickListener {
+            startActivity(android.content.Intent(this, DiagLogActivity::class.java))
+        }
         ready = true
         if (intent.getBooleanExtra(EXTRA_IMPORTED, false)) {
             intent.removeExtra(EXTRA_IMPORTED)

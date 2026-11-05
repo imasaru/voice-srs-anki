@@ -293,6 +293,11 @@
     <string name="section_backup">Backup</string>
     <string name="settings_export">Export</string>
     <string name="settings_import">Import</string>
+    <string name="settings_export_logs">Export logs</string>
+    <string name="settings_view_logs">View logs</string>
+    <string name="settings_diag_logs_help">Share or inspect recent app activity</string>
+    <string name="settings_diag_log_title">Diagnostic log</string>
+    <string name="settings_export_logs_failed">Could not export logs</string>
     <string name="settings_export_keys">Include API keys</string>
     <string name="settings_export_keys_help">Off by default. The file is not encrypted.</string>
     <string name="settings_exported">Settings exported</string>
