@@ -198,6 +198,12 @@ class ChatPane(
         if (live >= 0) adapter.notifyItemChanged(live, ChatAdapter.PAYLOAD_READING)
     }
 
+    /** h154: bookmarks changed elsewhere (Bookmarks sheet), so rebind rows to repaint their icons. */
+    fun refreshBookmarks() {
+        if (!attached) return
+        adapter.notifyDataSetChanged()
+    }
+
     /** h121b: "Ask about this" — put the quote into the chat input and select it, never send. */
     private fun askAboutText(text: String) {
         val input = findChatInput() ?: run {

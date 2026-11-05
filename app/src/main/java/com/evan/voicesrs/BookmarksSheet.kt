@@ -1,6 +1,7 @@
 package com.evan.voicesrs
 
 import android.os.Bundle
+import android.content.DialogInterface
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -37,6 +38,11 @@ class BookmarksSheet : BottomSheetDialogFragment() {
         sheet.behavior.state = BottomSheetBehavior.STATE_EXPANDED
         sheet.behavior.skipCollapsed = true
         view?.layoutParams?.height = ViewGroup.LayoutParams.MATCH_PARENT
+    }
+
+    override fun onDismiss(dialog: DialogInterface) {
+        super.onDismiss(dialog)
+        (activity as? MainActivity)?.onBookmarksChanged()
     }
 
     private class Adapter(

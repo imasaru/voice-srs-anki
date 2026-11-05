@@ -399,6 +399,11 @@ class MainActivity : AppCompatActivity() {
         return super.onOptionsItemSelected(item)
     }
 
+    /** h154: called by BookmarksSheet when it closes. */
+    fun onBookmarksChanged() {
+        chatPane?.refreshBookmarks()
+    }
+
     override fun onStart() {
         super.onStart()
         lastDrillRunning = DrillService.running
