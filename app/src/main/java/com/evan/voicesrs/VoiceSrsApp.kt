@@ -24,6 +24,11 @@ class VoiceSrsApp : Application() {
         super.onCreate()
         DynamicColors.applyToActivitiesIfAvailable(this)
         try {
+            DiagLog.sink = DiagLogFile(File(filesDir, "logs"))
+            DiagLog.log("APP", "start", listOf("sdk" to Build.VERSION.SDK_INT))
+        } catch (_: Throwable) {
+        }
+        try {
             ExplainBatchSchedule.sync(this, Prefs.load(this))
         } catch (_: Exception) {
         }

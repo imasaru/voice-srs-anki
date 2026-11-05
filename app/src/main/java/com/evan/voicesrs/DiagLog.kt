@@ -10,6 +10,14 @@ object DiagLog {
     const val NONE = "none"
     private val TS: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
 
+    /** h89: where log() writes; set once by VoiceSrsApp. Null = logging off (unit tests, early startup). */
+    @Volatile var sink: DiagLogFile? = null
+
+    /** Format one line and queue it on the sink. Never throws. */
+    fun log(tag: String, event: String, kv: List<Pair<String, Any?>> = emptyList(), now: Long = System.currentTimeMillis()) {
+        try { sink?.append(line(now, tag, event, kv)) } catch (_: Throwable) { }
+    }
+
     fun line(epochMs: Long, tag: String, event: String, kv: List<Pair<String, Any?>> = emptyList(), zone: ZoneId = JST): String {
         val sb = StringBuilder()
         sb.append(TS.format(Instant.ofEpochMilli(epochMs).atZone(zone)))
