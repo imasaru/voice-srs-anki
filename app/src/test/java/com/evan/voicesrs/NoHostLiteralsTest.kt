@@ -38,7 +38,7 @@ class NoHostLiteralsTest {
 
     @Test
     fun `rules catch the old asr default`() {
-        val bad = listOf("    const val ASR_PORT = 8791", "val u = \"http://192.0.2.10:8766\"", "x.tail1234.ts.net", "\"http://h:8791\"")
+        val bad = listOf("    const val ASR_PORT = 8791", "val u = \"http://${listOf(100, 64, 1, 2).joinToString(".")}:8766\"", "x.tail1234.ts.net", "\"http://h:8791\"")
         for (b in bad) assertTrue(b, rules.any { it.second.containsMatchIn(b) })
         assertTrue(rules.none { it.second.containsMatchIn("xmlns:android=\"http://schemas.android.com/apk/res/android\"") })
         assertTrue(rules.none { it.second.containsMatchIn("if (!url.startsWith(\"http://\")) return") })

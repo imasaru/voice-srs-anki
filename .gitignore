@@ -51,3 +51,6 @@ addon/.ankiconnect-git/
 # Note: .gitignore does not untrack files already committed nor rewrite history.
 # Files already in history remain visible there; use a separate history/privacy
 # review (see tools/security/README.md) before anything is published.
+
+# Both generated BuildConfig.java findings are covered by */build/.
+# All three old credential-bearing Prefs.kt baselines are covered by baselines/.
