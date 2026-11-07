@@ -1,0 +1,15 @@
+# Gitleaks configuration for Voice SRS.
+#
+# Extends the built-in default rule set. There are intentionally NO [allowlists]
+# (no blanket allowlists) and NO baseline suppression, and NO custom [rules]
+# (no PII rules yet — a separate private audit covers that).
+
+title = "Voice SRS gitleaks"
+
+# Use the default ruleset as the base.
+[extend]
+useDefault = true
+
+# Intentionally empty on purpose:
+#   - No [allowlists] section (no blanket allowlists / baseline suppression).
+#   - No [rules] section (no custom PII rules; private audit handles that).

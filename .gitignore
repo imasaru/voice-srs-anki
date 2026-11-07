@@ -1,13 +1,53 @@
+# Build outputs
 build/
 */build/
 .gradle/
 .kotlin/
+
+# Local config & secrets (host defaults, AnkiConnect key, keystores)
 local.properties
 *-key.txt
 *.keystore
-releases/
-shots-*/
-*.log
+
+# Environment files: ignore all .env except the committed example
+.env
+.env.*
+!.env.example
+
+# Android / data / media / private material
+*.db
+*.db-*
+*.sqlite*
+recordings/
+audio-recordings/
+private-data/
+baselines/
+scratch/
+*.bak
+*.bak-*
+*.jks
+*.p12
+*.pem
+*.key
+*.apkg
+*.anki2
+
+# Dependency lock generated for the one-off security audit (NOT canonical pinning)
+app/gradle.lockfile
+
+# IDE
 .idea/
 
+# Logs
+*.log
+
+# Releases / screenshots
+releases/
+shots-*/
+
+# AnkiConnect git mirror (do not track)
 addon/.ankiconnect-git/
+
+# Note: .gitignore does not untrack files already committed nor rewrite history.
+# Files already in history remain visible there; use a separate history/privacy
+# review (see tools/security/README.md) before anything is published.
