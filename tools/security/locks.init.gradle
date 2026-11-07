@@ -1,20 +1,8 @@
-// Gradle init script for generating a resolved runtime dependency lock.
-//
-// Apply with (see .github/workflows/security.yml and tools/security/README.md):
-//   ./gradlew :app:dependencies --configuration debugRuntimeClasspath \
-//     --write-locks --init-script tools/security/locks.init.gradle --no-daemon
-//
-// It enables dependency locking across all configurations so resolution is
-// deterministic, then writes only the requested configuration (debugRuntimeClasspath).
-//
-// This script produces app/gradle.lockfile for the OSV-Scanner audit in CI.
-// It is NOT canonical dependency pinning; do not treat the generated lock as
-// the authoritative pin. See tools/security/README.md.
-
+// One-off resolved debug-runtime lock inventory for OSV-Scanner.
+// This does not establish canonical, reviewed dependency pinning.
+// Run the :app:dependencies command documented in README.md with --write-locks.
 allprojects {
-    configurations.all {
-        dependencyLocking {
-            lockAllConfigurations()
-        }
+    dependencyLocking {
+        lockAllConfigurations()
     }
 }

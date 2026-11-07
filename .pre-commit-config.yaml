@@ -9,7 +9,7 @@
 #   pre-commit run --all-files
 #
 # Hooks:
-#   gitleaks/gitleaks v8.30.1   full-history secret scan (--redact=100)
+#   gitleaks/gitleaks v8.30.1   staged secret scan (--redact=100)
 #   pre-commit/pre-commit-hooks v5.0.0
 #     - detect-private-key
 #     - check-added-large-files (1024 KB)
@@ -28,6 +28,6 @@ repos:
     hooks:
       - id: detect-private-key
       - id: check-added-large-files
-        args: ["--max-size=1024"]
+        args: ["--maxkb=1024"]
       - id: check-merge-conflict
       - id: check-yaml
